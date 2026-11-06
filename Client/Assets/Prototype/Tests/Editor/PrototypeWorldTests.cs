@@ -1,0 +1,55 @@
+using NUnit.Framework;
+using UnityEngine;
+namespace OutpostLoop.Tests
+{
+    /// <summary>地图与战斗的六项限定验证，包含完整局时模拟。</summary>
+    public class PrototypeWorldTests
+    {
+        [Test] public void SeedProducesBoundedRepeatableMap()
+        {
+            var a = new WorldState(41); var b = new WorldState(41); var c = new WorldState(42);
+            Assert.AreEqual(36, a.Nodes.Count); Assert.AreEqual(a.Nodes[5].Position, b.Nodes[5].Position);
+            Assert.AreNotEqual(a.Nodes[5].Position, c.Nodes[5].Position);
+            foreach (var node in a.Nodes) { Assert.LessOrEqual(node.Position.magnitude, 47); Assert.Greater(node.Position.magnitude, 5); }
+        }
+        [Test] public void MovementRespectsMapAndPause()
+        {
+            var w = new WorldState(1);
+            for(int i=0;i<200;i++) w.Step(0.1f, Vector2.right, false);
+            Assert.Greater(w.Player.x, 20); Assert.LessOrEqual(w.Player.x, 46);
+            var before = w.Player; w.Run.Paused = true; w.Step(1, Vector2.left, false); Assert.AreEqual(before, w.Player);
+        }
+        [Test] public void NearbyGatheringConsumesNodeAndDepositsAtHome()
+        {
+            var w = new WorldState(1); var node = w.Nodes[0];
+            for(int i=0;i<500 && Vector2.Distance(w.Player,node.Position)>0.2f;i++) w.Step(0.02f,node.Position-w.Player,false);
+            int before = node.Remaining;
+            for(int i=0;i<50;i++) w.Step(0.02f,Vector2.zero,true);
+            Assert.Less(node.Remaining,before); Assert.Greater(w.Run.CargoScrap+w.Run.CargoEnergy,0);
+            for(int i=0;i<500 && w.Player.magnitude>0.2f;i++) w.Step(0.02f,-w.Player,false);
+            Assert.AreEqual(0,w.Run.CargoScrap+w.Run.CargoEnergy); Assert.Greater(w.Run.Scrap+w.Run.Energy,0);
+        }
+        [Test] public void WaveAndEnemyCountsStayBounded()
+        {
+            var w = new WorldState(12);
+            for(int i=0;i<7200;i++) { w.Step(0.1f,Vector2.zero,false); Assert.LessOrEqual(w.Enemies.Count,48); }
+            Assert.Greater(w.Wave,0); Assert.AreNotEqual(0,w.Run.Outcome);
+        }
+        [Test] public void FullyPreparedBaseWinsCompleteRun()
+        {
+            foreach(int seed in new[]{11,22})
+            {
+                var w = new WorldState(seed);
+                for(int n=0;n<50;n++){for(int j=0;j<12;j++)w.Run.Gather(j%3==0); w.Run.Deposit();}
+                for(int route=0;route<3;route++)for(int level=0;level<3;level++)Assert.IsTrue(w.Run.Upgrade(route));
+                for(int i=0;i<7201;i++)w.Step(0.1f,Vector2.zero,false);
+                Assert.AreEqual(1,w.Run.Outcome,"seed="+seed); Assert.AreEqual(6,w.Wave); Assert.Greater(w.Kills,0);
+            }
+        }
+        [Test] public void LargeFrameDoesNotSkipEntireWaves()
+        {
+            var w = new WorldState(1); w.Step(120,Vector2.zero,false);
+            Assert.LessOrEqual(w.Run.Elapsed,0.101f); Assert.AreEqual(0,w.Wave);
+        }
+    }
+}

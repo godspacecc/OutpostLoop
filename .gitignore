@@ -1,0 +1,9 @@
+/Client/Library/
+/Client/Temp/
+/Client/Logs/
+/Client/Obj/
+/Client/UserSettings/
+/Backup/Artifacts/
+*.csproj
+*.sln
+.vs/

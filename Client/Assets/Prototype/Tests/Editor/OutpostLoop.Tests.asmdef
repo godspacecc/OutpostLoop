@@ -1,0 +1,1 @@
+{"name":"OutpostLoop.Tests","references":["OutpostLoop.Runtime"],"includePlatforms":["Editor"],"optionalUnityReferences":["TestAssemblies"]}

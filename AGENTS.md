@@ -1,0 +1,11 @@
+# OutpostLoop 协作规则
+
+- 独立新项目，Unity 根为 Client；不复制 FirepowerLoop/AnotherDay 美术、玩家数据、Library、UserSettings、MCP 本地配置或服务器数据。
+- 目标是限时单局、地面高位斜俯视的探索→采集→升级→自动防守；每局换种子，非长期城市经营。
+- 当前授权为 Unity 编辑器可玩首版。不得触发 Player Build 或发布。
+- 正式视觉必须先展示预览并获明确确认；独立临时可玩预览允许制作。高位概念方向已接受，未展示的正式模型和动画不自动视为确认。
+- 核心手写类、函数和字段补中文注释。领域状态与表现分离；临时 Prototype 之外的正式化需重新审查职责与配置方案。
+- 预览/视频/日志/报告一律在本仓库 Backup/Artifacts/，按批次分目录。
+- 测试只运行真实非空 testClass 或完整 testMethod，声明范围和最大数量，includePassingTests=true；CLI 用完整 XML 保留通过项。禁止全套或无效筛选回退。
+- 不自动创建 worktree。修复并验证后可中文本地提交；远端尚未授权，不擅自使用 FirepowerLoop origin。
+- 进度入口 Docs/执行总清单.md。用户已授权自主继续完成首版，不反复询问技术开工权限。
