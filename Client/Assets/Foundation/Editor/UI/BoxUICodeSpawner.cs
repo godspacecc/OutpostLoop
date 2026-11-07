@@ -20,19 +20,19 @@ namespace Game
 
         public static void AutoUpdateBoxUI(GameObject gameObject)
         {
-            if (!TryValidateBoxUiPrefab(gameObject, out var prefabPath, out var referenceCollector, out var naming))
+            if (!TryValidateBoxUiPrefab(gameObject, out var prefabPath, out var referenceCollector))
             {
                 return;
             }
 
             UICodeSpawner.WriteViewScript(
                 gameObject,
-                GetBoxUiScriptAssetPath(prefabPath, naming),
+                GetBoxUiScriptAssetPath(prefabPath),
                 referenceCollector,
-                naming.Suffix,
+                BoxUiSuffix,
                 "BaseBoxUI");
 
-            SetPendingBinding(prefabPath, DefaultNamespace + "." + naming.ClassName);
+            SetPendingBinding(prefabPath, DefaultNamespace + "." + gameObject.name + BoxUiSuffix);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             SchedulePendingBindingCheck();
@@ -41,12 +41,10 @@ namespace Game
         private static bool TryValidateBoxUiPrefab(
             GameObject gameObject,
             out string prefabPath,
-            out ReferenceCollector referenceCollector,
-            out BoxUiNaming naming)
+            out ReferenceCollector referenceCollector)
         {
-            prefabPath = gameObject != null ? AssetDatabase.GetAssetPath(gameObject) : string.Empty;
+            prefabPath = AssetDatabase.GetAssetPath(gameObject);
             referenceCollector = null;
-            naming = default;
             var normalizedPath = prefabPath.Replace("\\", "/");
             if (gameObject == null ||
                 string.IsNullOrEmpty(prefabPath) ||
@@ -58,13 +56,6 @@ namespace Game
                 return false;
             }
 
-            var prefabName = System.IO.Path.GetFileNameWithoutExtension(prefabPath);
-            if (!string.Equals(prefabName, gameObject.name, StringComparison.Ordinal))
-            {
-                Debug.LogError($"[BoxUICodeSpawner] Prefab 文件名必须与根 GameObject 名完全一致：{prefabName} != {gameObject.name}");
-                return false;
-            }
-
             referenceCollector = gameObject.GetComponent<ReferenceCollector>();
             if (referenceCollector == null)
             {
@@ -72,31 +63,12 @@ namespace Game
                 return false;
             }
 
-            naming = CreateNaming(prefabName);
             return true;
         }
 
         private static string GetBoxUiScriptAssetPath(string prefabPath)
         {
-            return GetBoxUiScriptAssetPath(prefabPath, CreateNaming(System.IO.Path.GetFileNameWithoutExtension(prefabPath)));
-        }
-
-        private static string GetBoxUiScriptAssetPath(string prefabPath, BoxUiNaming naming)
-        {
-            return UICodeSpawner.GetGeneratedScriptPath(prefabPath, UiScriptRoot, naming.Suffix);
-        }
-
-        private static string GetBoxUiAssemblyType(string prefabName)
-        {
-            return DefaultNamespace + "." + CreateNaming(prefabName).ClassName;
-        }
-
-        private static BoxUiNaming CreateNaming(string prefabName)
-        {
-            var suffix = prefabName.EndsWith("Box", StringComparison.Ordinal)
-                ? "UI"
-                : BoxUiSuffix;
-            return new BoxUiNaming(prefabName + suffix, suffix);
+            return UICodeSpawner.GetGeneratedScriptPath(prefabPath, UiScriptRoot, BoxUiSuffix);
         }
 
         private static void SetPendingBinding(string prefabPath, string assemblyType)
@@ -176,18 +148,6 @@ namespace Game
             serializedObject.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(prefab);
             AssetDatabase.SaveAssets();
-        }
-
-        private readonly struct BoxUiNaming
-        {
-            public BoxUiNaming(string className, string suffix)
-            {
-                ClassName = className;
-                Suffix = suffix;
-            }
-
-            public string ClassName { get; }
-            public string Suffix { get; }
         }
     }
 }

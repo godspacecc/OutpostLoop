@@ -17,11 +17,22 @@ namespace OutpostLoop.Tests
             // Main Start 握手后，Boot 入口与加载界面应释放。
             for(int frame=0;frame<10;frame++)yield return null;
             Assert.AreEqual("Main",UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+            Assert.IsTrue(Boot.BootHost.TryGetResourceInfo(out var info));
+            Assert.AreEqual(Boot.BootResourceSource.EditorSimulate,info.Source);
+            var package=YooAsset.YooAssets.GetPackage("OutpostLoop");
+            Assert.NotNull(package,"必须通过实际 YooAsset 包进入 Main");
+            Assert.AreEqual(YooAsset.EOperationStatus.Succeed,package.InitializeStatus);
+            Assert.IsTrue(package.CheckLocationValid("Scenes/Main"));
+            Assert.IsTrue(package.CheckLocationValid("Game.dll.bytes"));
             Assert.IsEmpty(Object.FindObjectsOfType<Boot.Launcher>(), "Main 就绪后应销毁 Boot 入口");
         }
         [UnityTest]
         public IEnumerator BootAdvancesPausesAndRestartsThroughFoundation()
         {
+            var main=EditorSceneManager.OpenScene("Assets/Game/Scenes/Main.unity");
+            var preview=Object.FindObjectOfType<PrototypeController>();
+            Assert.NotNull(new UnityEditor.SerializedObject(preview).FindProperty("previewShader").objectReferenceValue,
+                "Main 必须显式持有 Shader，防止 Player 构建裁剪运行时查找的依赖");
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();

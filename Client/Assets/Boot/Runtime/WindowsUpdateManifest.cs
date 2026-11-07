@@ -10,7 +10,7 @@ namespace Boot
     [Serializable]
     public sealed class WindowsUpdateManifest
     {
-        public const string ProductId = "com.3dbase.game";
+        public const string ProductId = "com.outpostloop.game";
         public int schemaVersion;
         public string productId;
         public string platform;

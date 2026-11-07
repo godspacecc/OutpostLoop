@@ -17,15 +17,6 @@ namespace Boot
 
         public static async UniTask<bool> LoadMainAsync()
         {
-#if UNITY_EDITOR
-            if (BootResourceStartupState.TryGet(out var sourceInfo) && sourceInfo.Source == BootResourceSource.EditorSource)
-            {
-                ReleaseCurrent();
-                await UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(
-                    "Assets/Game/Scenes/Main.unity", new UnityEngine.SceneManagement.LoadSceneParameters(LoadSceneMode.Single));
-                return SceneManager.GetActiveScene().path == "Assets/Game/Scenes/Main.unity";
-            }
-#endif
             var package = YooAssets.GetPackage("OutpostLoop");
             if (package == null)
             {
@@ -63,10 +54,6 @@ namespace Boot
 
         public static Scene GetLoadedScene()
         {
-#if UNITY_EDITOR
-            if (BootResourceStartupState.TryGet(out var info) && info.Source == BootResourceSource.EditorSource)
-                return SceneManager.GetSceneByPath("Assets/Game/Scenes/Main.unity");
-#endif
             if (_sceneHandle == null || _sceneHandle.Status != EOperationStatus.Succeed)
                 return default;
 

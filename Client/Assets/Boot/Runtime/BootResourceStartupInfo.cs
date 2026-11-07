@@ -8,8 +8,7 @@ namespace Boot
         EditorSimulate,
         HostLatest,
         HostCached,
-        BuiltinFallback,
-        EditorSource
+        BuiltinFallback
     }
 
     /// <summary>

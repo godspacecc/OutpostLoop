@@ -1,55 +1,49 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace Game
 {
     /// <summary>
-    /// 为小规模固定数量的 UI 列表复用由预制体创建的列表项。
+    /// 用于少量固定列表项的简单列表视图，按 totalCount 复用预制体并回调刷新项内容。
     /// </summary>
     [AddComponentMenu("UI/Custom List View")]
     public sealed class CustomListView : MonoBehaviour, IDraggableContainer
     {
         public GameObject itemPrefab;
-        private readonly List<GameObject> cells = new List<GameObject>();
-        private Action<Transform, int> onItemRefresh;
+        public int totalCount;
 
-        public int totalCount { get; set; }
+        private readonly List<Transform> _cachedItems = new List<Transform>();
+        private Action<Transform, int> _onItemRefresh;
 
-        public void AddItemRefreshListener(Action<Transform, int> refresh)
+        public void AddItemRefreshListener(Action<Transform, int> onItemRefresh)
         {
-            onItemRefresh = refresh;
+            _onItemRefresh = onItemRefresh;
         }
 
         public void RefreshCells()
         {
+            RemoveDestroyedItems();
+            var count = Mathf.Max(0, totalCount);
             if (itemPrefab == null)
             {
-                Log.Error("[CustomListView] 列表元素预制体缺失。");
+                Log.Error("[CustomListView] 列表项预制体缺失。");
                 return;
             }
 
-            cells.RemoveAll(cell => cell == null);
-            var activeCount = Mathf.Max(0, totalCount);
-            while (cells.Count < activeCount)
+            while (_cachedItems.Count < count)
             {
                 var item = Instantiate(itemPrefab, transform);
-                item.SetActive(false);
-                cells.Add(item);
+                _cachedItems.Add(item.transform);
             }
 
-            for (var index = 0; index < cells.Count; index++)
+            for (var i = 0; i < _cachedItems.Count; i++)
             {
-                var active = index < activeCount;
-                if (cells[index].activeSelf != active)
-                {
-                    cells[index].SetActive(active);
-                }
-
+                var active = i < count;
+                _cachedItems[i].gameObject.SetActive(active);
                 if (active)
                 {
-                    onItemRefresh?.Invoke(cells[index].transform, index);
+                    _onItemRefresh?.Invoke(_cachedItems[i], i);
                 }
             }
         }
@@ -57,25 +51,42 @@ namespace Game
         public void ClearCells()
         {
             totalCount = 0;
-            cells.RemoveAll(cell => cell == null);
-            foreach (var cell in cells)
+            RemoveDestroyedItems();
+            foreach (var item in _cachedItems)
             {
-                cell.SetActive(false);
+                item.gameObject.SetActive(false);
             }
         }
 
         public List<Transform> GetDraggableItems()
         {
-            cells.RemoveAll(cell => cell == null);
-            return cells
-                .Where(cell => cell.activeSelf)
-                .Select(cell => cell.transform)
-                .ToList();
+            RemoveDestroyedItems();
+            var items = new List<Transform>();
+            foreach (var item in _cachedItems)
+            {
+                if (item.gameObject.activeSelf)
+                {
+                    items.Add(item);
+                }
+            }
+
+            return items;
         }
 
         public Transform GetContentTransform()
         {
             return transform;
+        }
+
+        private void RemoveDestroyedItems()
+        {
+            for (var i = _cachedItems.Count - 1; i >= 0; i--)
+            {
+                if (_cachedItems[i] == null)
+                {
+                    _cachedItems.RemoveAt(i);
+                }
+            }
         }
     }
 }

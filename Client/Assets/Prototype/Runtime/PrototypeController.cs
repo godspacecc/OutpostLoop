@@ -23,17 +23,21 @@ namespace OutpostLoop
         // 权威规则由架构系统持有，视图只转发输入及读取快照。
         private PrototypeSystem session;
         private string startupError;
+        // 显式场景依赖，确保资源包携带临时表现所需 Shader。
+        [SerializeField] private Shader previewShader;
+        // 仅领域与表现均初始化成功后，允许更新及通知 Boot 就绪。
+        private bool initialized;
         private readonly Color groundColor = new Color(0.16f,0.25f,0.24f);
 
         private void Awake() { Initialize(); }
         /// <summary>Main 完成真实玩法初始化后才释放 Boot 启动界面。</summary>
         private void Start()
         {
-            if (World != null) Boot.BootHost.ReportReady();
+            if (initialized) Boot.BootHost.ReportReady();
             else Boot.BootHost.ReportFailure(new Dictionary<string,string>{{"reason",startupError ?? "Prototype initialization failed"}});
         }
         // 失活时停止接受输入并暂停，避免隐藏视图仍带着上一帧输入推进。
-        private void OnEnable(){if(session!=null)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
+        private void OnEnable(){if(initialized)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
         private void OnDisable()
         {
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
@@ -48,7 +52,7 @@ namespace OutpostLoop
             if(architecture.GetModel<PrototypeModel>()==null)architecture.RegisterModel(new PrototypeModel());
             if(architecture.GetSystem<PrototypeSystem>()==null)architecture.RegisterSystem(new PrototypeSystem());
             session=architecture.GetSystem<PrototypeSystem>();
-            if(isActiveAndEnabled)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);
+
 
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
@@ -60,12 +64,24 @@ namespace OutpostLoop
             light.transform.rotation=Quaternion.Euler(50,-35,0);
             RenderSettings.ambientLight=new Color(0.58f,0.63f,0.65f);
             RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
-            try{Restart(false);}catch(System.Exception e){startupError=e.Message;Game.Log.Error("独立原型启动失败："+e.Message);}
+            try
+            {
+                Restart(false);
+                if(isActiveAndEnabled)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);
+            }
+            catch(System.Exception e)
+            {
+                initialized=false;startupError=e.Message;
+                Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
+                session.SubmitInput(Vector2.zero,false);session.SetPaused(true);
+                Game.Log.Error("独立原型启动失败："+e);
+            }
         }
 
         /// <summary>重开替换完整领域状态和表现，不保留上一局能力与敌人。</summary>
         public void Restart(bool begin)
         {
+            initialized=false;
             if(worldRoot!=null){worldRoot.gameObject.SetActive(false);Release(worldRoot.gameObject);}
             foreach(var material in materials)Release(material);
             materials.Clear();resources.Clear();enemies.Clear();
@@ -111,10 +127,18 @@ namespace OutpostLoop
                 float angle=i*Mathf.PI/16;var pos=new Vector3(Mathf.Cos(angle)*48,1.5f,Mathf.Sin(angle)*48);
                 Shape("Boundary",worldRoot,PrimitiveType.Cube,pos,new Vector3(2,3,2),stone);
             }
-            feedback="";SyncView();
+            feedback="";SyncView();initialized=true;
         }
 
-        private Material Mat(Color color){var m=new Material(Shader.Find("Standard"));m.color=color;materials.Add(m);return m;}
+        /// <summary>Player 只使用序列化依赖；编辑器动态预览可使用内置 Shader。</summary>
+        private Material Mat(Color color)
+        {
+#if UNITY_EDITOR
+            if(previewShader==null)previewShader=Shader.Find("Standard");
+#endif
+            if(previewShader==null)throw new System.InvalidOperationException("Main 缺少临时表现 Shader 引用。");
+            var m=new Material(previewShader);m.color=color;materials.Add(m);return m;
+        }
         private Transform Shape(string label,Transform parent,PrimitiveType type,Vector3 position,Vector3 scale,Material material)
         {
             var obj=GameObject.CreatePrimitive(type);obj.name=label;obj.transform.SetParent(parent,false);
@@ -125,7 +149,7 @@ namespace OutpostLoop
 
         private void PollInputAndPresent()
         {
-            if(World==null)return;
+            if(!initialized)return;
             if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0){shop=false;World.Run.Paused=!World.Run.Paused;}
             if(Input.GetKeyDown(KeyCode.B)&&started&&World.Run.Outcome==0&&World.Player.magnitude<5)
             {shop=!shop;World.Run.Paused=shop;}
@@ -161,7 +185,7 @@ namespace OutpostLoop
 
         private void OnGUI()
         {
-            if(World==null){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
+            if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
             float scale=Mathf.Min(Screen.width/1280f,Screen.height/720f);
             GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
             GUI.skin.font=font;GUI.skin.label.fontSize=18;GUI.skin.button.fontSize=19;GUI.skin.box.fontSize=18;

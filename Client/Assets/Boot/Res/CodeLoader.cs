@@ -40,10 +40,6 @@ namespace Boot
             }
 #endif
 
-#if UNITY_EDITOR
-            if (BootResourceStartupState.TryGet(out var sourceInfo) && sourceInfo.Source == BootResourceSource.EditorSource)
-                return BootOperationResult.Success();
-#endif
             if (package == null)
             {
                 Debug.LogWarning("[CodeLoader] ResourcePackage 为空。");

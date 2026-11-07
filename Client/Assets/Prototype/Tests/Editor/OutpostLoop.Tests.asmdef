@@ -2,7 +2,8 @@
   "name": "OutpostLoop.Tests",
   "references": [
     "Game",
-    "Boot"
+    "Boot",
+    "YooAsset"
   ],
   "includePlatforms": [
     "Editor"

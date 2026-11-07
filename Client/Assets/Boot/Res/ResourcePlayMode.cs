@@ -18,9 +18,6 @@ namespace Boot
         /// <summary>
         /// 主机模式 - 从远程服务器下载资源
         /// </summary>
-        HostPlayMode,
-
-        /// <summary>仅编辑器直接读取源资产，不生成模拟清单。</summary>
-        EditorSourceMode
+        HostPlayMode
     }
 }

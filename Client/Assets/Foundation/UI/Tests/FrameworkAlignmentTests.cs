@@ -6,7 +6,7 @@ using NUnit.Framework;
 using UnityEngine;
 namespace OutpostLoop.Tests
 {
-    /// <summary>限定五项：公共资源入口、UI 相对地址、安全区内容映射。</summary>
+    /// <summary>限定五项：公共资源入口、UI 完整地址、安全区内容映射。</summary>
     public sealed class FrameworkAlignmentTests
     {
         private static Type Find(string name) => AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(name)).FirstOrDefault(t => t != null);
@@ -16,13 +16,12 @@ namespace OutpostLoop.Tests
             Assert.NotNull(Find("Game.ResourceLoader"));
             Assert.NotNull(Find("Game.YooAssetResourceLoader"));
         }
-        [Test] public void ControllerResolvesRelativeUiAddress()
+        [Test] public void UiAddressContractMatchesReference()
         {
-            string observed = null;
-            UIHelper.SetPrefabLoader(path => { observed = path; return null; });
-            try { using (Log.CaptureForTests((type, message) => {})) new Probe().Show();
-                Assert.AreEqual("Prefabs/UI/Probe/Window", observed);
-            } finally { UIHelper.SetPrefabLoader(null); }
+            Assert.IsTrue(UIResourceAddress.IsValid("Prefabs/UI/Probe/Window"));
+            Assert.IsFalse(UIResourceAddress.IsValid("Probe/Window"));
+            Assert.IsFalse(UIResourceAddress.IsValid("Prefabs/UI/../Window"));
+            Assert.IsFalse(UIResourceAddress.IsValid("Prefabs/UI/Probe/Window.prefab"));
         }
         [Test] public void SafeAreaMapsContentAndKeepsFullscreenBackground()
         {
@@ -83,6 +82,6 @@ namespace OutpostLoop.Tests
             public ResourceLoadHandle LoadAssetAsync<T>(string path,Action<T> callback) where T:UnityEngine.Object { callback?.Invoke(LoadAsset<T>(path));return ResourceLoadHandle.Empty; }
             public void Release(ResourceLoadHandle handle) {}
         }
-        private sealed class Probe : BaseUICtrl { public Probe() {} protected override string Path() => "Probe/Window"; public override UILayer Layer() => UILayer.Dialog; protected override void OnInit() {} protected override void OnShow() {} protected override void OnHide() {} }
+        private sealed class Probe : BaseUICtrl { public Probe() {} protected override string Path() => "Prefabs/UI/Probe/Window"; public override UILayer Layer() => UILayer.Dialog; protected override void OnInit() {} protected override void OnShow() {} protected override void OnHide() {} }
     }
 }

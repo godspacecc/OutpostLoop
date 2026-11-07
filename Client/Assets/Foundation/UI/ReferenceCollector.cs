@@ -112,9 +112,10 @@ namespace Game
 
         private static string ResolveTypeName(Object obj)
         {
-            if (obj is GameObject)
+            if (obj is GameObject gameObject)
             {
-                return typeof(GameObject).FullName;
+                var component = gameObject.GetComponent<Component>();
+                return component != null ? component.GetType().FullName : typeof(GameObject).FullName;
             }
 
             return obj != null ? obj.GetType().FullName : string.Empty;

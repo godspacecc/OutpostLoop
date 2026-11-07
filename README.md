@@ -6,7 +6,7 @@
 1. Unity Hub 添加本仓库的 `Client` 目录。
 2. 打开 `Assets/Game/Scenes/Boot.unity`。
 3. 点击 Play，再点击游戏内“开始这一局”。推荐 Game 视图 16:9、1280×720 或更大。
-4. Boot 负责资源、代码加载和启动错误恢复；Main 保存基础根与原型入口。开发时默认使用编辑器源资源模式，不生成资源包。
+4. Boot 负责资源、代码加载和启动错误恢复；Main 保存基础根与原型入口。开发时与参考项目相同，默认使用 YooAsset 编辑器模拟模式，生成模拟清单并校验真实收集地址。
 
 ## 操作
 - WASD/方向键移动，靠近资源按住 E 采集。
@@ -27,8 +27,8 @@
 
 - QFramework 的 Model/System、事件、统一生命周期、日志和计时器。原型由 Model 保存本局，System 推进规则，Controller 提交操作并显示画面。
 - 独立 Luban 配置源 `Config/DataCsv/rules.csv`。运行 `Config/gen.bat` 会校验并生成客户端与服务端配置产物；`Server` 包含生成配置与通用资源服脚本模板，没有旧服务器业务或玩家数据。
-- YooAsset 2.3.17、独立 OutpostLoop 收集设置；公共 IResourceLoader/ResourceLoader/ResourceLoadHandle/YooAssetResourceLoader 与 FirepowerLoop 对齐。当前编辑器通过同一公共接口的 EditorSourceResourceLoader 后端读取 `tbrule.bytes`，真实收集地址和 `startup` 标签已检查。尚无已构建清单，因此资源包运行加载未验证；不触发模拟构建或 Player Build。
-- BaseUI、Box/Page 控制器、UIRoot 空层、列表与对象池、ReferenceCollector 和 UI 代码生成器。默认 UI 加载转发公共 ResourceLoader，控制器 Path 返回 UI 根下相对路径，统一地址解析后加载，并自动接入 SafeAreaFitter。未复制旧项目主题或 UI Prefab，游戏画面仍是原型 IMGUI。
+- YooAsset 2.3.17、独立 OutpostLoop 收集设置；公共 IResourceLoader/ResourceLoader/ResourceLoadHandle/YooAssetResourceLoader 与 FirepowerLoop 对齐。Boot 默认经 YooAsset 模拟包初始化，主场景和配置均通过公共 YooAssetResourceLoader 加载；EditorSourceResourceLoader 仅供独立编辑器诊断/测试使用，不再是 Boot 启动分支。模拟模式仍检查 Game.dll.bytes 和 AOT 清单地址，需要本项目自身生成的启动依赖。
+- BaseUI、Box/Page 控制器、UIRoot 空层、列表与对象池、ReferenceCollector 和 UI 代码生成器。默认 UI 加载转发公共 ResourceLoader，控制器 Path 返回与 3DBase 一致的完整逻辑地址（如 Prefabs/UI/Probe/Window），由 UIResourceAddress 校验后加载；也支持 CreateView 动态视图，并自动接入 SafeAreaFitter。未复制旧项目主题或 UI Prefab，游戏画面仍是原型 IMGUI。
 - 独立 JSON 文件存储：区分缺失、损坏、未知版本，完整写入后替换旧文件。这里只提供通用能力，没有增加游戏中途存档或局外成长。
 - UniTask、Input System、UGUI、TMP 等依赖由本工程自行安装。没有复制旧 Library、UserSettings、MCP 配置或玩家数据。
 
@@ -69,4 +69,6 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 
 构建沿用宿主兼容身份、不可变 AOT 基线、工作区互斥锁、持久版本预留与脚本重载恢复。首次完整包需要本项目自己的 HybridCLR 本地 IL2CPP 安装和生成产物；快速打包与热更新必须使用本项目已成功生成的兼容基线，不能使用参考项目的产物。Windows 安装器还需要 Inno Setup，Android 需要对应 SDK/NDK/JDK。资源地址初始为本机 `http://127.0.0.1:8000`，不继承旧项目服务地址。
 
-本轮授权仅实现链路并验证编辑器流程，未实际生成 Player、资源包、安装器或发布资源服；不能据此宣称安装包、真机热更与安装流程已通过。验证证据位于 `Backup/Artifacts/BootMainBuild-20261107/`。
+初次拆分的编辑器验证证据位于 `Backup/Artifacts/BootMainBuild-20261107/`。随后用户单独授权一次本地完整构建、不发布；已生成本项目 Windows 宿主、AOT/Game DLL、资源与安装器，并验证资源服不可达时回退内置资源、进入 Main。Boot 对齐的 35 项限定测试通过，证据位于 `Backup/Artifacts/BootAlignment-20261107/`。未执行安装、Android 真机或发布验证。
+
+后续 UI 对齐以 3DBase 为准：安全区递归适配、Top/Popup 互斥、隐藏窗口置顶、完整 UI 地址/CreateView、列表及生成工具；26 项限定测试全部通过，含实际 Boot→Main 和三项生命周期 Play 检查。此后未再构建 Player，现有本地安装包仅对应前一轮 Boot 验证。证据位于 `Backup/Artifacts/UI3DBaseAlignment-20261107/`。音频、设置、本地化等尚未迁入的通用模块不在本批范围内。

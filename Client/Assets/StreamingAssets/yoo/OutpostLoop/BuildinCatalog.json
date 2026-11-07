@@ -1,0 +1,59 @@
+{
+    "FileVersion": "1.0.0",
+    "PackageName": "OutpostLoop",
+    "PackageVersion": "20261107164752",
+    "Wrappers": [
+        {
+            "BundleGUID": "0db1bd6e84ec2db4e214a38848898554",
+            "FileName": "0db1bd6e84ec2db4e214a38848898554.bundle"
+        },
+        {
+            "BundleGUID": "3aec72d8a79fd9c267f28d5859ca8818",
+            "FileName": "3aec72d8a79fd9c267f28d5859ca8818.bundle"
+        },
+        {
+            "BundleGUID": "49dbc8bc466392ec1107908b748eddbf",
+            "FileName": "49dbc8bc466392ec1107908b748eddbf.bundle"
+        },
+        {
+            "BundleGUID": "657504a0f5b92db56a0e80e62d606bb4",
+            "FileName": "657504a0f5b92db56a0e80e62d606bb4.bundle"
+        },
+        {
+            "BundleGUID": "66fed16da025a4daace20ee5337f2973",
+            "FileName": "66fed16da025a4daace20ee5337f2973.bundle"
+        },
+        {
+            "BundleGUID": "87955632053f8d51578f94d38d1eddf8",
+            "FileName": "87955632053f8d51578f94d38d1eddf8.bundle"
+        },
+        {
+            "BundleGUID": "905282f413db620024eb3cc1d3755067",
+            "FileName": "905282f413db620024eb3cc1d3755067.bundle"
+        },
+        {
+            "BundleGUID": "9db611f6b4087927266e6bb24ed1405f",
+            "FileName": "9db611f6b4087927266e6bb24ed1405f"
+        },
+        {
+            "BundleGUID": "c3fe03cfda1c6b33bf373310c8e146f9",
+            "FileName": "c3fe03cfda1c6b33bf373310c8e146f9.bundle"
+        },
+        {
+            "BundleGUID": "ccf532c03e253a238398aa3c3abecc63",
+            "FileName": "ccf532c03e253a238398aa3c3abecc63.bundle"
+        },
+        {
+            "BundleGUID": "dc994845df4123abdb3db50ebb51184e",
+            "FileName": "dc994845df4123abdb3db50ebb51184e.bundle"
+        },
+        {
+            "BundleGUID": "f8627416026e6d040f6434aee4cdab95",
+            "FileName": "f8627416026e6d040f6434aee4cdab95.bundle"
+        },
+        {
+            "BundleGUID": "fce4b060102bc77c6e2d495761bdaa51",
+            "FileName": "fce4b060102bc77c6e2d495761bdaa51.bundle"
+        }
+    ]
+}

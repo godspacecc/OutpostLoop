@@ -157,7 +157,7 @@ namespace Game
             {
                 var popups = new List<BaseUICtrl>(UICtrlDict.Values);
                 foreach (var popup in popups)
-                    if (popup != null && popup.Layer() == UILayer.Popup && popup.IsTransientPopup) popup.Hide();
+                    if (popup != null && popup.Layer() == UILayer.Popup && popup.IsTransientPopup) popup.HideForLayerBlocking();
             }
             NotifyBlockingStateChanged();
         }

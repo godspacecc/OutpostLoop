@@ -37,6 +37,7 @@ namespace OutpostLoop.Editor
             // 基础根独立于玩法入口，重载 Main 时由既有实例继续驱动。
             var foundation=GameObject.Find("FoundationRoot")??new GameObject("FoundationRoot");
             var driver=foundation.AddComponent<Game.FoundationLoop>();SetBool(driver,"persistAcrossScenes",true);
+            Set(UnityEngine.Object.FindObjectOfType<PrototypeController>(),"previewShader",Shader.Find("Standard"));
             EditorSceneManager.SaveScene(main);
             // 启动界面使用本项目临时 UGUI 几何，不引用参考项目美术。
             var boot=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
@@ -63,6 +64,10 @@ namespace OutpostLoop.Editor
             var buttons=Child(panel,"Buttons");Set(view,"_buttonArea",buttons);
             Set(view,"_retryButton",Button(buttons,"Retry","重试",30,610));Set(view,"_copyDetailsButton",Button(buttons,"Copy","复制详情",270,610));Set(view,"_quitButton",Button(buttons,"Quit","退出",510,610));
             var entry=new GameObject("BootEntry");entry.SetActive(false);var launcher=entry.AddComponent<Launcher>();Set(launcher,"_updateView",view);Set(launcher,"_updateCanvas",canvas);
+            // 与参考项目相同：编辑器也经过 YooAsset 模拟包，不旁路资源与地址校验。
+            var resourceSettings=new SerializedObject(entry.GetComponent<ResourceBoot>());
+            resourceSettings.FindProperty("_editorPlayMode").intValue=(int)ResourcePlayMode.EditorSimulateMode;
+            resourceSettings.ApplyModifiedPropertiesWithoutUndo();
             var server=panel.AddComponent<BootResourceServerView>();Set(server,"_launcher",launcher);Set(server,"_entryButton",Button(panel,"Server","资源地址",990,610));
             var editor=Child(panel,"ServerEditor");editor.AddComponent<Image>().color=new Color(.12f,.15f,.18f,1);Set(server,"_editorPanel",editor);
             Set(server,"_currentAddressText",Text(editor,"Current",40,120,1160,50));Set(server,"_feedbackText",Text(editor,"Feedback",40,230,1160,90));
@@ -76,6 +81,8 @@ namespace OutpostLoop.Editor
             SetBool(canvas,"m_OverrideSorting",true);
             EditorSceneManager.SaveScene(boot,BootPath);EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(BootPath,true)};
             PlayerSettings.companyName="Godspace";PlayerSettings.productName="OutpostLoop";
+            // 参考构建链使用本机 HTTP 资源服，正式 Windows 包同样需要允许该传输。
+            PlayerSettings.insecureHttpOption=InsecureHttpOption.AlwaysAllowed;
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android,"com.godspace.outpostloop");PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone,"com.godspace.outpostloop");
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone,ScriptingImplementation.IL2CPP);PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android,ScriptingImplementation.IL2CPP);
             var hybrid=HybridCLR.Editor.Settings.HybridCLRSettings.Instance;hybrid.hotUpdateAssemblyDefinitions=new[]{AssetDatabase.LoadAssetAtPath<UnityEditorInternal.AssemblyDefinitionAsset>("Assets/Game/Game.asmdef")};HybridCLR.Editor.Settings.HybridCLRSettings.Save();

@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace Game
 {
     /// <summary>
-    /// 扩展网格布局以按序列化预制体填充子项，并通过刷新回调交给外部绑定数据。
+    /// 扩展网格布局以按资源或预制体填充子项，并通过刷新回调交给外部绑定数据。
     /// </summary>
     [AddComponentMenu("UI/Custom Grid Layout Group")]
     public class CustomGridLayoutGroup : GridLayoutGroup, IDraggableContainer
@@ -23,8 +23,13 @@ namespace Game
             _onItemRefresh = onItemRefresh;
         }
 
-        public void LoadAndFillGrid(int itemCount = 10)
+        public void LoadAndFillGrid(string prefabPath = null, int itemCount = 10)
         {
+            if (gridPrefab == null && !string.IsNullOrEmpty(prefabPath))
+            {
+                gridPrefab = ResourceLoader.LoadAsset<GameObject>(prefabPath);
+            }
+
             totalCount = Mathf.Max(0, itemCount);
             RefreshCells();
         }
@@ -65,7 +70,6 @@ namespace Game
                 _ownedItems.Add(item);
             }
 
-            // Owned items always follow authored/static content while retaining cache order.
             foreach (var item in _ownedItems)
             {
                 item.transform.SetAsLastSibling();

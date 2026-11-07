@@ -8,6 +8,7 @@ namespace UnityEngine.UI
     [DisallowMultipleComponent]
     public class LoopGridLayoutGroup : LoopVerticalScrollRect
     {
+        public GameObject gridPrefab;
         public Vector2 cellSize = new Vector2(88f, 72f);
         public Vector2 spacing = new Vector2(8f, 8f);
         public RectOffset padding;
@@ -15,19 +16,65 @@ namespace UnityEngine.UI
 
         protected override void Awake()
         {
-            if (!HasValidGridWiring())
-            {
-                enabled = false;
-                return;
-            }
-
-            InitializeGridLayout();
+            EnsureGridContent();
             base.Awake();
         }
 
         public void EnsureGridContent()
         {
-            HasValidGridWiring();
+            horizontal = false;
+            vertical = true;
+            EnsureViewport();
+
+            if (content == null)
+            {
+                var contentTransform = viewport.transform.Find("Content") as RectTransform;
+                if (contentTransform == null)
+                {
+                    contentTransform = transform.Find("Content") as RectTransform;
+                }
+
+                if (contentTransform == null)
+                {
+                    var contentObject = new GameObject("Content", typeof(RectTransform));
+                    contentObject.transform.SetParent(viewport, false);
+                    contentTransform = contentObject.GetComponent<RectTransform>();
+                }
+
+                content = contentTransform;
+            }
+
+            if (content.parent != viewport)
+            {
+                content.SetParent(viewport, false);
+            }
+
+            ConfigureContentRect(content);
+            ConfigureGrid(content.gameObject);
+            SyncPrefabSource();
+        }
+
+        private void EnsureViewport()
+        {
+            if (viewport == null)
+            {
+                var viewportTransform = transform.Find("Viewport") as RectTransform;
+                if (viewportTransform == null)
+                {
+                    var viewportObject = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
+                    viewportObject.transform.SetParent(transform, false);
+                    viewportTransform = viewportObject.GetComponent<RectTransform>();
+                }
+
+                viewport = viewportTransform;
+            }
+
+            ConfigureViewportRect(viewport);
+
+            if (viewport.GetComponent<RectMask2D>() == null)
+            {
+                viewport.gameObject.AddComponent<RectMask2D>();
+            }
         }
 
         public new void AddItemRefreshListener(Action<Transform, int> scrollMoveEvent)
@@ -46,62 +93,40 @@ namespace UnityEngine.UI
             dataSource.scrollMoveEvent = scrollMoveEvent;
         }
 
-        public void RefreshCells(bool refillFromTop)
+        public new void RefreshCells()
         {
-            if (!HasValidGridWiring())
-            {
-                return;
-            }
+            EnsureGridContent();
 
             if (Application.isPlaying && isActiveAndEnabled)
             {
-                if (refillFromTop)
-                {
-                    RefillCells(0);
-                }
-                else
-                {
-                    base.RefreshCells();
-                }
-
+                RefillCells(0);
                 return;
             }
-        }
 
-        public new void RefreshCells()
-        {
-            RefreshCells(true);
+            FillEditorCells();
         }
 
         public new void ClearCells()
         {
-            if (!HasValidGridWiring())
-            {
-                return;
-            }
-
             if (Application.isPlaying)
             {
                 base.ClearCells();
+                return;
             }
-            else
-            {
-                Debug.LogWarning($"[{nameof(LoopGridLayoutGroup)}] 编辑态不刷新或清理列表项，避免修改宿主 Prefab 的静态子物体。");
-            }
+
+            ClearEditorCells();
+            totalCount = 0;
         }
 
         public new Transform GetContentTransform()
         {
-            return HasValidGridWiring() ? content : null;
+            EnsureGridContent();
+            return content;
         }
 
         public new List<Transform> GetDraggableItems()
         {
-            if (!HasValidGridWiring())
-            {
-                return new List<Transform>();
-            }
-
+            EnsureGridContent();
             var items = new List<Transform>();
             foreach (Transform child in content)
             {
@@ -111,59 +136,16 @@ namespace UnityEngine.UI
             return items;
         }
 
-        private bool HasValidGridWiring()
-        {
-            if (prefabSource == null || prefabSource.prefab == null)
-            {
-                Debug.LogError($"[{nameof(LoopGridLayoutGroup)}] prefabSource.prefab 为空，无法刷新网格。");
-                return false;
-            }
-
-            if (viewport == null)
-            {
-                Debug.LogError($"[{nameof(LoopGridLayoutGroup)}] 缺少 Viewport，宿主 Prefab 必须预先创建。");
-                return false;
-            }
-
-            if (content == null)
-            {
-                Debug.LogError($"[{nameof(LoopGridLayoutGroup)}] 缺少 Content，宿主 Prefab 必须预先创建。");
-                return false;
-            }
-
-            if (content.parent != viewport)
-            {
-                Debug.LogError($"[{nameof(LoopGridLayoutGroup)}] Content 必须挂在 Viewport 下。");
-                return false;
-            }
-
-            if (viewport.GetComponent<RectMask2D>() == null)
-            {
-                Debug.LogError($"[{nameof(LoopGridLayoutGroup)}] Viewport 缺少 RectMask2D。");
-                return false;
-            }
-
-            if (content.GetComponent<GridLayoutGroup>() == null)
-            {
-                Debug.LogError($"[{nameof(LoopGridLayoutGroup)}] Content 缺少 GridLayoutGroup。");
-                return false;
-            }
-
-            return true;
-        }
-
-        private void InitializeGridLayout()
-        {
-            horizontal = false;
-            vertical = true;
-            EnsurePadding();
-            ConfigureContentRect(content);
-            ConfigureGrid(content.gameObject);
-        }
-
         private void ConfigureGrid(GameObject contentObject)
         {
+            EnsurePadding();
+
             var grid = contentObject.GetComponent<GridLayoutGroup>();
+            if (grid == null)
+            {
+                grid = contentObject.AddComponent<GridLayoutGroup>();
+            }
+
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = constraintCount;
             grid.cellSize = cellSize;
@@ -186,6 +168,64 @@ namespace UnityEngine.UI
             contentTransform.pivot = new Vector2(0.5f, 1f);
             contentTransform.anchoredPosition = Vector2.zero;
             contentTransform.sizeDelta = new Vector2(0f, contentTransform.sizeDelta.y);
+        }
+
+        private static void ConfigureViewportRect(RectTransform viewportTransform)
+        {
+            viewportTransform.anchorMin = Vector2.zero;
+            viewportTransform.anchorMax = Vector2.one;
+            viewportTransform.pivot = new Vector2(0.5f, 0.5f);
+            viewportTransform.anchoredPosition = Vector2.zero;
+            viewportTransform.sizeDelta = Vector2.zero;
+        }
+
+        private void SyncPrefabSource()
+        {
+            if (gridPrefab == null && prefabSource.prefab != null)
+            {
+                gridPrefab = prefabSource.prefab;
+            }
+
+            if (gridPrefab != null)
+            {
+                prefabSource.prefab = gridPrefab;
+            }
+        }
+
+        private void FillEditorCells()
+        {
+            ClearEditorCells();
+
+            if (gridPrefab == null || content == null)
+            {
+                return;
+            }
+
+            for (var index = 0; index < totalCount; index++)
+            {
+                var item = Instantiate(gridPrefab, content, false);
+                item.SetActive(true);
+                dataSource.ProvideData(item.transform, index);
+            }
+        }
+
+        private void ClearEditorCells()
+        {
+            if (content == null)
+            {
+                return;
+            }
+
+            var children = new List<Transform>();
+            foreach (Transform child in content)
+            {
+                children.Add(child);
+            }
+
+            foreach (var child in children)
+            {
+                DestroyImmediate(child.gameObject);
+            }
         }
     }
 }

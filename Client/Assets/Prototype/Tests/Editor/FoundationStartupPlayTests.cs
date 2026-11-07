@@ -61,7 +61,7 @@ namespace OutpostLoop.Tests
         public sealed class ShutdownProbe : Game.BaseUICtrl
         {
             public int UnloadCount; public bool ResourcesWereReady;
-            protected override string Path()=>"Test/Shutdown";
+            protected override string Path()=>"Prefabs/UI/Test/Shutdown";
             public override Game.UILayer Layer()=>Game.UILayer.Dialog;
             protected override void OnInit(){} protected override void OnShow(){} protected override void OnHide(){}
             protected override void OnUnload(){UnloadCount++;ResourcesWereReady=Game.ResourceLoader.IsConfigured;}

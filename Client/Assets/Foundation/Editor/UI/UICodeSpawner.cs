@@ -155,7 +155,7 @@ namespace Game
             }
 
             return prefabPath
-                .Substring(ResourceUiRoot.Length, prefabPath.Length - ResourceUiRoot.Length - ".prefab".Length)
+                .Substring(GameAssetRoot.Length, prefabPath.Length - GameAssetRoot.Length - ".prefab".Length)
                 .Replace("\\", "/");
         }
 
@@ -222,14 +222,6 @@ namespace Game
                     item.TypeName.StartsWith("UnityEngine.UI.", StringComparison.Ordinal)))
             {
                 builder.AppendLine("using UnityEngine.UI;");
-            }
-
-            if (referenceCollector.data.Any(item =>
-                    item != null &&
-                    !string.IsNullOrWhiteSpace(item.TypeName) &&
-                    item.TypeName.StartsWith("UnityEngine.InputSystem.OnScreen.", StringComparison.Ordinal)))
-            {
-                builder.AppendLine("using UnityEngine.InputSystem.OnScreen;");
             }
         }
 

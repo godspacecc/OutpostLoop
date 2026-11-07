@@ -24,7 +24,7 @@ namespace Boot
 #if UNITY_EDITOR
         [Tooltip("编辑器运行时使用的资源加载模式")]
 #endif
-        private ResourcePlayMode _editorPlayMode = ResourcePlayMode.EditorSourceMode;
+        private ResourcePlayMode _editorPlayMode = ResourcePlayMode.EditorSimulateMode;
 
         private ResourcePlayMode _actualPlayMode;
         private bool _isReady;
@@ -105,19 +105,6 @@ namespace Boot
                 }
 #endif
 
-#if UNITY_EDITOR
-                if (_editorPlayMode == ResourcePlayMode.EditorSourceMode)
-                {
-                    if (UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEditor.SceneAsset>("Assets/Game/Scenes/Main.unity") == null ||
-                        UnityEditor.AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Game/Config/tbrule.bytes") == null)
-                        return Fail(BootFailureCode.RequiredResourceMissing, BootFailureStage.ResourceValidation, BootRetryScope.ResourceInitialization, ("source", "Main scene or tbrule.bytes"));
-                    _actualPlayMode = ResourcePlayMode.EditorSourceMode;
-                    BootResourceStartupState.Publish(new BootResourceStartupInfo(BootResourceSource.EditorSource, "", "editor-source", ""));
-                    _isReady = true;
-                    SetStatus("编辑器源资源就绪（未构建资源包）");
-                    return BootOperationResult.Success();
-                }
-#endif
                 YooAssets.Initialize();
                 DeterminePlayMode();
 

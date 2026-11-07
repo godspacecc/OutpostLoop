@@ -48,11 +48,21 @@ namespace OutpostLoop.Tests
                 StringAssert.Contains("class FoundationGeneratedProbeUI : BaseUI", source);
                 StringAssert.Contains("public Button ActionButton;", source);
                 StringAssert.Contains("using UnityEngine.UI;", source);
-                Assert.AreEqual("Probe/FoundationGeneratedProbe", Invoke("GetUiPrefabResourcePath", "Assets/Game/Prefabs/UI/Probe/FoundationGeneratedProbe.prefab"));
+                Assert.AreEqual("Prefabs/UI/Probe/FoundationGeneratedProbe", Invoke("GetUiPrefabResourcePath", "Assets/Game/Prefabs/UI/Probe/FoundationGeneratedProbe.prefab"));
                 Assert.AreEqual("Assets/Game/Scripts/Controller/UI/Probe/FoundationGeneratedProbeUI.cs", Invoke("GetGeneratedScriptPath", "Assets/Game/Prefabs/UI/Probe/FoundationGeneratedProbe.prefab", "Assets/Game/Scripts/Controller/UI/", "UI"));
                 Assert.AreSame(button, Invoke("ResolveReferenceObject", root, typeof(Button)));
             }
             finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+        /// <summary>同名 Prefab 在三个项目间应生成同一类名和引用类型。</summary>
+        [Test] public void BoxNamingAndCollectorDefaultMatchReference()
+        {
+            var method=typeof(BoxUICodeSpawner).GetMethod("GetBoxUiScriptAssetPath",BindingFlags.Static|BindingFlags.NonPublic);
+            Assert.AreEqual("Assets/Game/Scripts/Controller/UI/Test/Box/ItemBoxBoxUI.cs",method.Invoke(null,new object[]{"Assets/Game/Prefabs/UI/Test/Box/ItemBox.prefab"}));
+            var root=new GameObject("reference probe",typeof(RectTransform));
+            try {var collector=root.AddComponent<ReferenceCollector>();collector.Add("root",root);
+                Assert.AreEqual(typeof(RectTransform).FullName,collector.data[0].TypeName);
+            } finally {UnityEngine.Object.DestroyImmediate(root);}
         }
         private static object Invoke(string method, params object[] args)
         {

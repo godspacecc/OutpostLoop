@@ -25,12 +25,20 @@ namespace Game.Editor
             path => { if (File.Exists(path)) AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
                       else AssetDatabase.DeleteAsset(path); }, ReserveDefault()) { }
 
+        /// <summary>昂贵构建前校验本项目版本起点；只读，不预留版本、不写入台账。</summary>
+        public static WindowsUpdateManifest ValidateSourceIdentity()
+        {
+            var seed = JsonUtility.FromJson<WindowsUpdateManifest>(File.ReadAllText(DefaultLedger).TrimStart('\uFEFF'));
+            if (seed == null || seed.schemaVersion != 1 || seed.productId != WindowsUpdateManifest.ProductId ||
+                seed.platform != "Windows" || seed.architecture != "x64" || seed.releaseNumber < 0 ||
+                !System.Text.RegularExpressions.Regex.IsMatch(seed.versionName ?? "", @"\A[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}\z"))
+                throw new InvalidOperationException("PC 源码版本起点无效。");
+            return seed;
+        }
+
         private static ApplicationVersionReservation ReserveDefault()
         {
-            var seed = JsonUtility.FromJson<WindowsUpdateManifest>(File.ReadAllText(DefaultLedger));
-            if (seed == null || seed.schemaVersion != 1 || seed.productId != WindowsUpdateManifest.ProductId ||
-                seed.platform != "Windows" || seed.architecture != "x64")
-                throw new InvalidOperationException("PC 源码版本起点无效。");
+            var seed = ValidateSourceIdentity();
             return PersistentBuildVersions.ReserveApplication(BuildDataStore.Root, "StandaloneWindows64", seed.versionName, seed.releaseNumber);
         }
 

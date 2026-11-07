@@ -80,7 +80,6 @@ namespace Game
             }
 
             UICodeSpawner.EnsureDirectoryExists(assetPath);
-
             var builder = new StringBuilder();
             builder.AppendLine("namespace Game");
             builder.AppendLine("{");

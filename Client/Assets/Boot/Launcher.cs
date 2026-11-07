@@ -480,9 +480,6 @@ namespace Boot
             }
 #endif
 
-#if UNITY_EDITOR
-            if (BootResourceStartupState.TryGet(out var sourceInfo) && sourceInfo.Source == BootResourceSource.EditorSource) return null;
-#endif
             return YooAssets.TryGetPackage("OutpostLoop");
         }
 

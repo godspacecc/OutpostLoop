@@ -555,6 +555,7 @@ namespace Game.Editor
                 throw new InvalidOperationException("Standalone 脚本后端必须是 IL2CPP。");
 
             ValidateInsecureHttpOption(PlayerSettings.insecureHttpOption);
+            WindowsReleaseIdentity.ValidateSourceIdentity();
 
             var enabledScenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).ToArray();
             if (enabledScenes.Length != 1 || enabledScenes[0].path != BootScene)

@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -25,6 +25,7 @@ namespace Game.Editor
             public bool WindowsModuleInstalled, AndroidModuleInstalled, WindowsIl2CppConfigured, AndroidIl2CppConfigured;
             // 安装器只能读取现有配置和文件，禁止预检时触发选择框或安装。
             public bool InnoCompilerExists, InstallerTemplateExists, AndroidInstallerSourcesExist;
+            public bool WindowsSourceIdentityValid, HttpResourcesAllowed;
             public string ActiveTarget, CheckedUtc, InnoCompilerPath, HybridClrLocalPath;
             public string[] MissingRequirements, Limitations;
             public bool SourceReady => BootSceneExists && MainSceneExists && GameAssemblyExists && BootIsOnlyBuildScene && MainAddressConfigured && HybridClrPackageExists && HybridClrGameConfigured;
@@ -44,6 +45,10 @@ namespace Game.Editor
                 ActiveTarget = EditorUserBuildSettings.activeBuildTarget.ToString(), CheckedUtc = DateTime.UtcNow.ToString("O")
             };
             var missing = new List<string>();
+            try { WindowsReleaseIdentity.ValidateSourceIdentity(); result.WindowsSourceIdentityValid=true; }
+            catch (Exception error) { missing.Add("Windows 源身份校验失败："+error.Message); }
+            result.HttpResourcesAllowed=PlayerSettings.insecureHttpOption==InsecureHttpOption.AlwaysAllowed;
+            if(!result.HttpResourcesAllowed)missing.Add("当前通用资源服使用 HTTP，正式包传输配置与构建要求不一致。");
             var scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).ToArray();
             result.BootIsOnlyBuildScene = scenes.Length == 1 && scenes[0].path == "Assets/Game/Scenes/Boot.unity";
             // 只检查收集器声明，不调用 Collect/SimulateBuild 或资源构建。

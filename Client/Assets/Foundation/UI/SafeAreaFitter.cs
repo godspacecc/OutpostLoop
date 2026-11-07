@@ -17,7 +17,7 @@ namespace Game
         private bool originalLayoutCaptured;
         private LayoutSnapshot originalLayout;
 
-        /// <summary>全屏根的直属内容布局；Key 的生命周期不超过当前 UI 实例。</summary>
+        /// <summary>内容及全屏背景容器内的原始布局；Key 的生命周期不超过当前 UI 实例。</summary>
         private readonly Dictionary<RectTransform, LayoutSnapshot> childLayouts =
             new Dictionary<RectTransform, LayoutSnapshot>();
 
@@ -58,7 +58,7 @@ namespace Game
         }
 
         /// <summary>
-        /// 应用已经归一化的安全区锚点。全屏根只收紧直属内容，不改变背景覆盖范围。
+        /// 应用已经归一化的安全区锚点。保留全屏背景容器，并适配其中内容，不重复收紧后代。
         /// </summary>
         internal void ApplyAnchors(Vector2 safeAnchorMin, Vector2 safeAnchorMax)
         {
@@ -86,36 +86,33 @@ namespace Game
 
             // 根节点保留物理全屏尺寸，使根 Image、Raycast 和阻塞边界不被安全区切掉。
             originalLayout.Restore(rectTransform);
-            CaptureDirectChildren();
-            foreach (var pair in childLayouts)
-            {
-                var child = pair.Key;
-                if (child == null)
-                {
-                    continue;
-                }
-
-                var layout = pair.Value;
-                if (layout.IsFullScreen && child.GetComponent<Graphic>() != null)
-                {
-                    // 背景、遮罩和全屏射线面继续覆盖刘海与圆角区域。
-                    child.anchorMin = layout.AnchorMin;
-                    child.anchorMax = layout.AnchorMax;
-                    continue;
-                }
-
-                ApplyMappedLayout(child, layout, safeAnchorMin, safeAnchorMax, false);
-            }
+            ApplyContent(rectTransform, safeAnchorMin, safeAnchorMax);
         }
 
-        private void CaptureDirectChildren()
+        private void ApplyContent(RectTransform container, Vector2 safeAnchorMin, Vector2 safeAnchorMax)
         {
-            for (var index = 0; index < rectTransform.childCount; index++)
+            for (var index = 0; index < container.childCount; index++)
             {
-                if (rectTransform.GetChild(index) is RectTransform child && !childLayouts.ContainsKey(child))
+                if (!(container.GetChild(index) is RectTransform child))
                 {
-                    childLayouts.Add(child, LayoutSnapshot.Capture(child));
+                    continue;
                 }
+                if (!childLayouts.TryGetValue(child, out var layout))
+                {
+                    layout = LayoutSnapshot.Capture(child);
+                    childLayouts.Add(child, layout);
+                }
+                if (layout.IsFullScreen && child.GetComponent<Graphic>() != null && child.GetComponent<Selectable>() == null)
+                {
+                    // 背景仍铺满屏幕，但带背景容器中的按钮等内容必须继续适配。
+                    child.anchorMin = layout.AnchorMin;
+                    child.anchorMax = layout.AnchorMax;
+                    ApplyContent(child, safeAnchorMin, safeAnchorMax);
+                    continue;
+                }
+
+                // 此容器已映射到安全区，后代随父布局移动，不再重复映射。
+                ApplyMappedLayout(child, layout, safeAnchorMin, safeAnchorMax, false);
             }
         }
 

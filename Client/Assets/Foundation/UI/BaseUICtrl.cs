@@ -69,6 +69,7 @@ namespace Game
         protected abstract void OnShow();
         protected abstract void OnHide();
         protected virtual void OnUnload() { }
+        protected virtual BaseUI CreateView() { return null; }
         /// <summary>普通关闭入口的门禁；默认允许，仅由需要独占显示的界面覆盖。</summary>
         protected virtual bool CanHide() { return true; }
         protected virtual BackgroundConfig GetBackgroundConfig() { return null; }
@@ -220,9 +221,14 @@ namespace Game
             }
         }
 
-        public void Hide()
+        public void Hide() => HideInternal(false);
+
+        // 层级互斥必须关闭临时浮层，不受普通关闭门禁影响。
+        internal void HideForLayerBlocking() => HideInternal(true);
+
+        private void HideInternal(bool force)
         {
-            if (BaseUI == null || !_isActive || !CanHide())
+            if (BaseUI == null || !_isActive || (!force && !CanHide()))
             {
                 return;
             }
@@ -242,7 +248,7 @@ namespace Game
         public void MoveToTop()
         {
             if (Layer() == UILayer.Popup && IsTransientPopup && !UIHelper.CanShowPopup()) return;
-            if (BaseUI != null)
+            if (IsShow())
             {
                 MovePairToTop();
                 UIHelper.NotifyShown(this);
@@ -268,20 +274,6 @@ namespace Game
 
         private void Load()
         {
-            var relativePath = Path();
-            if (!ResourceAddress.TryFromRelativePath(ResourceAddressKind.UiPrefab, relativePath, out var address, out var addressError))
-            {
-                Log.Error($"[BaseUICtrl] UI 相对路径无效：{relativePath ?? "<null>"}；{addressError}");
-                return;
-            }
-
-            var prefab = UIHelper.LoadPrefab(address);
-            if (prefab == null)
-            {
-                Log.Error($"[BaseUICtrl] UI Prefab 未找到：{address}");
-                return;
-            }
-
             var root = UIRoot.EnsureInstance();
             if (root == null)
             {
@@ -295,14 +287,35 @@ namespace Game
                 return;
             }
 
-            var gameObject = Object.Instantiate(prefab, layerObj, false);
-            BaseUI = gameObject.GetComponent<BaseUI>();
-
-            if (BaseUI == null)
+            BaseUI = CreateView();
+            GameObject gameObject;
+            if (BaseUI != null)
             {
-                Log.Error($"[BaseUICtrl] UI Prefab 缺少 BaseUI：{address}");
-                Object.DestroyImmediate(gameObject);
-                return;
+                gameObject = BaseUI.gameObject;
+                gameObject.transform.SetParent(layerObj, false);
+            }
+            else
+            {
+                var address = Path();
+                if (!UIResourceAddress.IsValid(address))
+                {
+                    Log.Error($"[BaseUICtrl] UI 资源地址无效：{address ?? "<null>"}");
+                    return;
+                }
+                var prefab = UIHelper.LoadPrefab(address);
+                if (prefab == null)
+                {
+                    Log.Error($"[BaseUICtrl] UI Prefab 未找到：{address}");
+                    return;
+                }
+                gameObject = Object.Instantiate(prefab, layerObj, false);
+                BaseUI = gameObject.GetComponent<BaseUI>();
+                if (BaseUI == null)
+                {
+                    Log.Error($"[BaseUICtrl] UI Prefab 缺少 BaseUI：{address}");
+                    Object.DestroyImmediate(gameObject);
+                    return;
+                }
             }
 
             // 安全区只约束可交互内容；UI 根、Prefab 全屏背景和运行时背景继续覆盖物理屏幕。

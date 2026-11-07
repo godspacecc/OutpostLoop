@@ -3,7 +3,7 @@
   #error Release required
 #endif
 [Setup]
-AppId={{A13E8774-43DF-407E-98D2-C254573FA71E}
+AppId={{9E06D299-DCC5-49CF-8947-E9D9BAE9DCCA}
 AppName=OutpostLoop
 AppVersion={#Version}
 DefaultDirName={localappdata}\Programs\OutpostLoop
@@ -55,7 +55,7 @@ function InitializeSetup: Boolean;
 begin
   ExistingInstallDir := '';
   RegQueryStringValue(HKCU64,
-    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A13E8774-43DF-407E-98D2-C254573FA71E}_is1',
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{9E06D299-DCC5-49CF-8947-E9D9BAE9DCCA}_is1',
     'InstallLocation', ExistingInstallDir);
   if ExistingInstallDir <> '' then
     ExistingInstallDir := RemoveBackslashUnlessRoot(ExpandFileName(ExistingInstallDir));
