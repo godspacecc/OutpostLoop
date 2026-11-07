@@ -8,6 +8,16 @@ namespace Game
         protected override void Init()
         {
             RegisterModel(new RuntimeLogModel());
+            RegisterModel(new LocalizationModel());
+            RegisterModel(new DisplaySettingsModel());
+            RegisterModel(new AudioSettingsModel());
+            RegisterModel(new HotKeyModel());
+            RegisterUtility<ISettingsFileStore>(new SettingsFileStore());
+            RegisterUtility<IDisplayResolutionApplier>(new UnityDisplayResolutionApplier());
+            RegisterUtility(new HotKeyActionRegistry());
+            RegisterSystem(new SettingsSystem());
+            RegisterSystem(new DisplayPreviewTransaction());
+            RegisterSystem(new HotKeySystem());
             RegisterSystem(new RuntimeLogSystem());
         }
     }

@@ -17,6 +17,8 @@ namespace OutpostLoop.Resources
                 throw new ArgumentException("非法资源地址", nameof(address));
             if (Path.GetFileName(address)==address && address.EndsWith(".bytes",StringComparison.Ordinal))
                 path="Assets/Game/Config/"+address;
+            else if (address == "languages.json")
+                path="Assets/Game/Config/Localization/languages.json";
             else if (address.StartsWith("Prefabs/UI/",StringComparison.Ordinal) &&
                 ResourceAddress.TryFromRelativePath(ResourceAddressKind.UiPrefab,address.Substring("Prefabs/UI/".Length),out var resolved,out _))
                 path="Assets/Game/"+resolved+".prefab";

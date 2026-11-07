@@ -28,7 +28,10 @@ namespace Game
 #endif
             }
             UIHelper.SetPrefabLoader(null);
+            // 资源先就绪，再重载语言配置并应用本项目持久目录中的设置。
+            LocalizationLanguages.ResetCache();
             architecture = Game.Interface;
+            architecture.GetSystem<SettingsSystem>().LoadAndApply();
             IsInitialized = true;
         }
         /// <summary>退出按逆序释放界面、玩法容器、计时器和事件，最后断开资源入口；重复调用无副作用。</summary>
@@ -42,6 +45,7 @@ namespace Game
             Cleanup(() => current?.Deinit());
             Cleanup(TimerMgr.Instance.Clear);
             Cleanup(LifeCycle.Quit);
+            LocalizationLanguages.ResetCache();
             ResourceLoader.Use(null);
         }
         /// <summary>一个模块清理失败不阻断其它模块退出，同时保留错误原因。</summary>
