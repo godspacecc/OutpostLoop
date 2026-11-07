@@ -3,7 +3,8 @@
   "references": [
     "Game",
     "Boot",
-    "YooAsset"
+    "YooAsset",
+    "Unity.ugui"
   ],
   "includePlatforms": [
     "Editor"

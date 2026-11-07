@@ -3,7 +3,9 @@ using NUnit.Framework;
 using QFramework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace OutpostLoop.Tests
 {
@@ -61,6 +63,65 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(controller.World.Run.Paused);
             Assert.AreEqual(controller.World.Run.Config.InitialHealth, controller.World.Run.Health);
             yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator BootPreviewButtonsDriveSessionFromStartThroughRestart()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var run = controller.World.Run;
+            Assert.IsTrue(run.Paused);
+            Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            Click("PrimaryAction");
+            Assert.IsFalse(run.Paused);
+            Assert.IsFalse(Game.UIHelper.HasUIOpen);
+
+            // 通过领域事务准备一笔库存，只验证界面接线；移动采集由原有玩法测试覆盖。
+            controller.World.Step(.1f, Vector2.up, false);
+            Assert.Less(controller.World.Player.magnitude, 5f, "从出生点向基地走一步才能打开升级");
+            int cost = run.ScrapCost(1);
+            for (int i = 0; i < cost; i++) Assert.IsTrue(run.Gather(false));
+            run.Deposit();
+            yield return null;
+            Click("OpenUpgrade");
+            Assert.IsTrue(run.Paused);
+            Click("Purchase1");
+            Assert.AreEqual(1, run.Levels[1]);
+            Assert.AreEqual(0, run.Scrap);
+            Click("Purchase1");
+            Assert.AreEqual(1, run.Levels[1], "资源不足时按钮不能改变升级等级");
+            Click("PrimaryAction");
+            Assert.IsFalse(run.Paused);
+
+            Game.Game.Interface.GetSystem<PrototypeSystem>().SetPaused(true);
+            yield return null;
+            Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            Click("PrimaryAction");
+            Assert.IsFalse(run.Paused);
+            run.Damage(run.Health);
+            yield return null;
+            Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            var oldWorld = controller.World;
+            Click("PrimaryAction");
+            Assert.AreNotSame(oldWorld, controller.World);
+            Assert.AreEqual(0, controller.World.Run.Levels[1]);
+            Assert.IsFalse(controller.World.Run.Paused);
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>通过活动 EventSystem 分发 UGUI 左键事件，不绕过按钮监听器调用玩法。</summary>
+        private static void Click(string name)
+        {
+            var target = GameObject.Find(name);
+            Assert.NotNull(target, name + " 应在当前窗口显示");
+            Assert.NotNull(target.GetComponent<Button>());
+            Assert.NotNull(EventSystem.current);
+            Assert.IsTrue(ExecuteEvents.Execute(target,
+                new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left },
+                ExecuteEvents.pointerClickHandler));
         }
     }
 }

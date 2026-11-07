@@ -4,6 +4,9 @@ using QFramework;
 
 namespace OutpostLoop
 {
+    /// <summary>临时玩法界面从当前会话推导的显示状态。</summary>
+    internal enum PrototypeOverlay { None, Start, Paused, Upgrade, Result }
+
     /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
     public sealed class PrototypeController : MonoBehaviour
     {
@@ -20,6 +23,9 @@ namespace OutpostLoop
         private Font font;
         private string feedback = "";
         private float feedbackUntil;
+        // 主场景窗口随基础会话清理；临时截图工具仍可仅初始化世界。
+        private PrototypeModalCtrl modal;
+        private PrototypeUpgradeButtonCtrl upgradeEntry;
         // 权威规则由架构系统持有，视图只转发输入及读取快照。
         private PrototypeSystem session;
         private string startupError;
@@ -33,14 +39,34 @@ namespace OutpostLoop
         /// <summary>Main 完成真实玩法初始化后才释放 Boot 启动界面。</summary>
         private void Start()
         {
-            if (initialized) Boot.BootHost.ReportReady();
-            else Boot.BootHost.ReportFailure(new Dictionary<string,string>{{"reason",startupError ?? "Prototype initialization failed"}});
+            if (initialized)
+            {
+                try
+                {
+                    RefreshOverlay();
+                    if (modal?.IsShow() == true)
+                    {
+                        Boot.BootHost.ReportReady();
+                        return;
+                    }
+                    startupError = "临时玩法界面未能显示";
+                }
+                catch (System.Exception error)
+                {
+                    startupError = error.Message;
+                    Game.Log.Error("临时玩法界面初始化失败：" + error);
+                }
+                initialized = false;
+            }
+            Boot.BootHost.ReportFailure(new Dictionary<string,string>{{"reason",startupError ?? "Prototype initialization failed"}});
         }
         // 失活时停止接受输入并暂停，避免隐藏视图仍带着上一帧输入推进。
         private void OnEnable(){if(initialized)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
         private void OnDisable()
         {
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
+            modal?.Hide();
+            upgradeEntry?.Hide();
             if(session!=null){session.SubmitInput(Vector2.zero,false);session.SetPaused(true);}
         }
 
@@ -151,9 +177,12 @@ namespace OutpostLoop
         private void PollInputAndPresent()
         {
             if(!initialized)return;
-            if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0){shop=false;session.SetPaused(!World.Run.Paused);}
-            if(Input.GetKeyDown(KeyCode.B)&&started&&World.Run.Outcome==0&&World.Player.magnitude<5)
-            {shop=!shop;session.SetPaused(shop);}
+            if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0)
+            {
+                if(shop || World.Run.Paused) ActOnModal();
+                else session.SetPaused(true);
+            }
+            if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
             if(started&&!World.Run.Paused&&World.Run.Outcome==0)
             {
                 var move=new Vector2(Input.GetAxisRaw("Horizontal"),Input.GetAxisRaw("Vertical"));
@@ -161,6 +190,74 @@ namespace OutpostLoop
                 if(move.sqrMagnitude>0.01f)player.rotation=Quaternion.LookRotation(new Vector3(-move.x,0,-move.y));
             }
             SyncView();
+            RefreshOverlay();
+        }
+
+        internal PrototypeOverlay Overlay => !started ? PrototypeOverlay.Start :
+            World.Run.Outcome != 0 ? PrototypeOverlay.Result :
+            shop ? PrototypeOverlay.Upgrade : World.Run.Paused ? PrototypeOverlay.Paused : PrototypeOverlay.None;
+
+        internal string UpgradeFeedback => Time.realtimeSinceStartup < feedbackUntil ? feedback : "";
+
+        /// <summary>键盘与临时按钮共用同一个基地入口，购买权限仍由玩法系统判断。</summary>
+        internal void ToggleUpgrade()
+        {
+            if (!initialized || !started || World.Run.Outcome != 0 || World.Player.magnitude >= 5) return;
+            shop = !shop;
+            feedback = "";
+            session.SetPaused(shop);
+            RefreshOverlay();
+        }
+
+        /// <summary>根据本局状态执行主按钮动作；窗口本身不改变规则数据。</summary>
+        internal void ActOnModal()
+        {
+            if (!initialized) return;
+            switch (Overlay)
+            {
+                case PrototypeOverlay.Start:
+                    started = true;
+                    session.SetPaused(false);
+                    break;
+                case PrototypeOverlay.Paused:
+                case PrototypeOverlay.Upgrade:
+                    shop = false;
+                    session.SetPaused(false);
+                    break;
+                case PrototypeOverlay.Result:
+                    Restart(true);
+                    break;
+            }
+            RefreshOverlay();
+        }
+
+        internal void PurchaseUpgrade(int route)
+        {
+            if (!initialized || Overlay != PrototypeOverlay.Upgrade) return;
+            feedback = session.Purchase(route) ? "升级完成" : "资源不足或已满级";
+            feedbackUntil = Time.realtimeSinceStartup + 2;
+            RefreshOverlay();
+        }
+
+        /// <summary>仅在基础会话就绪时显示窗口，退出后不重新生成 UI。</summary>
+        private void RefreshOverlay()
+        {
+            if (!Application.isPlaying || !Game.FoundationRuntime.IsInitialized) return;
+            var mode = Overlay;
+            if (mode != PrototypeOverlay.None)
+            {
+                if (modal?.IsShow() != true) modal = Game.UIHelper.ShowUI<PrototypeModalCtrl>();
+                modal.Bind(this, font);
+                modal.Refresh(this);
+            }
+            else modal?.Hide();
+
+            if (mode == PrototypeOverlay.None && World.Player.magnitude < 5)
+            {
+                if (upgradeEntry?.IsShow() != true) upgradeEntry = Game.UIHelper.ShowUI<PrototypeUpgradeButtonCtrl>();
+                upgradeEntry.Bind(this, font);
+            }
+            else upgradeEntry?.Hide();
         }
 
         /// <summary>表现仅映射已结算状态；敌人采用固定池，不按波次无限创建。</summary>
@@ -199,43 +296,6 @@ namespace OutpostLoop
             GUI.Label(new Rect(30,151,300,28),"背包 "+(s.CargoScrap+s.CargoEnergy)+" / "+s.Capacity);
             GUI.Box(new Rect(16,640,850,62),"WASD 移动 · 靠近资源按住 E 采集 · 回基地自动卸货\n基地附近 B 升级 · ESC 暂停 · 12 分钟守住最终进攻即获胜");
             DrawMap();
-            if(started&&s.Outcome==0&&World.Player.magnitude<5&&!shop&&!s.Paused)
-                if(GUI.Button(new Rect(900,640,330,52),"打开基地升级 [B]")){shop=true;session.SetPaused(true);}
-            if(Time.realtimeSinceStartup<feedbackUntil)GUI.Label(new Rect(380,590,700,36),feedback);
-            if(!started)
-            {
-                GUI.Box(new Rect(365,210,550,325),"探索 / 采集 / 升级 / 防守");
-                GUI.Label(new Rect(400,265,490,135),"从中央基地出发，搜寻废料与能源。\n满载后回家卸货，升级采集能力或防线。\n炮塔自动战斗；提前准备比操作更重要。\n每局 12 分钟，最后一波在第 11 分钟。\n当前使用独立临时几何体，不是最终美术。");
-                if(GUI.Button(new Rect(460,445,360,58),"开始这一局")){started=true;session.SetPaused(false);}
-            }
-            else if(s.Outcome!=0)
-            {
-                GUI.Box(new Rect(390,240,500,245),s.Outcome>0?"防守成功":"本局结束");
-                GUI.Label(new Rect(425,300,450,60),"坚持 "+Mathf.FloorToInt(s.Elapsed)+" 秒，击退 "+World.Kills+" 个敌人\n换个资源布局，再试一条升级路线。");
-                if(GUI.Button(new Rect(470,395,340,58),"新地图，再来一局"))Restart(true);
-            }
-            else if(shop)
-            {
-                GUI.Box(new Rect(350,210,580,350),"基地升级 · 选择期间暂停");
-                string[] names={"采集 / 运输","炮塔火力 / 射程","基地耐久 / 修复"};
-                for(int i=0;i<3;i++)
-                {
-                    var label=names[i]+"  "+s.Levels[i]+" / "+s.Config.MaxLevel;
-                    label+=s.Levels[i]>=s.Config.MaxLevel?"  已满级":"   废料 "+s.ScrapCost(i)+" / 能源 "+s.EnergyCost(i);
-                    if(GUI.Button(new Rect(375,270+i*65,530,53),label))
-                    {
-                        // 面板暂停世界，购买事务仍需在允许动作的状态下校验。
-                        bool ok=session.Purchase(i);
-                        feedback=ok?"升级完成":"资源不足或已满级";feedbackUntil=Time.realtimeSinceStartup+2;
-                    }
-                }
-                if(GUI.Button(new Rect(505,485,270,48),"返回探索 [B]")){shop=false;session.SetPaused(false);}
-            }
-            else if(s.Paused)
-            {
-                GUI.Box(new Rect(450,270,380,180),"已暂停");
-                if(GUI.Button(new Rect(490,345,300,60),"继续 [ESC]"))session.SetPaused(false);
-            }
         }
 
         private void DrawMap()
@@ -247,6 +307,13 @@ namespace OutpostLoop
         }
         private void Dot(Vector2 p,Color color,float size)
         {GUI.color=color;GUI.DrawTexture(new Rect(1155+p.x*2-size/2,140-p.y*2-size/2,size,size),Texture2D.whiteTexture);GUI.color=Color.white;}
-        private void OnDestroy(){Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);foreach(var material in materials)Release(material);if(font!=null)Release(font);}
+        private void OnDestroy()
+        {
+            Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
+            modal?.Detach(this);
+            upgradeEntry?.Detach(this);
+            foreach(var material in materials)Release(material);
+            if(font!=null)Release(font);
+        }
     }
 }

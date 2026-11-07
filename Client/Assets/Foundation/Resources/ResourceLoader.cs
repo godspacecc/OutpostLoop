@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -11,14 +12,18 @@ namespace Game
     {
         private static readonly IResourceLoader DefaultLoader = new NullResourceLoader();
         private static IResourceLoader _current = DefaultLoader;
+        private static readonly List<IDisposable> SessionLoaders = new List<IDisposable>();
 
         public static IResourceLoader Current => _current;
 
         public static bool IsConfigured => !ReferenceEquals(_current, DefaultLoader);
 
+        /// <summary>接管可释放加载器的会话所有权；切换时保留旧资源，直到使用方退出后调用 Shutdown。</summary>
         public static void Use(IResourceLoader loader)
         {
             _current = loader ?? DefaultLoader;
+            if (loader is IDisposable disposable && !SessionLoaders.Exists(item => ReferenceEquals(item, disposable)))
+                SessionLoaders.Add(disposable);
         }
 
         public static T LoadAsset<T>(string path) where T : Object
@@ -33,12 +38,14 @@ namespace Game
 
         public static ResourceLoadHandle LoadAssetAsync<T>(string path, Action<T> onLoaded) where T : Object
         {
-            return _current.LoadAssetAsync(path, onLoaded);
+            var owner = _current;
+            var handle = owner.LoadAssetAsync(path, onLoaded);
+            return new ResourceLoadHandle(handle.RawHandle, owner);
         }
 
         public static void Release(ResourceLoadHandle handle)
         {
-            _current.Release(handle);
+            (handle.Owner ?? _current).Release(handle);
         }
 
         public static void SetLoaderForTests(IResourceLoader loader)
@@ -46,9 +53,19 @@ namespace Game
             Use(loader);
         }
 
-        public static void ResetForTests()
+        public static void ResetForTests() => Shutdown();
+
+        /// <summary>业务停止使用资源后关闭所有会话加载器；单个清理失败不阻断其他加载器，重复调用无副作用。</summary>
+        public static void Shutdown()
         {
             _current = DefaultLoader;
+            var loaders = SessionLoaders.ToArray();
+            SessionLoaders.Clear();
+            foreach (var loader in loaders)
+            {
+                try { loader.Dispose(); }
+                catch (Exception error) { Log.Error($"[ResourceLoader] 资源会话释放失败：{error}"); }
+            }
         }
 
         private sealed class NullResourceLoader : IResourceLoader

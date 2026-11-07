@@ -2,7 +2,7 @@ using NUnit.Framework;
 using OutpostLoop.Resources.Editor;
 namespace OutpostLoop.Resources.Tests
 {
-    /// <summary>范围仅五条：真实源收集、源配置读取及非法地址拒绝；不验证运行包。</summary>
+    /// <summary>六项编辑器检查：真实源收集、地址与加载器所有权；不验证 Player 资源包。</summary>
     public sealed class ResourceFoundationTests
     {
         [Test] public void UiSourceAndCollectorUseSameLogicalAddress()
@@ -35,5 +35,39 @@ namespace OutpostLoop.Resources.Tests
         }
         [Test] public void EditorSourceReadsRealRule() { Assert.IsNotEmpty(new EditorSourceResourceLoader().LoadAsset<UnityEngine.TextAsset>("tbrule.bytes").bytes); }
         [Test] public void EditorSourceRejectsTraversal() { Assert.Throws<System.ArgumentException>(() => new EditorSourceResourceLoader().LoadAsset<UnityEngine.TextAsset>("../tbrule.bytes")); }
+
+        [Test] public void SwitchingLoadersKeepsSessionOwnersAndRoutesAsyncRelease()
+        {
+            var first = new OwnedLoader();
+            var second = new OwnedLoader();
+            try
+            {
+                Game.ResourceLoader.Use(first);
+                var handle = Game.ResourceLoader.LoadAssetAsync<UnityEngine.TextAsset>("probe", _ => { });
+                Game.ResourceLoader.Use(second);
+                Game.ResourceLoader.Release(handle);
+                Assert.AreEqual(1, first.Releases);
+                Assert.AreEqual(0, second.Releases);
+                Game.ResourceLoader.Use(first);
+                Assert.AreEqual(0, first.Disposals + second.Disposals);
+                Game.ResourceLoader.Shutdown();
+                Game.ResourceLoader.Shutdown();
+                Assert.AreEqual(1, first.Disposals);
+                Assert.AreEqual(1, second.Disposals);
+                Assert.IsFalse(Game.ResourceLoader.IsConfigured);
+            }
+            finally { Game.ResourceLoader.Shutdown(); }
+        }
+
+        // 跟踪两个后端各自收到的异步归还与会话关闭。
+        private sealed class OwnedLoader : Game.IResourceLoader, System.IDisposable
+        {
+            public int Releases, Disposals;
+            public T LoadAsset<T>(string path) where T : UnityEngine.Object => null;
+            public Game.ResourceLoadHandle LoadAssetAsync<T>(string path, System.Action<T> onLoaded)
+                where T : UnityEngine.Object => new Game.ResourceLoadHandle(new object());
+            public void Release(Game.ResourceLoadHandle handle) => Releases++;
+            public void Dispose() => Disposals++;
+        }
     }
 }

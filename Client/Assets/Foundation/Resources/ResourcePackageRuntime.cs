@@ -69,7 +69,7 @@ namespace OutpostLoop.Resources
         public IEnumerator Shutdown()
         {
             IsReady = false;
-            ResourceLoader.Use(null);
+            ResourceLoader.Shutdown();
             if (package == null) yield break;
             yield return package.DestroyAsync();
             YooAssets.RemovePackage(package); package = null;

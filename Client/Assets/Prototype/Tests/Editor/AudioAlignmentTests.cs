@@ -33,7 +33,6 @@ namespace OutpostLoop.Tests
             LifeCycle.ClearForTests();
             ResourceLoader.ResetForTests();
             Object.DestroyImmediate(root);
-            loader.Dispose();
         }
         [Test] public void AudioFrameworkExists()
         {

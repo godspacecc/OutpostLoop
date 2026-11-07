@@ -7,10 +7,15 @@ namespace Game
     {
         public static readonly ResourceLoadHandle Empty = new ResourceLoadHandle(null);
 
-        public ResourceLoadHandle(object rawHandle)
+        public ResourceLoadHandle(object rawHandle) : this(rawHandle, null) { }
+
+        internal ResourceLoadHandle(object rawHandle, IResourceLoader owner)
         {
             RawHandle = rawHandle;
+            Owner = owner;
         }
+
+        internal IResourceLoader Owner { get; }
 
         public object RawHandle { get; }
         public bool IsValid => RawHandle != null;

@@ -7,7 +7,7 @@ using UnityEngine.TestTools;
 using UnityEngine.SceneManagement;
 namespace OutpostLoop.Tests
 {
-    /// <summary>三项真实 Play 检查；所有编辑器设置在 finally 中恢复。</summary>
+    /// <summary>四项真实 Play 检查；所有编辑器设置在 finally 中恢复。</summary>
     public sealed class FoundationStartupPlayTests
     {
         private static IEnumerator WaitForMain()
@@ -39,6 +39,33 @@ namespace OutpostLoop.Tests
         }
         private static GameObject temporaryPrefab;
         private static GameObject LoadTemporaryPrefab(string address) => temporaryPrefab;
+        [UnityTest] public IEnumerator BootResourceSessionReusesAndReleasesSyncHandle()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            const string address = "tbrule.bytes";
+            var probe = YooAsset.YooAssets.GetPackage("OutpostLoop").LoadAssetSync<TextAsset>(address);
+            try
+            {
+                Assert.NotNull(probe.AssetObject);
+                // 已有 Main 读过规则，用独立句柄观测同一个 YooAsset 提供器的真实引用计数。
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var provider = typeof(YooAsset.AssetHandle).BaseType.GetProperty("Provider", flags).GetValue(probe);
+                var count = provider.GetType().GetProperty("RefCount");
+                var before = (int)count.GetValue(provider);
+                Assert.GreaterOrEqual(before, 2, "应有会话与独立探针各持有一个句柄");
+                Assert.AreSame(probe.AssetObject, Game.ResourceLoader.LoadAsset<TextAsset>(address));
+                Assert.AreSame(probe.AssetObject, Game.ResourceLoader.LoadAsset<TextAsset>(address));
+                Assert.AreEqual(before, count.GetValue(provider));
+                Game.FoundationRuntime.Shutdown();
+                Game.FoundationRuntime.Shutdown();
+                Assert.AreEqual(before - 1, count.GetValue(provider));
+                Assert.NotNull(probe.AssetObject, "会话关闭不得释放调用方自己的句柄");
+            }
+            finally { probe.Release(); }
+            yield return new ExitPlayMode();
+        }
         [UnityTest] public IEnumerator OpenWindowUnloadsBeforeResourcesAndOnlyOnce()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

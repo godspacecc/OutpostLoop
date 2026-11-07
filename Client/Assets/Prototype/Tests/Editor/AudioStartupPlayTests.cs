@@ -26,7 +26,6 @@ namespace OutpostLoop.Tests
             var audio=architecture.GetSystem<AudioSystem>();
             var model=architecture.GetModel<AudioSettingsModel>();
             var previous=model.ToData();
-            var originalLoader=ResourceLoader.Current;
             var loader=new AudioTestLoader{Immediate=true};
             ResourceLoader.Use(loader);
             try
@@ -71,8 +70,6 @@ namespace OutpostLoop.Tests
                     model.Apply(previous);audio.ApplyVolumes();
                     FoundationRuntime.Shutdown();
                 }
-                ResourceLoader.Use(originalLoader);
-                loader.Dispose();
             }
             yield return new ExitPlayMode();
         }

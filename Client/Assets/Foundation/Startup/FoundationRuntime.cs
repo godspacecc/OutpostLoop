@@ -47,7 +47,7 @@ namespace Game
             Cleanup(TimerMgr.Instance.Clear);
             Cleanup(LifeCycle.Quit);
             LocalizationLanguages.ResetCache();
-            ResourceLoader.Use(null);
+            ResourceLoader.Shutdown();
         }
         /// <summary>一个模块清理失败不阻断其它模块退出，同时保留错误原因。</summary>
         private static void Cleanup(Action action)

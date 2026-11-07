@@ -20,7 +20,7 @@
 ## 当前交付边界
 这是**编辑器可玩原型**，不是发布版本。全部几何体、材质与调试 UI 独立创建，未使用 FirepowerLoop 的视觉资源。高位镜头和新概念方向已讨论；实际模型、动作和射击短线仍为临时可玩预览，不代表正式美术验收。
 
-地图半径限制 46 米；36 个资源点；敌人固定池 48；不生成无限新区。边缘装饰不碰撞，首版没有自由建造、居民模拟、寻路障碍、音频、触屏输入或中途存档。手机性能与安装包尚未验证，未运行 Player Build。
+地图半径限制 46 米；36 个资源点；敌人固定池 48；不生成无限新区。边缘装饰不碰撞，首版没有自由建造、居民模拟、寻路障碍、正式音效、触屏输入或中途存档。Windows 本地 Player 仅验证过下文的 Boot 批次；未实际安装或进行 Android 真机验收。
 
 ## 实现与验证
 已经补齐适合独立项目的通用开发基础，源码独立维护，不与 FirepowerLoop 自动同步：
@@ -28,7 +28,9 @@
 - QFramework 的 Model/System、事件、统一生命周期、日志和计时器。原型由 Model 保存本局，System 推进规则，Controller 提交操作并显示画面。
 - 独立 Luban 配置源 `Config/DataCsv/rules.csv`。运行 `Config/gen.bat` 会校验并生成客户端与服务端配置产物；`Server` 包含生成配置与通用资源服脚本模板，没有旧服务器业务或玩家数据。
 - YooAsset 2.3.17、独立 OutpostLoop 收集设置；公共 IResourceLoader/ResourceLoader/ResourceLoadHandle/YooAssetResourceLoader 与 FirepowerLoop 对齐。Boot 默认经 YooAsset 模拟包初始化，主场景和配置均通过公共 YooAssetResourceLoader 加载；EditorSourceResourceLoader 仅供独立编辑器诊断/测试使用，不再是 Boot 启动分支。模拟模式仍检查 Game.dll.bytes 和 AOT 清单地址，需要本项目自身生成的启动依赖。
-- BaseUI、Box/Page 控制器、UIRoot 空层、列表与对象池、ReferenceCollector 和 UI 代码生成器。默认 UI 加载转发公共 ResourceLoader，控制器 Path 返回与 3DBase 一致的完整逻辑地址（如 Prefabs/UI/Probe/Window），由 UIResourceAddress 校验后加载；也支持 CreateView 动态视图，并自动接入 SafeAreaFitter。未复制旧项目主题或 UI Prefab，游戏画面仍是原型 IMGUI。
+- BaseUI、Box/Page 控制器、UIRoot 分层、列表与对象池、ReferenceCollector 和 UI 代码生成器。默认 UI 加载转发公共 ResourceLoader，控制器 Path 返回完整逻辑地址（如 Prefabs/UI/Probe/Window），由 UIResourceAddress 校验后加载。开局、暂停、基地升级和结算使用 CreateView 生成的临时 UGUI 界面，接入 SafeAreaFitter；状态 HUD 与区域地图仍是原型 IMGUI。
+- 同步加载以地址和类型在会话内复用 YooAsset 句柄，UI 和系统退出后统一释放。异步句柄由调用方持有并交回原加载器；切换后端不提前释放旧会话借用的同步资源。
+- 运行时日志支持错误落盘和诊断导出；设置支持本地持久化及显示预览回滚；音频支持混音、池化、淡入淡出和会话暂停，尚未接入正式音效素材。
 - 独立 JSON 文件存储：区分缺失、损坏、未知版本，完整写入后替换旧文件。这里只提供通用能力，没有增加游戏中途存档或局外成长。
 - UniTask、Input System、UGUI、TMP 等依赖由本工程自行安装。没有复制旧 Library、UserSettings、MCP 配置或玩家数据。
 
@@ -71,7 +73,7 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 
 初次拆分的编辑器验证证据位于 `Backup/Artifacts/BootMainBuild-20261107/`。随后用户单独授权一次本地完整构建、不发布；已生成本项目 Windows 宿主、AOT/Game DLL、资源与安装器，并验证资源服不可达时回退内置资源、进入 Main。Boot 对齐的 35 项限定测试通过，证据位于 `Backup/Artifacts/BootAlignment-20261107/`。未执行安装、Android 真机或发布验证。
 
-后续 UI 对齐以 3DBase 为准：安全区递归适配、Top/Popup 互斥、隐藏窗口置顶、完整 UI 地址/CreateView、列表及生成工具；26 项限定测试全部通过，含实际 Boot→Main 和三项生命周期 Play 检查。此后未再构建 Player，现有本地安装包仅对应前一轮 Boot 验证。证据位于 `Backup/Artifacts/UI3DBaseAlignment-20261107/`。音频、设置、本地化等尚未迁入的通用模块不在本批范围内。
+后续 UI 对齐以 3DBase 为准：安全区递归适配、Top/Popup 互斥、隐藏窗口置顶、完整 UI 地址/CreateView、列表及生成工具；26 项限定测试全部通过，含实际 Boot→Main 和三项生命周期 Play 检查。此后未再构建 Player，现有本地安装包仅对应前一轮 Boot 验证。证据位于 `Backup/Artifacts/UI3DBaseAlignment-20261107/`。
 
 
 ## Unity MCP
