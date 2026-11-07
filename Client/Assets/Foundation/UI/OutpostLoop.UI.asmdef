@@ -3,7 +3,8 @@
   "references": [
     "OutpostLoop.Core",
     "Unity.ugui",
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "OutpostLoop.Resources"
   ],
   "includePlatforms": []
 }

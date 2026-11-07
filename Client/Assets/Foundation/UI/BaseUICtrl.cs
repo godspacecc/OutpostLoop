@@ -257,12 +257,9 @@ namespace Game
         private void Load()
         {
             var relativePath = Path();
-            // 加载端口接收生成器产生的相对地址，禁止跨目录和绝对路径。
-            var address = relativePath?.Replace('\\', '/');
-            if (string.IsNullOrWhiteSpace(address) || !address.StartsWith("Prefabs/UI/", StringComparison.Ordinal)
-                || address.Contains("..") || address.Contains(":"))
+            if (!ResourceAddress.TryFromRelativePath(ResourceAddressKind.UiPrefab, relativePath, out var address, out var addressError))
             {
-                Log.Error($"[BaseUICtrl] UI 相对路径无效：{relativePath ?? "<null>"}");
+                Log.Error($"[BaseUICtrl] UI 相对路径无效：{relativePath ?? "<null>"}；{addressError}");
                 return;
             }
 
@@ -295,6 +292,10 @@ namespace Game
                 Object.DestroyImmediate(gameObject);
                 return;
             }
+
+            // 安全区只约束可交互内容；UI 根、Prefab 全屏背景和运行时背景继续覆盖物理屏幕。
+            var safeAreaFitter = gameObject.GetComponent<SafeAreaFitter>() ?? gameObject.AddComponent<SafeAreaFitter>();
+            safeAreaFitter.ApplyNow();
 
             var loadedUI = BaseUI;
             EnsureBackgroundFor(loadedUI, layerObj);

@@ -38,3 +38,16 @@ MonoBehaviour:
         FilterRuleName: OutpostConfigFilter
         AssetTags: 
         UserData: 
+    - GroupName: UI
+      GroupDesc: 
+      AssetTags: startup
+      ActiveRuleName: EnableGroup
+      Collectors:
+      - CollectPath: Assets/Game/Prefabs/UI
+        CollectorGUID: 6e3138a832a649041b63ebf55d584c7d
+        CollectorType: 0
+        AddressRuleName: OutpostUiAddress
+        PackRuleName: PackSeparately
+        FilterRuleName: OutpostUiFilter
+        AssetTags: 
+        UserData: 

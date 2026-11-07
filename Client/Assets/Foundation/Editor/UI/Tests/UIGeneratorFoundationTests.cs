@@ -42,13 +42,13 @@ namespace OutpostLoop.Tests
                 var button = root.AddComponent<Button>();
                 var collector = root.AddComponent<ReferenceCollector>();
                 collector.data.Add(new ReferenceCollectorData { key = "ActionButton", gameObject = root, TypeName = typeof(Button).FullName });
-                var output = Path.GetFullPath(Path.Combine(Application.dataPath, "../../Backup/Artifacts/Foundation-20261107/GeneratedUI/FoundationGeneratedProbeUI.cs"));
+                var output = Path.GetFullPath(Path.Combine(Application.dataPath, "../../Backup/Artifacts/FrameworkAlignment-20261107/GeneratedUI/FoundationGeneratedProbeUI.cs"));
                 Invoke("WriteViewScript", root, output, collector, "UI", "BaseUI");
                 var source = File.ReadAllText(output);
                 StringAssert.Contains("class FoundationGeneratedProbeUI : BaseUI", source);
                 StringAssert.Contains("public Button ActionButton;", source);
                 StringAssert.Contains("using UnityEngine.UI;", source);
-                Assert.AreEqual("Prefabs/UI/Probe/FoundationGeneratedProbe", Invoke("GetUiPrefabResourcePath", "Assets/Game/Prefabs/UI/Probe/FoundationGeneratedProbe.prefab"));
+                Assert.AreEqual("Probe/FoundationGeneratedProbe", Invoke("GetUiPrefabResourcePath", "Assets/Game/Prefabs/UI/Probe/FoundationGeneratedProbe.prefab"));
                 Assert.AreEqual("Assets/Game/Scripts/Controller/UI/Probe/FoundationGeneratedProbeUI.cs", Invoke("GetGeneratedScriptPath", "Assets/Game/Prefabs/UI/Probe/FoundationGeneratedProbe.prefab", "Assets/Game/Scripts/Controller/UI/", "UI"));
                 Assert.AreSame(button, Invoke("ResolveReferenceObject", root, typeof(Button)));
             }

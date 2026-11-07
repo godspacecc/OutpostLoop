@@ -155,7 +155,7 @@ namespace Game
             }
 
             return prefabPath
-                .Substring(GameAssetRoot.Length, prefabPath.Length - GameAssetRoot.Length - ".prefab".Length)
+                .Substring(ResourceUiRoot.Length, prefabPath.Length - ResourceUiRoot.Length - ".prefab".Length)
                 .Replace("\\", "/");
         }
 

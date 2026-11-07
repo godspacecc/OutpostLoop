@@ -1,1 +1,7 @@
-{"name": "OutpostLoop.Resources", "references": ["YooAsset"]}
+{
+  "name": "OutpostLoop.Resources",
+  "references": [
+    "YooAsset",
+    "OutpostLoop.Core"
+  ]
+}

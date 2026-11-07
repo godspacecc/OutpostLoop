@@ -112,6 +112,7 @@ namespace Game
             _prefabLoader = DefaultLoadPrefab;
             lastBlockingUIOpen = false;
             BlockingUIChanged = null;
+            ResourceLoader.ResetForTests();
 
             foreach (var uiRoot in Object.FindObjectsOfType<UIRoot>(true))
             {
@@ -181,8 +182,7 @@ namespace Game
 
         private static GameObject DefaultLoadPrefab(string path)
         {
-            Log.Error($"[UIHelper] 尚未配置界面资源加载器：{path}");
-            return null;
+            return ResourceLoader.LoadAsset<GameObject>(path);
         }
 
         private static void NotifyBlockingStateChanged()

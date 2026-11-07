@@ -1,1 +1,16 @@
-{"name": "OutpostLoop.Resources.Tests", "references": ["OutpostLoop.Resources", "OutpostLoop.Resources.Editor"], "includePlatforms": ["Editor"], "optionalUnityReferences": ["TestAssemblies"]}
+{
+  "name": "OutpostLoop.Resources.Tests",
+  "references": [
+    "OutpostLoop.Resources",
+    "OutpostLoop.Resources.Editor",
+    "YooAsset.Editor",
+    "YooAsset",
+    "OutpostLoop.Core"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

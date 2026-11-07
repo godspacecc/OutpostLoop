@@ -44,9 +44,7 @@ namespace OutpostLoop
             if(architecture.GetSystem<PrototypeSystem>()==null)architecture.RegisterSystem(new PrototypeSystem());
             session=architecture.GetSystem<PrototypeSystem>();
             if(isActiveAndEnabled)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);
-#if UNITY_EDITOR
-            Game.UIHelper.SetPrefabLoader(path=>UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Game/"+path+".prefab"));
-#endif
+
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
             gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true; gameCamera.orthographicSize=17;

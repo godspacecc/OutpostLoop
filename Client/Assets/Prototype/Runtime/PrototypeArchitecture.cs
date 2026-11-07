@@ -8,7 +8,13 @@ namespace OutpostLoop
     /// <summary>明确的编辑器源配置入口，不把源读取冒充资源包已就绪。</summary>
     public static class PrototypeServices
     {
-        public static PrototypeConfig LoadConfig() => PrototypeConfig.Load(ResourceService.LoadBytesForEditorSource);
+        public static PrototypeConfig LoadConfig()
+        {
+#if UNITY_EDITOR
+            if (!Game.ResourceLoader.IsConfigured) Game.ResourceLoader.Use(new EditorSourceResourceLoader());
+#endif
+            return PrototypeConfig.Load(address => Game.ResourceLoader.LoadAsset<TextAsset>(address)?.bytes);
+        }
     }
     /// <summary>本局状态归模型持有，表现组件不再拥有权威世界。</summary>
     public sealed class PrototypeModel : AbstractModel

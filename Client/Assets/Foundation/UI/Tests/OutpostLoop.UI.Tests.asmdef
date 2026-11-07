@@ -3,7 +3,9 @@
   "references": [
     "OutpostLoop.UI",
     "OutpostLoop.Core",
-    "Unity.ugui"
+    "Unity.ugui",
+    "OutpostLoop.Resources",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [
     "Editor"

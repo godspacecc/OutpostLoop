@@ -3,7 +3,7 @@
 独立的限时单局探索、采集、升级与自动防守原型。Unity **2022.3.55f1c1**，工程目录 `Client`。
 
 ## 启动
-1. Unity Hub 添加 `E:/GitHub/OutpostLoop/Client`。
+1. Unity Hub 添加本仓库的 `Client` 目录。
 2. 打开 `Assets/Prototype/Scenes/Boot.unity`。
 3. 点击 Play，再点击游戏内“开始这一局”。推荐 Game 视图 16:9、1280×720 或更大。
 4. 若未找到场景，用菜单 `OutpostLoop > Create Preview Scene` 创建。
@@ -27,8 +27,8 @@
 
 - QFramework 的 Model/System、事件、统一生命周期、日志和计时器。原型由 Model 保存本局，System 推进规则，Controller 提交操作并显示画面。
 - 独立 Luban 配置源 `Config/DataCsv/rules.csv`。运行 `Config/gen.bat` 会校验并生成客户端与服务端配置产物；`Server` 当前只有生成配置，没有服务器业务或数据。
-- YooAsset 2.3.17、独立 OutpostLoop 收集设置、资源句柄释放及错误处理接口。当前编辑器从源文件读取 `tbrule.bytes`，真实收集地址和 `startup` 标签已检查。尚无已构建清单，因此资源包运行加载未验证；不触发模拟构建或 Player Build。
-- BaseUI、Box/Page 控制器、UIRoot 空层、列表与对象池、ReferenceCollector 和 UI 代码生成器。未复制旧项目主题或 UI Prefab，游戏画面仍是原型 IMGUI。
+- YooAsset 2.3.17、独立 OutpostLoop 收集设置；公共 IResourceLoader/ResourceLoader/ResourceLoadHandle/YooAssetResourceLoader 与 FirepowerLoop 对齐。当前编辑器通过同一公共接口的 EditorSourceResourceLoader 后端读取 `tbrule.bytes`，真实收集地址和 `startup` 标签已检查。尚无已构建清单，因此资源包运行加载未验证；不触发模拟构建或 Player Build。
+- BaseUI、Box/Page 控制器、UIRoot 空层、列表与对象池、ReferenceCollector 和 UI 代码生成器。默认 UI 加载转发公共 ResourceLoader，控制器 Path 返回 UI 根下相对路径，统一地址解析后加载，并自动接入 SafeAreaFitter。未复制旧项目主题或 UI Prefab，游戏画面仍是原型 IMGUI。
 - 独立 JSON 文件存储：区分缺失、损坏、未知版本，完整写入后替换旧文件。这里只提供通用能力，没有增加游戏中途存档或局外成长。
 - UniTask、Input System、UGUI、TMP 等依赖由本工程自行安装。没有复制旧 Library、UserSettings、MCP 配置或玩家数据。
 
@@ -48,3 +48,5 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 限定验证共 39 项，分 10 个真实测试类执行，包含配置、资源源收集、UI、生成代码编译/引用绑定、存储、架构、原型规则和实际进入 Play 的帧推进/暂停/重开检查。每次只运行一个真实类，声明数量并保留全部通过项，禁止无效过滤回退完整套件。详情见 `Docs/基础迁入验收.md`。
 
 预览、验证与日志在 `Backup/Artifacts/Prototype-20261106/` 和 `Backup/Artifacts/Foundation-20261107/`（本地资料，Git 忽略）。用户已授权独立 GitHub 仓库 `godspacecc/OutpostLoop`，不会推入 FirepowerLoop。
+
+2026-11-07 资源/UI 基础对齐增量验证：21 项限定测试通过，含真实源收集、窗口安全区接入及实际 Play。详见 `Docs/执行总清单.md`；本批证据在 `Backup/Artifacts/FrameworkAlignment-20261107/`。没有验证资源包运行或真机安全区。

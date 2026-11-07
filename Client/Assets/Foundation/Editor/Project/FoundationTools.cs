@@ -58,7 +58,7 @@ namespace OutpostLoop.Editor
         public static void Diagnostics()
         {
             ResourceSourceAudit.Audit();
-            var config=OutpostLoop.Config.PrototypeConfig.Load(OutpostLoop.Resources.ResourceService.LoadBytesForEditorSource);
+            var config=OutpostLoop.Config.PrototypeConfig.Load(address => new OutpostLoop.Resources.EditorSourceResourceLoader().LoadAsset<TextAsset>(address)?.bytes);
             Debug.Log($"OutpostLoop基础：QFramework/UGUI/InputSystem/Luban/YooAsset；源配置局时={config.Duration}，敌人上限={config.MaxEnemies}。当前为编辑器源开发模式，资源包/发布未验证。");
         }
     }
