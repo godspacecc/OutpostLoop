@@ -9,11 +9,11 @@ namespace OutpostLoop.Resources.Editor
     /// <summary>独立文件名地址，保留配置扩展名。</summary>
     public sealed class OutpostConfigAddress : IAddressRule
     { public string GetAssetAddress(AddressRuleData data) => Path.GetFileName(data.AssetPath); }
-    /// <summary>收集直属 bytes 与语言列表；语言列表随启动资源提供，不收集视觉资源。</summary>
+    /// <summary>收集直属 bytes 与本地化 JSON；语言配置和文本随启动资源提供，不收集视觉资源。</summary>
     public sealed class OutpostConfigFilter : IFilterRule
     {
         public string FindAssetType => EAssetSearchType.All.ToString();
-        public bool IsCollectAsset(FilterRuleData data) => data.AssetPath == "Assets/Game/Config/Localization/languages.json" || Path.GetDirectoryName(data.AssetPath).Replace('\\', '/') == "Assets/Game/Config" && Path.GetExtension(data.AssetPath) == ".bytes";
+        public bool IsCollectAsset(FilterRuleData data) => (Path.GetDirectoryName(data.AssetPath).Replace('\\', '/') == "Assets/Game/Config/Localization" && Path.GetExtension(data.AssetPath) == ".json") || Path.GetDirectoryName(data.AssetPath).Replace('\\', '/') == "Assets/Game/Config" && Path.GetExtension(data.AssetPath) == ".bytes";
     }
     /// <summary>UI 使用 Game 根下不含扩展名的统一逻辑地址。</summary>
     public sealed class OutpostUiAddress : IAddressRule

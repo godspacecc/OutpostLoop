@@ -17,8 +17,8 @@ namespace OutpostLoop.Resources
                 throw new ArgumentException("非法资源地址", nameof(address));
             if (Path.GetFileName(address)==address && address.EndsWith(".bytes",StringComparison.Ordinal))
                 path="Assets/Game/Config/"+address;
-            else if (address == "languages.json")
-                path="Assets/Game/Config/Localization/languages.json";
+            else if (System.Text.RegularExpressions.Regex.IsMatch(address, @"\A[A-Za-z0-9-]+\.json\z"))
+                path="Assets/Game/Config/Localization/"+address;
             else if (address.StartsWith("Audio/Music/",StringComparison.Ordinal) || address.StartsWith("Audio/Sound/",StringComparison.Ordinal))
             {
                 // 同一完整逻辑地址匹配实际音频扩展名，拒绝重复地址。

@@ -4,8 +4,11 @@
     "Game",
     "Boot",
     "YooAsset",
-    "Unity.ugui"
+    "Unity.ugui",
+    "UniTask"
   ],
+  "overrideReferences": true,
+  "precompiledReferences": ["Newtonsoft.Json.dll"],
   "includePlatforms": [
     "Editor"
   ],

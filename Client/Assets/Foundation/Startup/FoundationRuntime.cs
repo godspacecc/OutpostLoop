@@ -31,6 +31,7 @@ namespace Game
             // 资源先就绪，再重载语言配置并应用本项目持久目录中的设置。
             LocalizationLanguages.ResetCache();
             architecture = Game.Interface;
+            architecture.GetUtility<LocalizationUtility>().InitializeConfiguredTables();
             architecture.GetSystem<SettingsSystem>().LoadAndApply();
             architecture.GetSystem<AudioSystem>().ApplyVolumes();
             IsInitialized = true;

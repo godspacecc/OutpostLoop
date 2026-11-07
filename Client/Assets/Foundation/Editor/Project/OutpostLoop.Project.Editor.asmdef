@@ -6,6 +6,7 @@
     "Unity.ugui",
     "Unity.InputSystem",
     "Boot",
+    "UniTask",
     "YooAsset",
     "YooAsset.Editor",
     "HybridCLR.Editor"
