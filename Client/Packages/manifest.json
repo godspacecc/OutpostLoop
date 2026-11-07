@@ -14,7 +14,9 @@
     "com.unity.modules.ui": "1.0.0",
     "com.unity.modules.unitywebrequest": "1.0.0",
     "com.unity.modules.unitywebrequestassetbundle": "1.0.0",
-    "com.unity.modules.assetbundle": "1.0.0"
+    "com.unity.modules.assetbundle": "1.0.0",
+    "com.code-philosophy.hybridclr": "https://gitee.com/focus-creative-games/hybridclr_unity.git#e4def761d69b27b7b51a5de0f6d272861416a2d6",
+    "com.unity.modules.androidjni": "1.0.0"
   },
   "scopedRegistries": [
     {

@@ -10,7 +10,7 @@ using OutpostLoop.Resources.Editor;
 
 namespace OutpostLoop.Editor
 {
-    /// <summary>独立工程日常入口；不提供旧项目的打包、发布或服务器操作。</summary>
+    /// <summary>独立工程配置与诊断入口；打包链路由通用构建工具负责。</summary>
     public static class FoundationTools
     {
         [MenuItem("Tools/配置/生成双端配置")]
@@ -31,28 +31,7 @@ namespace OutpostLoop.Editor
         [MenuItem("Tools/开发/准备原型基础场景")]
         public static void Prepare()
         {
-            if(EditorApplication.isPlaying)throw new InvalidOperationException("请先退出Play再准备基础场景。");
-            var scene=EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity");
-            var entry=GameObject.Find("PrototypeEntry");
-            if(entry==null)throw new InvalidOperationException("缺少 PrototypeEntry。");
-            if(entry.GetComponent<Game.FoundationLoop>()==null)entry.AddComponent<Game.FoundationLoop>();
-            if(UnityEngine.Object.FindObjectOfType<Game.UIRoot>()==null)
-            {
-                var root=new GameObject("UIRoot",typeof(RectTransform));root.SetActive(false);
-                var canvas=root.AddComponent<Canvas>();canvas.renderMode=RenderMode.ScreenSpaceOverlay;
-                root.AddComponent<CanvasScaler>();root.AddComponent<GraphicRaycaster>();
-                foreach(var name in new[]{"HUD","Dialog","Popup","Tips","Top"})
-                {
-                    var layer=new GameObject(name,typeof(RectTransform));layer.transform.SetParent(root.transform,false);
-                    var rect=(RectTransform)layer.transform;rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
-                }
-                var input=new GameObject("EventSystem",typeof(EventSystem),typeof(InputSystemUIInputModule));input.transform.SetParent(root.transform,false);
-                root.AddComponent<Game.UIRoot>();root.SetActive(true);
-            }
-            var settings=new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset")[0]);
-            var handling=settings.FindProperty("activeInputHandler");if(handling!=null){handling.intValue=2;settings.ApplyModifiedPropertiesWithoutUndo();}
-            EditorSceneManager.SaveScene(scene);ResourceSourceAudit.EnsureSettings();AssetDatabase.SaveAssets();
-            Debug.Log("FOUNDATION_READY：独立空UI层、生命周期、源收集设置已准备，未构建资源包。");
+            BootMainSceneSetup.Prepare();
         }
         [MenuItem("Tools/诊断/基础诊断")]
         public static void Diagnostics()

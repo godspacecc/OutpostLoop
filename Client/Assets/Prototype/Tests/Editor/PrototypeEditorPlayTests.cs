@@ -10,11 +10,21 @@ namespace OutpostLoop.Tests
     /// <summary>限定编辑器实景检查：验证真实Play帧驱动、暂停和新局，不执行任何构建。</summary>
     public sealed class PrototypeEditorPlayTests
     {
+        private static IEnumerator WaitForMain()
+        {
+            for(int frame=0;frame<600 && Object.FindObjectOfType<PrototypeController>()==null;frame++)yield return null;
+            Assert.NotNull(Object.FindObjectOfType<PrototypeController>(), "Boot 未成功进入 Main");
+            // Main Start 握手后，Boot 入口与加载界面应释放。
+            for(int frame=0;frame<10;frame++)yield return null;
+            Assert.AreEqual("Main",UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+            Assert.IsEmpty(Object.FindObjectsOfType<Boot.Launcher>(), "Main 就绪后应销毁 Boot 入口");
+        }
         [UnityTest]
         public IEnumerator BootAdvancesPausesAndRestartsThroughFoundation()
         {
-            EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity");
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
+            yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             Assert.NotNull(controller);
             Assert.NotNull(Object.FindObjectOfType<Game.UIRoot>());

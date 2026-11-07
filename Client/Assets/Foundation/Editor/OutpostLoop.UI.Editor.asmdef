@@ -1,8 +1,7 @@
 {
   "name": "OutpostLoop.UI.Editor",
   "references": [
-    "OutpostLoop.UI",
-    "OutpostLoop.Core",
+    "Game",
     "Unity.ugui",
     "Unity.ugui.Editor"
   ],

@@ -51,3 +51,29 @@ MonoBehaviour:
         FilterRuleName: OutpostUiFilter
         AssetTags: 
         UserData: 
+    - GroupName: Main
+      GroupDesc: 
+      AssetTags: startup
+      ActiveRuleName: EnableGroup
+      Collectors:
+      - CollectPath: Assets/Game/Scenes/Main.unity
+        CollectorGUID: 07eecea160b459843bfa46d9774adcb9
+        CollectorType: 0
+        AddressRuleName: AddressByGameRelativePathNoExtension
+        PackRuleName: PackSeparately
+        FilterRuleName: CollectAll
+        AssetTags: 
+        UserData: 
+    - GroupName: Code
+      GroupDesc: 
+      AssetTags: startup
+      ActiveRuleName: EnableGroup
+      Collectors:
+      - CollectPath: Assets/Game/Dlls
+        CollectorGUID: 193391b09284b2449b8ef2306f11b3e2
+        CollectorType: 0
+        AddressRuleName: AddressByFileNameWithExtension
+        PackRuleName: PackSeparately
+        FilterRuleName: CollectAll
+        AssetTags: 
+        UserData: 

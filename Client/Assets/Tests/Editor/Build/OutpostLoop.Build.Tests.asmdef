@@ -1,0 +1,9 @@
+{
+  "name": "OutpostLoop.Build.Tests",
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

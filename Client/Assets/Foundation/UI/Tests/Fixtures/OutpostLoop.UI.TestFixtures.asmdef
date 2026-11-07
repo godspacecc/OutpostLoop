@@ -1,1 +1,10 @@
-{"name":"OutpostLoop.UI.TestFixtures","references":["OutpostLoop.UI","Unity.ugui"],"optionalUnityReferences":["TestAssemblies"]}
+{
+  "name": "OutpostLoop.UI.TestFixtures",
+  "references": [
+    "Game",
+    "Unity.ugui"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

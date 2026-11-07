@@ -11,20 +11,12 @@ namespace OutpostLoop.Editor
         [MenuItem("Tools/开发/创建原型预览场景")]
         public static void CreateScene()
         {
-            var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
-            new GameObject("PrototypeEntry").AddComponent<PrototypeController>();
-            Directory.CreateDirectory("Assets/Prototype/Scenes");
-            EditorSceneManager.SaveScene(scene,"Assets/Prototype/Scenes/Boot.unity");
-            EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene("Assets/Prototype/Scenes/Boot.unity",true)};
-            PlayerSettings.companyName="IndependentPrototype";PlayerSettings.productName="OutpostLoop";
-            AssetDatabase.SaveAssets();
-            // 重建临时场景时同时恢复独立工程的生命周期与空UI层。
-            FoundationTools.Prepare();
+            BootMainSceneSetup.Prepare();
             Debug.Log("OUTPOST_SETUP_READY");
         }
         public static void Capture()
         {
-            CreateScene();
+            EditorSceneManager.OpenScene(BootMainSceneSetup.MainPath);
             Game.FoundationRuntime.Initialize();
             try
             {
@@ -37,7 +29,7 @@ namespace OutpostLoop.Editor
             File.WriteAllBytes(Path.Combine(output,"scene-preview.png"),image.EncodeToPNG());
             camera.targetTexture=null;RenderTexture.active=prior;Object.DestroyImmediate(rt);Object.DestroyImmediate(image);
             // 生成的临时几何体不保存进场景，运行时重新建立。
-            EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity",OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(BootMainSceneSetup.MainPath,OpenSceneMode.Single);
             Debug.Log("OUTPOST_CAPTURE_READY");
             }
             finally { Game.FoundationRuntime.Shutdown(); }
@@ -45,7 +37,7 @@ namespace OutpostLoop.Editor
         /// <summary>临时动态预览采样：定位到第一波前，不作为整局人工通关证据。</summary>
         public static void CaptureMotion()
         {
-            CreateScene();
+            EditorSceneManager.OpenScene(BootMainSceneSetup.MainPath);
             Game.FoundationRuntime.Initialize();
             try
             {
@@ -63,7 +55,7 @@ namespace OutpostLoop.Editor
                 File.WriteAllBytes(Path.Combine(output,frame.ToString("D3")+".png"),image.EncodeToPNG());
             }
             camera.targetTexture=null;RenderTexture.active=prior;Object.DestroyImmediate(rt);Object.DestroyImmediate(image);
-            EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity",OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(BootMainSceneSetup.MainPath,OpenSceneMode.Single);
             Debug.Log("OUTPOST_MOTION_READY frames=60 simulatedSeconds=48");
             }
             finally { Game.FoundationRuntime.Shutdown(); }

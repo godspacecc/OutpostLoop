@@ -1,0 +1,15 @@
+{
+  "name": "OutpostLoop.BootFlow.Tests",
+  "references": [
+    "Boot",
+    "UniTask",
+    "Unity.ugui",
+    "YooAsset"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

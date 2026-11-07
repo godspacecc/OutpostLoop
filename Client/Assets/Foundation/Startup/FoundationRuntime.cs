@@ -16,6 +16,11 @@ namespace Game
             if (IsInitialized) return;
             if (!ResourceLoader.IsConfigured)
             {
+                if (Boot.BootHost.TryGetResourceInfo(out var info) && info.Source != Boot.BootResourceSource.EditorSource)
+                    ResourceLoader.Use(new YooAssetResourceLoader(YooAsset.YooAssets.GetPackage("OutpostLoop")));
+            }
+            if (!ResourceLoader.IsConfigured)
+            {
 #if UNITY_EDITOR
                 ResourceLoader.Use(new EditorSourceResourceLoader());
 #else

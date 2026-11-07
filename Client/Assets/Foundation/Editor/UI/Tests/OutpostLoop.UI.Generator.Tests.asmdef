@@ -1,9 +1,8 @@
 {
   "name": "OutpostLoop.UI.Generator.Tests",
   "references": [
-    "OutpostLoop.UI",
+    "Game",
     "OutpostLoop.UI.Editor",
-    "OutpostLoop.Core",
     "Unity.ugui",
     "OutpostLoop.UI.TestFixtures"
   ],

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <DefineConstants>UNITY_EDITOR</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Client/Assets/Game/Scripts/Utility/ResourceUpdate/ApplicationUpdateCandidate.cs" Link="ApplicationUpdateCandidate.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/AndroidApkPublishUtility.cs" Link="AndroidApkPublishUtility.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/WindowsInstallerPublishUtility.cs" Link="WindowsInstallerPublishUtility.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/BuildArtifacts.cs" Link="BuildArtifacts.cs" />
+    <Compile Include="../../Client/Assets/Editor/YooAsset/ResourceServerPublishUtility.cs" Link="ResourceServerPublishUtility.cs" />
+    <Compile Include="../../Client/Assets/Boot/Runtime/ApkUpdateManifest.cs" Link="ApkUpdateManifest.cs" />
+    <Compile Include="../../Client/Assets/Boot/Runtime/WindowsUpdateManifest.cs" Link="WindowsUpdateManifest.cs" />
+    <Compile Include="../../Client/Assets/Game/Scripts/Utility/ResourceUpdate/ResourceUpdateNoticeDocument.cs" Link="ResourceUpdateNoticeDocument.cs" />
+    <Compile Include="../../Client/Assets/Game/Scripts/Utility/ResourceUpdate/ResourceUpdateNoticeContracts.cs" Link="ResourceUpdateNoticeContracts.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/BuildDataStore.cs" Link="BuildDataStore.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/HostBaselineArchive.cs" Link="HostBaselineArchive.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/WindowsReleaseIdentity.cs" Link="WindowsReleaseIdentity.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/WorkspaceBuildLock.cs" Link="WorkspaceBuildLock.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/CiBuildRequest.cs" Link="CiBuildRequest.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/CiBuildConfiguration.cs" Link="CiBuildConfiguration.cs" />
+    <Compile Include="../../Client/Assets/Editor/Build/CiBuildRunner.cs" Link="CiBuildRunner.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

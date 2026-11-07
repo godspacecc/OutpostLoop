@@ -1,12 +1,8 @@
 {
   "name": "OutpostLoop.Tests",
   "references": [
-    "OutpostLoop.Runtime",
-    "OutpostLoop.Core",
-    "OutpostLoop.Config",
-    "OutpostLoop.UI",
-    "OutpostLoop.Resources",
-    "OutpostLoop.Startup"
+    "Game",
+    "Boot"
   ],
   "includePlatforms": [
     "Editor"

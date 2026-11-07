@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "com.code-philosophy.hybridclr": {
+      "version": "https://gitee.com/focus-creative-games/hybridclr_unity.git#e4def761d69b27b7b51a5de0f6d272861416a2d6",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "e4def761d69b27b7b51a5de0f6d272861416a2d6"
+    },
     "com.cysharp.unitask": {
       "version": "2.5.11",
       "depth": 0,
@@ -77,6 +84,12 @@
         "com.unity.modules.ui": "1.0.0",
         "com.unity.modules.imgui": "1.0.0"
       }
+    },
+    "com.unity.modules.androidjni": {
+      "version": "1.0.0",
+      "depth": 0,
+      "source": "builtin",
+      "dependencies": {}
     },
     "com.unity.modules.assetbundle": {
       "version": "1.0.0",

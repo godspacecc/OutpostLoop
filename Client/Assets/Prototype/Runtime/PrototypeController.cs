@@ -5,7 +5,6 @@ using QFramework;
 namespace OutpostLoop
 {
     /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
-    [RequireComponent(typeof(Game.FoundationLoop))]
     public sealed class PrototypeController : MonoBehaviour
     {
         // 本局领域状态、临时表现根和预分配敌人池。
@@ -27,6 +26,12 @@ namespace OutpostLoop
         private readonly Color groundColor = new Color(0.16f,0.25f,0.24f);
 
         private void Awake() { Initialize(); }
+        /// <summary>Main 完成真实玩法初始化后才释放 Boot 启动界面。</summary>
+        private void Start()
+        {
+            if (World != null) Boot.BootHost.ReportReady();
+            else Boot.BootHost.ReportFailure(new Dictionary<string,string>{{"reason",startupError ?? "Prototype initialization failed"}});
+        }
         // 失活时停止接受输入并暂停，避免隐藏视图仍带着上一帧输入推进。
         private void OnEnable(){if(session!=null)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
         private void OnDisable()

@@ -1,0 +1,13 @@
+{
+  "name": "Game",
+  "rootNamespace": "Game",
+  "references": [
+    "Boot",
+    "YooAsset",
+    "UniTask",
+    "Unity.ugui",
+    "Unity.InputSystem",
+    "Unity.Newtonsoft.Json"
+  ],
+  "allowUnsafeCode": true
+}

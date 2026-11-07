@@ -10,14 +10,24 @@ namespace OutpostLoop.Tests
     /// <summary>三项真实 Play 检查；所有编辑器设置在 finally 中恢复。</summary>
     public sealed class FoundationStartupPlayTests
     {
-        [UnityTest] public IEnumerator SceneReloadStartsFreshFoundation()
+        private static IEnumerator WaitForMain()
         {
-            EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity");
+            for(int frame=0;frame<600 && Object.FindObjectOfType<PrototypeController>()==null;frame++)yield return null;
+            Assert.NotNull(Object.FindObjectOfType<PrototypeController>(), "Boot 未成功进入 Main");
+            // Main Start 握手后，Boot 入口与加载界面应释放。
+            for(int frame=0;frame<10;frame++)yield return null;
+            Assert.AreEqual("Main",UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+            Assert.IsEmpty(Object.FindObjectsOfType<Boot.Launcher>(), "Main 就绪后应销毁 Boot 入口");
+        }
+        [UnityTest] public IEnumerator MainReloadKeepsSingleFoundation()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
+            yield return WaitForMain();
             Assert.IsTrue(Game.FoundationRuntime.IsInitialized);
             var old=Object.FindObjectOfType<PrototypeController>();Assert.NotNull(old.World);
             var previous=old.World;
-            yield return SceneManager.LoadSceneAsync("Assets/Prototype/Scenes/Boot.unity");
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/Game/Scenes/Main.unity", new LoadSceneParameters(LoadSceneMode.Single));
             yield return null;
             var current=Object.FindObjectOfType<PrototypeController>();
             Assert.NotNull(current.World);Assert.AreNotSame(previous,current.World);
@@ -31,8 +41,9 @@ namespace OutpostLoop.Tests
         private static GameObject LoadTemporaryPrefab(string address) => temporaryPrefab;
         [UnityTest] public IEnumerator OpenWindowUnloadsBeforeResourcesAndOnlyOnce()
         {
-            EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity");
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
+            yield return WaitForMain();
             temporaryPrefab=new GameObject("temporary shutdown view",typeof(RectTransform),typeof(Game.BaseUI));
             Game.UIHelper.SetPrefabLoader(LoadTemporaryPrefab);
             var ctrl=Game.UIHelper.ShowUI<ShutdownProbe>();
@@ -62,9 +73,10 @@ namespace OutpostLoop.Tests
             try {
                 EditorSettings.enterPlayModeOptionsEnabled=true;
                 EditorSettings.enterPlayModeOptions=EnterPlayModeOptions.DisableDomainReload;
-                EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity");
+                EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
                 for(int run=0;run<2;run++) {
                     yield return new EnterPlayMode(false);
+                    yield return WaitForMain();
                     var controller=Object.FindObjectOfType<PrototypeController>();
                     Assert.NotNull(controller.World);Assert.IsTrue(Game.ResourceLoader.IsConfigured);
                     Assert.AreEqual(0,controller.World.Run.Elapsed);

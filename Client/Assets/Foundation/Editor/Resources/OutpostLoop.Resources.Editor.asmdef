@@ -1,1 +1,11 @@
-{"name": "OutpostLoop.Resources.Editor", "references": ["OutpostLoop.Resources", "YooAsset", "YooAsset.Editor"], "includePlatforms": ["Editor"]}
+{
+  "name": "OutpostLoop.Resources.Editor",
+  "references": [
+    "Game",
+    "YooAsset",
+    "YooAsset.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

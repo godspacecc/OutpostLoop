@@ -1,10 +1,8 @@
 {
   "name": "OutpostLoop.UI.Tests",
   "references": [
-    "OutpostLoop.UI",
-    "OutpostLoop.Core",
+    "Game",
     "Unity.ugui",
-    "OutpostLoop.Resources",
     "Unity.InputSystem"
   ],
   "includePlatforms": [

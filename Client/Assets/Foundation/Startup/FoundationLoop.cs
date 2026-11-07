@@ -7,6 +7,8 @@ namespace Game
     {
         // 重复入口不推进帧、不清理主入口的会话。
         private static FoundationLoop owner;
+        /// <summary>Main 的独立基础根跨场景保留；普通测试入口仍可按对象生命周期退出。</summary>
+        [SerializeField] private bool persistAcrossScenes;
         /// <summary>进入新 Play 时兼容禁用域重载的编辑器设置，不携带上一会话静态状态。</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetSession()
@@ -18,11 +20,12 @@ namespace Game
         {
             if (owner != null && owner != this)
             {
-                if (Application.isPlaying) Destroy(this); else DestroyImmediate(this);
+                if (Application.isPlaying) { if (persistAcrossScenes) Destroy(gameObject); else Destroy(this); } else DestroyImmediate(this);
                 return;
             }
             FoundationRuntime.Initialize();
             owner = this;
+            if (persistAcrossScenes && Application.isPlaying) DontDestroyOnLoad(gameObject);
         }
         private void Update() { if (owner == this) LifeCycle.Update(); }
         private void FixedUpdate() { if (owner == this) LifeCycle.FixedUpdate(); }

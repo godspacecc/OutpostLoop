@@ -7,3 +7,12 @@
 *.csproj
 *.sln
 .vs/
+# Generated build output, local toolchains and workflow journals
+/Client/Bundles/
+/Client/HybridCLRData/
+/Client/Build/
+/Release/
+/Artifacts/
+/Client/.outpostloop-*.lock
+/Client/.outpostloop-ci-*.json
+!/Tools/BuildSeparationValidation/BuildSeparationValidation.csproj

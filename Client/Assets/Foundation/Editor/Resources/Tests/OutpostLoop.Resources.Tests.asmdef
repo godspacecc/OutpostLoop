@@ -1,11 +1,10 @@
 {
   "name": "OutpostLoop.Resources.Tests",
   "references": [
-    "OutpostLoop.Resources",
+    "Game",
     "OutpostLoop.Resources.Editor",
     "YooAsset.Editor",
-    "YooAsset",
-    "OutpostLoop.Core"
+    "YooAsset"
   ],
   "includePlatforms": [
     "Editor"

@@ -1,7 +1,0 @@
-{
-  "name": "OutpostLoop.Resources",
-  "references": [
-    "YooAsset",
-    "OutpostLoop.Core"
-  ]
-}
