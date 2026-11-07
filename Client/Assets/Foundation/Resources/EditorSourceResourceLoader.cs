@@ -19,6 +19,20 @@ namespace OutpostLoop.Resources
                 path="Assets/Game/Config/"+address;
             else if (address == "languages.json")
                 path="Assets/Game/Config/Localization/languages.json";
+            else if (address.StartsWith("Audio/Music/",StringComparison.Ordinal) || address.StartsWith("Audio/Sound/",StringComparison.Ordinal))
+            {
+                // 同一完整逻辑地址匹配实际音频扩展名，拒绝重复地址。
+                string match=null;
+                foreach(var guid in UnityEditor.AssetDatabase.FindAssets("t:AudioClip",new[]{"Assets/Game/Audio"}))
+                {
+                    var candidate=UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                    if(Path.ChangeExtension(candidate,null)!="Assets/Game/"+address)continue;
+                    if(match!=null)throw new InvalidOperationException("重复音频地址："+address);
+                    match=candidate;
+                }
+                if(match==null){Log.Error("[EditorSourceResourceLoader] 源资源不存在："+address);return null;}
+                path=match;
+            }
             else if (address.StartsWith("Prefabs/UI/",StringComparison.Ordinal) &&
                 ResourceAddress.TryFromRelativePath(ResourceAddressKind.UiPrefab,address.Substring("Prefabs/UI/".Length),out var resolved,out _))
                 path="Assets/Game/"+resolved+".prefab";

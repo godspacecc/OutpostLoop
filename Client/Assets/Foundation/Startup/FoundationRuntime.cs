@@ -32,6 +32,7 @@ namespace Game
             LocalizationLanguages.ResetCache();
             architecture = Game.Interface;
             architecture.GetSystem<SettingsSystem>().LoadAndApply();
+            architecture.GetSystem<AudioSystem>().ApplyVolumes();
             IsInitialized = true;
         }
         /// <summary>退出按逆序释放界面、玩法容器、计时器和事件，最后断开资源入口；重复调用无副作用。</summary>

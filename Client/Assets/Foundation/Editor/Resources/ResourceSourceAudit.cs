@@ -24,6 +24,15 @@ namespace OutpostLoop.Resources.Editor
         public string FindAssetType => EAssetSearchType.All.ToString();
         public bool IsCollectAsset(FilterRuleData data) => data.AssetPath.StartsWith("Assets/Game/Prefabs/UI/",StringComparison.Ordinal) && data.AssetPath.EndsWith(".prefab",StringComparison.Ordinal);
     }
+    /// <summary>使用与 ResourceAddress 相同的 Audio/Music、Audio/Sound 逻辑路径。</summary>
+    public sealed class OutpostAudioAddress : IAddressRule
+    { public string GetAssetAddress(AddressRuleData data) => Path.ChangeExtension(data.AssetPath.Substring("Assets/Game/".Length),null); }
+    /// <summary>仅允许音乐与音效目录下的音频资源参与收集。</summary>
+    public sealed class OutpostAudioFilter : IFilterRule
+    {
+        public string FindAssetType => "AudioClip";
+        public bool IsCollectAsset(FilterRuleData data) => (data.AssetPath.StartsWith("Assets/Game/Audio/Music/",StringComparison.Ordinal) || data.AssetPath.StartsWith("Assets/Game/Audio/Sound/",StringComparison.Ordinal)) && AssetDatabase.GetMainAssetTypeAtPath(data.AssetPath)==typeof(AudioClip);
+    }
     public static class ResourceSourceAudit
     {
         public const string SettingPath = "Assets/AssetBundleCollectorSetting.asset";
@@ -35,7 +44,7 @@ namespace OutpostLoop.Resources.Editor
             if (setting != null) {
                 if (setting.Packages.Count != 1 || setting.Packages[0].PackageName != ResourcePackageRuntime.PackageName)
                     throw new InvalidOperationException("检测到非本项目资源设置，拒绝覆盖。");
-                EnsureUiGroup(setting);
+                EnsureUiGroup(setting); EnsureAudioGroup(setting);
                 return;
             }
             setting = ScriptableObject.CreateInstance<AssetBundleCollectorSetting>();
@@ -43,7 +52,7 @@ namespace OutpostLoop.Resources.Editor
             var group = new AssetBundleCollectorGroup { GroupName = "Config", ActiveRuleName = "EnableGroup", AssetTags = "startup" };
             group.Collectors.Add(new AssetBundleCollector { CollectPath = "Assets/Game/Config", CollectorGUID = AssetDatabase.AssetPathToGUID("Assets/Game/Config"), CollectorType = ECollectorType.MainAssetCollector, AddressRuleName = nameof(OutpostConfigAddress), PackRuleName = "PackSeparately", FilterRuleName = nameof(OutpostConfigFilter) });
             package.Groups.Add(group); setting.Packages.Add(package);
-            AssetDatabase.CreateAsset(setting, SettingPath); EnsureUiGroup(setting); AssetDatabase.SaveAssets();
+            AssetDatabase.CreateAsset(setting, SettingPath); EnsureUiGroup(setting); EnsureAudioGroup(setting); AssetDatabase.SaveAssets();
         }
         /// <summary>补齐空 UI 目录的收集规则，不创建任何正式视觉资源。</summary>
         private static void EnsureUiGroup(AssetBundleCollectorSetting setting)
@@ -53,6 +62,16 @@ namespace OutpostLoop.Resources.Editor
             Directory.CreateDirectory("Assets/Game/Prefabs/UI"); AssetDatabase.Refresh();
             var group=new AssetBundleCollectorGroup{GroupName="UI",ActiveRuleName="EnableGroup",AssetTags="startup"};
             group.Collectors.Add(new AssetBundleCollector{CollectPath="Assets/Game/Prefabs/UI",CollectorGUID=AssetDatabase.AssetPathToGUID("Assets/Game/Prefabs/UI"),CollectorType=ECollectorType.MainAssetCollector,AddressRuleName=nameof(OutpostUiAddress),PackRuleName="PackSeparately",FilterRuleName=nameof(OutpostUiFilter)});
+            package.Groups.Add(group); EditorUtility.SetDirty(setting); AssetDatabase.SaveAssets();
+        }
+        /// <summary>音频沿用 Game 根下无扩展名地址；仅收集 AudioClip，不包含混音器与脚本。</summary>
+        private static void EnsureAudioGroup(AssetBundleCollectorSetting setting)
+        {
+            var package=setting.Packages[0];
+            if(package.Groups.Any(g=>g.GroupName=="Audio"))return;
+            Directory.CreateDirectory("Assets/Game/Audio"); AssetDatabase.Refresh();
+            var group=new AssetBundleCollectorGroup{GroupName="Audio",ActiveRuleName="EnableGroup",AssetTags="startup"};
+            group.Collectors.Add(new AssetBundleCollector{CollectPath="Assets/Game/Audio",CollectorGUID=AssetDatabase.AssetPathToGUID("Assets/Game/Audio"),CollectorType=ECollectorType.MainAssetCollector,AddressRuleName=nameof(OutpostAudioAddress),PackRuleName="PackSeparately",FilterRuleName=nameof(OutpostAudioFilter)});
             package.Groups.Add(group); EditorUtility.SetDirty(setting); AssetDatabase.SaveAssets();
         }
         /// <summary>调用正式收集器，仅查询源结果，不执行任何构建。</summary>

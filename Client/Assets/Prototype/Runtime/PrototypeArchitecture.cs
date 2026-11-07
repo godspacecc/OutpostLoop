@@ -33,11 +33,18 @@ namespace OutpostLoop
         {
             var next=new WorldState(seed);next.Run.Paused=!running;
             model.World=next;movement=Vector2.zero;gathering=false;
+            this.GetSystem<Game.AudioSystem>()?.SetPaused(!running);
             this.SendEvent(new PrototypeRunStarted{Seed=seed});return next;
         }
         public void SubmitInput(Vector2 direction,bool collect){movement=direction;gathering=collect;}
         private void OnTick(){model.World?.Step(Time.deltaTime,movement,gathering);}
-        public void SetPaused(bool value){if(model.World!=null)model.World.Run.Paused=value;}
+        /// <summary>同步本局暂停与基础音频状态；UI声音不受会话暂停影响。</summary>
+        public void SetPaused(bool value)
+        {
+            if(model.World==null)return;
+            model.World.Run.Paused=value;
+            this.GetSystem<Game.AudioSystem>()?.SetPaused(value);
+        }
         public bool Purchase(int route)
         {
             if(model.World==null||model.World.Player.magnitude>=5)return false;

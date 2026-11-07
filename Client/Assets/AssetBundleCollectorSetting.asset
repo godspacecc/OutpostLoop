@@ -77,3 +77,16 @@ MonoBehaviour:
         FilterRuleName: CollectAll
         AssetTags: 
         UserData: 
+    - GroupName: Audio
+      GroupDesc: 
+      AssetTags: startup
+      ActiveRuleName: EnableGroup
+      Collectors:
+      - CollectPath: Assets/Game/Audio
+        CollectorGUID: 77e61e19ab2b3614d8c84b43209236b5
+        CollectorType: 0
+        AddressRuleName: OutpostAudioAddress
+        PackRuleName: PackSeparately
+        FilterRuleName: OutpostAudioFilter
+        AssetTags: 
+        UserData: 

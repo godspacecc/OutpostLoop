@@ -56,6 +56,7 @@ namespace OutpostLoop
 
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
+            cameraObject.AddComponent<AudioListener>();
             gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true; gameCamera.orthographicSize=17;
             gameCamera.backgroundColor=groundColor; gameCamera.clearFlags=CameraClearFlags.SolidColor;
             gameCamera.nearClipPlane=0.1f; gameCamera.farClipPlane=160;
@@ -150,9 +151,9 @@ namespace OutpostLoop
         private void PollInputAndPresent()
         {
             if(!initialized)return;
-            if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0){shop=false;World.Run.Paused=!World.Run.Paused;}
+            if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0){shop=false;session.SetPaused(!World.Run.Paused);}
             if(Input.GetKeyDown(KeyCode.B)&&started&&World.Run.Outcome==0&&World.Player.magnitude<5)
-            {shop=!shop;World.Run.Paused=shop;}
+            {shop=!shop;session.SetPaused(shop);}
             if(started&&!World.Run.Paused&&World.Run.Outcome==0)
             {
                 var move=new Vector2(Input.GetAxisRaw("Horizontal"),Input.GetAxisRaw("Vertical"));
@@ -199,13 +200,13 @@ namespace OutpostLoop
             GUI.Box(new Rect(16,640,850,62),"WASD 移动 · 靠近资源按住 E 采集 · 回基地自动卸货\n基地附近 B 升级 · ESC 暂停 · 12 分钟守住最终进攻即获胜");
             DrawMap();
             if(started&&s.Outcome==0&&World.Player.magnitude<5&&!shop&&!s.Paused)
-                if(GUI.Button(new Rect(900,640,330,52),"打开基地升级 [B]")){shop=true;s.Paused=true;}
+                if(GUI.Button(new Rect(900,640,330,52),"打开基地升级 [B]")){shop=true;session.SetPaused(true);}
             if(Time.realtimeSinceStartup<feedbackUntil)GUI.Label(new Rect(380,590,700,36),feedback);
             if(!started)
             {
                 GUI.Box(new Rect(365,210,550,325),"探索 / 采集 / 升级 / 防守");
                 GUI.Label(new Rect(400,265,490,135),"从中央基地出发，搜寻废料与能源。\n满载后回家卸货，升级采集能力或防线。\n炮塔自动战斗；提前准备比操作更重要。\n每局 12 分钟，最后一波在第 11 分钟。\n当前使用独立临时几何体，不是最终美术。");
-                if(GUI.Button(new Rect(460,445,360,58),"开始这一局")){started=true;s.Paused=false;}
+                if(GUI.Button(new Rect(460,445,360,58),"开始这一局")){started=true;session.SetPaused(false);}
             }
             else if(s.Outcome!=0)
             {
@@ -228,12 +229,12 @@ namespace OutpostLoop
                         feedback=ok?"升级完成":"资源不足或已满级";feedbackUntil=Time.realtimeSinceStartup+2;
                     }
                 }
-                if(GUI.Button(new Rect(505,485,270,48),"返回探索 [B]")){shop=false;s.Paused=false;}
+                if(GUI.Button(new Rect(505,485,270,48),"返回探索 [B]")){shop=false;session.SetPaused(false);}
             }
             else if(s.Paused)
             {
                 GUI.Box(new Rect(450,270,380,180),"已暂停");
-                if(GUI.Button(new Rect(490,345,300,60),"继续 [ESC]"))s.Paused=false;
+                if(GUI.Button(new Rect(490,345,300,60),"继续 [ESC]"))session.SetPaused(false);
             }
         }
 

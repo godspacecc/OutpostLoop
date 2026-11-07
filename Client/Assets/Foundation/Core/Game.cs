@@ -19,6 +19,7 @@ namespace Game
             RegisterSystem(new DisplayPreviewTransaction());
             RegisterSystem(new HotKeySystem());
             RegisterSystem(new RuntimeLogSystem());
+            RegisterSystem(new AudioSystem());
         }
     }
 }
