@@ -84,7 +84,10 @@ namespace Game
             pool.Destroy();
         }
 
-        public static void ClearForTests()
+        public static void ClearForTests() => Clear();
+
+        /// <summary>统一释放对象池及跨场景池根，供会话退出使用。</summary>
+        public static void Clear()
         {
             foreach (var pool in Pools.Values)
             {

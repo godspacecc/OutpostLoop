@@ -6,6 +6,10 @@ namespace OutpostLoop.Tests
     /// <summary>通过真实领域采集、运输和升级入口验证完整局，不注入库存。</summary>
     public class PrototypeFlowTests
     {
+        [TearDown] public void CloseFoundation() { Game.FoundationRuntime.Shutdown(); }
+
+        [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
+
         [Test] public void TwoSeedsCanWinByGatheringAndReturningHome()
         {
             foreach(int seed in new[]{732,733})

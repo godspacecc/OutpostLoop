@@ -1,18 +1,14 @@
 using QFramework;
 using UnityEngine;
 using OutpostLoop.Config;
-using OutpostLoop.Resources;
 
 namespace OutpostLoop
 {
-    /// <summary>明确的编辑器源配置入口，不把源读取冒充资源包已就绪。</summary>
+    /// <summary>玩法配置读取入口，只消费基础启动已准备的资源后端。</summary>
     public static class PrototypeServices
     {
         public static PrototypeConfig LoadConfig()
         {
-#if UNITY_EDITOR
-            if (!Game.ResourceLoader.IsConfigured) Game.ResourceLoader.Use(new EditorSourceResourceLoader());
-#endif
             return PrototypeConfig.Load(address => Game.ResourceLoader.LoadAsset<TextAsset>(address)?.bytes);
         }
     }

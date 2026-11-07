@@ -1,0 +1,8 @@
+{
+  "name": "OutpostLoop.Startup",
+  "references": [
+    "OutpostLoop.Core",
+    "OutpostLoop.UI",
+    "OutpostLoop.Resources"
+  ]
+}

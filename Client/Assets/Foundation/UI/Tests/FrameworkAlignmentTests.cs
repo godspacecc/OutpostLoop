@@ -62,9 +62,13 @@ namespace OutpostLoop.Tests
             var loader=new ProbeLoader{Asset=prefab};
             var ctrl=new Probe();
             try {
-                ResourceLoader.Use(loader); UIHelper.SetPrefabLoader(null);ctrl.Show();
+                ResourceLoader.Use(loader); UIHelper.SetPrefabLoader(null);ctrl=UIHelper.ShowUI<Probe>();
                 Assert.IsTrue(ctrl.IsShow());
                 Assert.NotNull(root.GetComponentInChildren<SafeAreaFitter>(true));
+                UIHelper.Shutdown();
+                Assert.IsNull(UIHelper.GetUICtrl<Probe>());
+                Assert.IsNull(root.GetComponentInChildren<SafeAreaFitter>(true));
+                Assert.IsFalse(ctrl.IsShow());
                 Assert.AreEqual("Prefabs/UI/Probe/Window",loader.Address);
             } finally {
                 ctrl.Hide();UnityEngine.Object.DestroyImmediate(root);UnityEngine.Object.DestroyImmediate(prefab);
@@ -79,6 +83,6 @@ namespace OutpostLoop.Tests
             public ResourceLoadHandle LoadAssetAsync<T>(string path,Action<T> callback) where T:UnityEngine.Object { callback?.Invoke(LoadAsset<T>(path));return ResourceLoadHandle.Empty; }
             public void Release(ResourceLoadHandle handle) {}
         }
-        private sealed class Probe : BaseUICtrl { protected override string Path() => "Probe/Window"; public override UILayer Layer() => UILayer.Dialog; protected override void OnInit() {} protected override void OnShow() {} protected override void OnHide() {} }
+        private sealed class Probe : BaseUICtrl { public Probe() {} protected override string Path() => "Probe/Window"; public override UILayer Layer() => UILayer.Dialog; protected override void OnInit() {} protected override void OnShow() {} protected override void OnHide() {} }
     }
 }

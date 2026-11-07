@@ -98,6 +98,23 @@ namespace Game
             _prefabLoader = prefabLoader ?? DefaultLoadPrefab;
         }
 
+        /// <summary>会话退出时卸载界面并清空静态缓存；不销毁场景作者配置的 UIRoot。</summary>
+        public static void Shutdown()
+        {
+            foreach (var ctrl in new List<BaseUICtrl>(UICtrlDict.Values))
+            {
+                try { ctrl?.Unload(); }
+                catch (Exception error) { Log.Error("[UIHelper] 窗口卸载失败：" + error); }
+            }
+            UICtrlDict.Clear();
+            ShowOrder.Clear();
+            GameObjectPoolHelper.Clear();
+            _prefabLoader = DefaultLoadPrefab;
+            lastBlockingUIOpen = false;
+            BlockingUIChanged = null;
+            UIRoot.ClearForTests();
+        }
+
         public static void ResetForTests()
         {
             foreach (var ctrl in UICtrlDict.Values)

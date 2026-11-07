@@ -5,6 +5,10 @@ namespace OutpostLoop.Tests
     /// <summary>仅八项纯规则测试；不运行其它类或完整测试套件。</summary>
     public class PrototypeRuleTests
     {
+        [TearDown] public void CloseFoundation() { Game.FoundationRuntime.Shutdown(); }
+
+        [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
+
         [Test] public void CargoIsBoundedAndDepositConservesResources()
         {
             var s = new RunState();

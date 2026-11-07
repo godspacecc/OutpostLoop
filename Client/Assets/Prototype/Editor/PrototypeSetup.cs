@@ -25,6 +25,9 @@ namespace OutpostLoop.Editor
         public static void Capture()
         {
             CreateScene();
+            Game.FoundationRuntime.Initialize();
+            try
+            {
             var controller=Object.FindObjectOfType<PrototypeController>();controller.Initialize();
             var camera=controller.GetComponentInChildren<Camera>();
             var rt=new RenderTexture(1280,720,24);camera.targetTexture=rt;camera.Render();
@@ -36,11 +39,16 @@ namespace OutpostLoop.Editor
             // 生成的临时几何体不保存进场景，运行时重新建立。
             EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity",OpenSceneMode.Single);
             Debug.Log("OUTPOST_CAPTURE_READY");
+            }
+            finally { Game.FoundationRuntime.Shutdown(); }
         }
         /// <summary>临时动态预览采样：定位到第一波前，不作为整局人工通关证据。</summary>
         public static void CaptureMotion()
         {
             CreateScene();
+            Game.FoundationRuntime.Initialize();
+            try
+            {
             var controller=Object.FindObjectOfType<PrototypeController>();controller.Initialize();controller.Restart(true);
             controller.World.Run.Tick(119,0);
             var camera=controller.GetComponentInChildren<Camera>();camera.orthographicSize=22;
@@ -57,6 +65,8 @@ namespace OutpostLoop.Editor
             camera.targetTexture=null;RenderTexture.active=prior;Object.DestroyImmediate(rt);Object.DestroyImmediate(image);
             EditorSceneManager.OpenScene("Assets/Prototype/Scenes/Boot.unity",OpenSceneMode.Single);
             Debug.Log("OUTPOST_MOTION_READY frames=60 simulatedSeconds=48");
+            }
+            finally { Game.FoundationRuntime.Shutdown(); }
         }
     }
 }

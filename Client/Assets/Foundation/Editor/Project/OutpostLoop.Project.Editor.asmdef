@@ -1,1 +1,16 @@
-{"name":"OutpostLoop.Project.Editor","references":["OutpostLoop.Core","OutpostLoop.UI","OutpostLoop.Config","OutpostLoop.Resources","OutpostLoop.Resources.Editor","Unity.ugui","Unity.InputSystem"],"includePlatforms":["Editor"]}
+{
+  "name": "OutpostLoop.Project.Editor",
+  "references": [
+    "OutpostLoop.Core",
+    "OutpostLoop.UI",
+    "OutpostLoop.Config",
+    "OutpostLoop.Resources",
+    "OutpostLoop.Resources.Editor",
+    "Unity.ugui",
+    "Unity.InputSystem",
+    "OutpostLoop.Startup"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

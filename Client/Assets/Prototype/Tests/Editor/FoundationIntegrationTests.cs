@@ -6,7 +6,9 @@ namespace OutpostLoop.Tests
     /// <summary>四项限定集成检查，证明技术底座被原型实际消费。</summary>
     public sealed class FoundationIntegrationTests
     {
-        [TearDown] public void Cleanup(){Game.Game.Interface.Deinit();Game.LifeCycle.ClearForTests();}
+        [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
+
+        [TearDown] public void Cleanup(){Game.FoundationRuntime.Shutdown();}
         [Test] public void ArchitectureOwnsRunAndPublishesStart()
         {
             var a=Game.Game.Interface;a.RegisterModel(new PrototypeModel());a.RegisterSystem(new PrototypeSystem());

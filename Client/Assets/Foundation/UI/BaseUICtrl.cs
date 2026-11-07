@@ -254,6 +254,18 @@ namespace Game
             return global::Game.Game.Interface;
         }
 
+        /// <summary>基础会话退出时释放已加载界面及背景，不受普通关闭条件限制。</summary>
+        internal void Unload()
+        {
+            var view = BaseUI;
+            if (view == null) return;
+            view.gameObject.SetActive(false);
+            // Play 中 Destroy 延迟到帧末；先同步复位与通知，确保依赖尚未关闭。
+            OnBaseUIDestroyed(view);
+            if (Application.isPlaying) Object.Destroy(view.gameObject);
+            else Object.DestroyImmediate(view.gameObject);
+        }
+
         private void Load()
         {
             var relativePath = Path();

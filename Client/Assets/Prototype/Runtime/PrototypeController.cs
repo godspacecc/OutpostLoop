@@ -5,6 +5,7 @@ using QFramework;
 namespace OutpostLoop
 {
     /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
+    [RequireComponent(typeof(Game.FoundationLoop))]
     public sealed class PrototypeController : MonoBehaviour
     {
         // 本局领域状态、临时表现根和预分配敌人池。
@@ -38,7 +39,6 @@ namespace OutpostLoop
         public void Initialize()
         {
             if(worldRoot != null)return;
-            if(GetComponent<Game.FoundationLoop>()==null)gameObject.AddComponent<Game.FoundationLoop>();
             var architecture=Game.Game.Interface;
             if(architecture.GetModel<PrototypeModel>()==null)architecture.RegisterModel(new PrototypeModel());
             if(architecture.GetSystem<PrototypeSystem>()==null)architecture.RegisterSystem(new PrototypeSystem());

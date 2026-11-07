@@ -5,6 +5,10 @@ namespace OutpostLoop.Tests
     /// <summary>地图与战斗的限定验证，包含完整局时模拟和敌波容量边界。</summary>
     public class PrototypeWorldTests
     {
+        [TearDown] public void CloseFoundation() { Game.FoundationRuntime.Shutdown(); }
+
+        [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
+
         [Test] public void ExtremeWaveConfigurationStillSpawnsWithinPoolLimit()
         {
             var config = PrototypeServices.LoadConfig();

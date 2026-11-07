@@ -50,3 +50,5 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 预览、验证与日志在 `Backup/Artifacts/Prototype-20261106/` 和 `Backup/Artifacts/Foundation-20261107/`（本地资料，Git 忽略）。用户已授权独立 GitHub 仓库 `godspacecc/OutpostLoop`，不会推入 FirepowerLoop。
 
 2026-11-07 资源/UI 基础对齐增量验证：21 项限定测试通过，含真实源收集、窗口安全区接入及实际 Play。详见 `Docs/执行总清单.md`；本批证据在 `Backup/Artifacts/FrameworkAlignment-20261107/`。没有验证资源包运行或真机安全区。
+
+基础启动由 `FoundationLoop` / `FoundationRuntime` 负责，先准备资源和架构，再由原型接入玩法；退出统一清理 UI、容器、计时器、事件与资源入口。原型配置读取不再隐式初始化基础。启动清理增量验证 40 项通过，包含场景重载、关闭域重载后重进，以及真实 Play 的窗口卸载顺序；证据位于 `Backup/Artifacts/StartupAlignment-20261107/`。

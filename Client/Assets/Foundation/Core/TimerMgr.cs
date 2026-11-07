@@ -62,7 +62,10 @@ namespace Game
             Tick(deltaTime, unscaledDeltaTime);
         }
 
-        public void ClearForTests()
+        public void ClearForTests() => Clear();
+
+        /// <summary>会话结束时清空计时器并解除帧订阅。</summary>
+        public void Clear()
         {
             _timers.Clear();
             _completedTimers.Clear();
