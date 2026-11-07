@@ -28,7 +28,7 @@ namespace OutpostLoop.Resources.Editor
     {
         public const string SettingPath = "Assets/AssetBundleCollectorSetting.asset";
         /// <summary>只创建本项目设置；遇到已有外来包拒绝覆盖。</summary>
-        [MenuItem("OutpostLoop/Resources/Ensure Settings")]
+        [MenuItem("Tools/资源/初始化收集设置")]
         public static void EnsureSettings()
         {
             var setting = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(SettingPath);
@@ -56,7 +56,7 @@ namespace OutpostLoop.Resources.Editor
             package.Groups.Add(group); EditorUtility.SetDirty(setting); AssetDatabase.SaveAssets();
         }
         /// <summary>调用正式收集器，仅查询源结果，不执行任何构建。</summary>
-        [MenuItem("OutpostLoop/Resources/Audit Source Collection")]
+        [MenuItem("Tools/诊断/检查资源源收集")]
         public static void Audit()
         {
             EnsureSettings();

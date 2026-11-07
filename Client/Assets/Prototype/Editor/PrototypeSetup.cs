@@ -8,7 +8,7 @@ namespace OutpostLoop.Editor
     /// <summary>仅创建独立原型场景及截图，不调用任何资源包或 Player Build。</summary>
     public static class PrototypeSetup
     {
-        [MenuItem("OutpostLoop/Create Preview Scene")]
+        [MenuItem("Tools/开发/创建原型预览场景")]
         public static void CreateScene()
         {
             var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);

@@ -6,7 +6,7 @@
 1. Unity Hub 添加本仓库的 `Client` 目录。
 2. 打开 `Assets/Prototype/Scenes/Boot.unity`。
 3. 点击 Play，再点击游戏内“开始这一局”。推荐 Game 视图 16:9、1280×720 或更大。
-4. 若未找到场景，用菜单 `OutpostLoop > Create Preview Scene` 创建。
+4. 若未找到场景，用菜单 `Tools > 开发 > 创建原型预览场景` 创建。
 
 ## 操作
 - WASD/方向键移动，靠近资源按住 E 采集。
@@ -36,10 +36,10 @@
 
 | 入口 | 用途 |
 |---|---|
-| `OutpostLoop > Foundation > Prepare Prototype Foundation` | 给 Boot 场景补齐统一生命周期与空 UI 层 |
-| `OutpostLoop > Foundation > Generate Config (Client + Server)` | 从权威配置源双端生成 |
-| `OutpostLoop > Foundation > Diagnostics` | 检查配置、源收集和基础状态 |
-| `OutpostLoop > Resources > Audit Source Collection` | 查询真实 YooAsset 源收集结果，不构建资源包 |
+| `Tools > 开发 > 准备原型基础场景` | 给 Boot 场景补齐统一生命周期与空 UI 层 |
+| `Tools > 配置 > 生成双端配置` | 从权威配置源双端生成 |
+| `Tools > 诊断 > 基础诊断` | 检查配置、源收集和基础状态 |
+| `Tools > 诊断 > 检查资源源收集` | 查询真实 YooAsset 源收集结果，不构建资源包 |
 | `Tools > 场景 > 场景切换` | 场景快速切换 |
 | Prefab 右键 `智能更新UI/BoxUI/Page` | 按引用收集生成视图/控制器并绑定组件 |
 

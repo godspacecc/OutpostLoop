@@ -13,7 +13,7 @@ namespace OutpostLoop.Editor
     /// <summary>独立工程日常入口；不提供旧项目的打包、发布或服务器操作。</summary>
     public static class FoundationTools
     {
-        [MenuItem("OutpostLoop/Foundation/Generate Config (Client + Server)")]
+        [MenuItem("Tools/配置/生成双端配置")]
         public static void GenerateConfig()
         {
             var root=Path.GetFullPath(Path.Combine(Application.dataPath,"../.."));
@@ -28,7 +28,7 @@ namespace OutpostLoop.Editor
             AssetDatabase.Refresh();
         }
         /// <summary>为既有原型补空UI层与唯一生命周期入口，不创建可见控件或套用旧主题。</summary>
-        [MenuItem("OutpostLoop/Foundation/Prepare Prototype Foundation")]
+        [MenuItem("Tools/开发/准备原型基础场景")]
         public static void Prepare()
         {
             if(EditorApplication.isPlaying)throw new InvalidOperationException("请先退出Play再准备基础场景。");
@@ -54,7 +54,7 @@ namespace OutpostLoop.Editor
             EditorSceneManager.SaveScene(scene);ResourceSourceAudit.EnsureSettings();AssetDatabase.SaveAssets();
             Debug.Log("FOUNDATION_READY：独立空UI层、生命周期、源收集设置已准备，未构建资源包。");
         }
-        [MenuItem("OutpostLoop/Foundation/Diagnostics")]
+        [MenuItem("Tools/诊断/基础诊断")]
         public static void Diagnostics()
         {
             ResourceSourceAudit.Audit();
