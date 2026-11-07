@@ -72,3 +72,10 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 初次拆分的编辑器验证证据位于 `Backup/Artifacts/BootMainBuild-20261107/`。随后用户单独授权一次本地完整构建、不发布；已生成本项目 Windows 宿主、AOT/Game DLL、资源与安装器，并验证资源服不可达时回退内置资源、进入 Main。Boot 对齐的 35 项限定测试通过，证据位于 `Backup/Artifacts/BootAlignment-20261107/`。未执行安装、Android 真机或发布验证。
 
 后续 UI 对齐以 3DBase 为准：安全区递归适配、Top/Popup 互斥、隐藏窗口置顶、完整 UI 地址/CreateView、列表及生成工具；26 项限定测试全部通过，含实际 Boot→Main 和三项生命周期 Play 检查。此后未再构建 Player，现有本地安装包仅对应前一轮 Boot 验证。证据位于 `Backup/Artifacts/UI3DBaseAlignment-20261107/`。音频、设置、本地化等尚未迁入的通用模块不在本批范围内。
+
+
+## Unity MCP
+
+使用 `com.ivanmurzak.unity.mcp`（AI Game Developer），按用户最新要求锁定 OpenUPM 稳定版 `1.7.1`；配套本机服务端由插件管理。本机端口及项目路由由各工程独立生成，不复用其他项目配置。Codex 本地配置和自动生成技能不进入版本库；新设备需在插件中配置本机连接。
+
+当前机器已通过真实 MCP 请求确认连接 OutpostLoop、读取 Boot 场景与 Console，并完成资源刷新。新增 MCP 配置后，当前聊天若仍没有原生工具，需要重启 Codex 后重新检查工具目录。

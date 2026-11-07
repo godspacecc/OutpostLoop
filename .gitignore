@@ -16,3 +16,10 @@
 /Client/.outpostloop-*.lock
 /Client/.outpostloop-ci-*.json
 !/Tools/BuildSeparationValidation/BuildSeparationValidation.csproj
+
+# 本机 MCP 端口配置不进入仓库
+/.codex/config.toml
+
+# Unity MCP 自动生成的本机接入与技能
+/Client/.codex/
+/Client/.agents/
