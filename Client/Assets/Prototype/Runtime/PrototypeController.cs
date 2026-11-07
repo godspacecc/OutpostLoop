@@ -81,7 +81,30 @@ namespace OutpostLoop
             if(architecture.GetModel<PrototypeModel>()==null)architecture.RegisterModel(new PrototypeModel());
             if(architecture.GetSystem<PrototypeSystem>()==null)architecture.RegisterSystem(new PrototypeSystem());
             session=architecture.GetSystem<PrototypeSystem>();
+            architecture.GetUtility<Game.HotKeyActionRegistry>().Register(new Game.HotKeyAction
+            {
+                ActionId = Game.HotKeyActionIds.TogglePause,
+                Context = Game.HotKeyContext.Gameplay,
+                Priority = 10,
+                CanExecute = () => this != null && isActiveAndEnabled && initialized && started &&
+                    World.Run.Outcome == 0 && !UtilityWindowOpen,
+                Execute = TogglePause
+            });
 
+
+            architecture.GetUtility<Game.HotKeyActionRegistry>().Register(new Game.HotKeyAction
+            {
+                ActionId = Game.HotKeyActionIds.ToggleRuntimeLog,
+                Context = Game.HotKeyContext.Global,
+                Priority = 1,
+                CanExecute = () => this != null && isActiveAndEnabled && initialized && Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() != true,
+                Execute = () =>
+                {
+                    var log = Game.UIHelper.GetUICtrl<PrototypeLogCtrl>();
+                    if (log?.IsShow() == true) log.Hide();
+                    else Game.UIHelper.ShowUI<PrototypeLogCtrl>();
+                }
+            });
 
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
@@ -180,10 +203,10 @@ namespace OutpostLoop
         private void PollInputAndPresent()
         {
             if(!initialized)return;
-            if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0)
+            if (UtilityWindowOpen)
             {
-                if(shop || World.Run.Paused) ActOnModal();
-                else session.SetPaused(true);
+                session.SubmitInput(Vector2.zero, false);
+                return;
             }
             if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
             if(started&&!World.Run.Paused&&World.Run.Outcome==0)
@@ -196,6 +219,16 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
+        /// <summary>暂停热键与界面操作共用同一个入口，重绑后由热键系统调用。</summary>
+        private bool UtilityWindowOpen => Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() == true ||
+            Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true;
+
+        private void TogglePause()
+        {
+            if (shop || World.Run.Paused) ActOnModal();
+            else session.SetPaused(true);
+        }
+
         internal PrototypeOverlay Overlay => !started ? PrototypeOverlay.Start :
             World.Run.Outcome != 0 ? PrototypeOverlay.Result :
             shop ? PrototypeOverlay.Upgrade : World.Run.Paused ? PrototypeOverlay.Paused : PrototypeOverlay.None;
@@ -205,6 +238,7 @@ namespace OutpostLoop
         /// <summary>键盘与临时按钮共用同一个基地入口，购买权限仍由玩法系统判断。</summary>
         internal void ToggleUpgrade()
         {
+            if (UtilityWindowOpen) return;
             if (!initialized || !started || World.Run.Outcome != 0 || World.Player.magnitude >= 5) return;
             shop = !shop;
             feedback = "";
@@ -215,6 +249,7 @@ namespace OutpostLoop
         /// <summary>根据本局状态执行主按钮动作；窗口本身不改变规则数据。</summary>
         internal void ActOnModal()
         {
+            if (UtilityWindowOpen) return;
             if (!initialized) return;
             switch (Overlay)
             {
@@ -236,8 +271,9 @@ namespace OutpostLoop
 
         internal void PurchaseUpgrade(int route)
         {
+            if (UtilityWindowOpen) return;
             if (!initialized || Overlay != PrototypeOverlay.Upgrade) return;
-            feedback = session.Purchase(route) ? "升级完成" : "资源不足或已满级";
+            feedback = session.Purchase(route) ? Game.Loc.T("PreviewText18") : Game.Loc.T("PreviewText19");
             feedbackUntil = Time.realtimeSinceStartup + 2;
             RefreshOverlay();
         }
@@ -293,18 +329,18 @@ namespace OutpostLoop
             GUI.skin.font=font;GUI.skin.label.fontSize=18;GUI.skin.button.fontSize=19;GUI.skin.box.fontSize=18;
             var s=World.Run;
             GUI.Box(new Rect(16,16,330,168),"");
-            GUI.Label(new Rect(30,26,305,30),"OUTPOST LOOP · 独立可玩预览");
-            GUI.Label(new Rect(30,61,300,28),"剩余 "+Mathf.CeilToInt(s.Config.Duration-s.Elapsed)+" 秒   波次 "+World.Wave+" / "+s.Config.WaveTimes.Count);
-            GUI.Label(new Rect(30,92,300,28),"基地 "+s.Health+"   击退 "+World.Kills);
-            GUI.Label(new Rect(30,122,300,28),"库存：废料 "+s.Scrap+"  能源 "+s.Energy);
-            GUI.Label(new Rect(30,151,300,28),"背包 "+(s.CargoScrap+s.CargoEnergy)+" / "+s.Capacity);
-            GUI.Box(new Rect(16,640,850,62),"WASD 移动 · 靠近资源按住 E 采集 · 回基地自动卸货\n基地附近 B 升级 · ESC 暂停 · 12 分钟守住最终进攻即获胜");
+            GUI.Label(new Rect(30,26,305,30),Game.Loc.T("HudTitle"));
+            GUI.Label(new Rect(30,61,300,28),Game.Loc.T("HudTime", Mathf.CeilToInt(s.Config.Duration-s.Elapsed), World.Wave, s.Config.WaveTimes.Count));
+            GUI.Label(new Rect(30,92,300,28),Game.Loc.T("HudHealth", s.Health, World.Kills));
+            GUI.Label(new Rect(30,122,300,28),Game.Loc.T("HudStock", s.Scrap, s.Energy));
+            GUI.Label(new Rect(30,151,300,28),Game.Loc.T("HudCargo", s.CargoScrap+s.CargoEnergy, s.Capacity));
+            GUI.Box(new Rect(16,640,850,62),Game.Loc.T("HudControls"));
             DrawMap();
         }
 
         private void DrawMap()
         {
-            var old=GUI.color;GUI.Box(new Rect(1050,18,210,235),"区域地图");
+            var old=GUI.color;GUI.Box(new Rect(1050,18,210,235),Game.Loc.T("HudMap"));
             foreach(var node in World.Nodes)if(node.Remaining>0)Dot(node.Position,node.Energy?Color.cyan:new Color(0.8f,0.5f,0.2f),4);
             foreach(var enemy in World.Enemies)Dot(enemy.Position,Color.red,5);
             Dot(Vector2.zero,Color.white,9);Dot(World.Player,Color.yellow,7);GUI.color=old;

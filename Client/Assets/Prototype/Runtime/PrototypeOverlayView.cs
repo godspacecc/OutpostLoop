@@ -1,3 +1,4 @@
+using System.Linq;
 using Game;
 using UnityEngine;
 using UnityEngine.UI;
@@ -68,9 +69,9 @@ namespace OutpostLoop
     /// <summary>开始页与局内弹窗复用会话控制器，展示逻辑不修改玩法状态。</summary>
     internal sealed class PrototypeOverlayView : BaseUI
     {
-        private static readonly string[] Routes = { "采集 / 运输", "炮塔火力 / 射程", "基地耐久 / 修复" };
+        private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
-        private Text heading, details, actionLabel, feedback;
+        private Text heading, details, actionLabel, feedback, startBriefing;
         private GameObject purchaseRows;
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
@@ -89,6 +90,8 @@ namespace OutpostLoop
         internal void BuildModal(Font font, PrototypeController controller)
         {
             BuildStartScreen(font, controller);
+            Button(transform, font, "SettingsEntry", Loc.T("SettingsTitle"), new Vector2(180, 48),
+                new Vector2(-115, -40), new Vector2(1, 1), () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
             var panel = Rect("Panel", transform, new Vector2(.5f,.5f), new Vector2(780,530), Vector2.zero);
             sessionPanel = panel;
             panel.gameObject.AddComponent<Image>().color = new Color(.08f,.13f,.14f,.98f);
@@ -108,7 +111,7 @@ namespace OutpostLoop
 
         internal void BuildUpgradeEntry(Font font, UnityEngine.Events.UnityAction onClick)
         {
-            Button(transform, font, "OpenUpgrade", "打开基地升级 [B]", new Vector2(450,72),
+            Button(transform, font, "OpenUpgrade", Loc.T("PreviewText14"), new Vector2(450,72),
                 new Vector2(-255,72), new Vector2(1,0), onClick);
         }
 
@@ -120,6 +123,7 @@ namespace OutpostLoop
             sessionPanel.gameObject.SetActive(!starting);
             if (starting)
             {
+                if (startBriefing != null) startBriefing.text = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;
                 var safe = Screen.safeArea.size;
@@ -137,24 +141,24 @@ namespace OutpostLoop
             switch (mode)
             {
                 case PrototypeOverlay.Paused:
-                    SetText(heading, "已暂停");
-                    SetText(details, "本局计时与战斗已暂停。");
-                    SetText(actionLabel, "继续 [ESC]");
+                    SetText(heading, Loc.T("PreviewText0"));
+                    SetText(details, Loc.T("PreviewText1"));
+                    SetText(actionLabel, Loc.T("PreviewText2"));
                     break;
                 case PrototypeOverlay.Upgrade:
-                    SetText(heading, "基地升级 · 局时已暂停");
-                    SetText(actionLabel, "返回探索 [B]");
+                    SetText(heading, Loc.T("PreviewText3"));
+                    SetText(actionLabel, Loc.T("PreviewText4"));
                     for (int i = 0; i < Routes.Length; i++)
                     {
-                        var cost = run.Levels[i] >= run.Config.MaxLevel ? "已满级" : $"废料 {run.ScrapCost(i)} / 能源 {run.EnergyCost(i)}";
+                        var cost = run.Levels[i] >= run.Config.MaxLevel ? Loc.T("PreviewText5") : Loc.T("PreviewCost", run.ScrapCost(i), run.EnergyCost(i));
                         SetText(routeLabels[i], $"{Routes[i]}   {run.Levels[i]} / {run.Config.MaxLevel}   {cost}");
                     }
                     SetText(feedback, controller.UpgradeFeedback);
                     break;
                 case PrototypeOverlay.Result:
-                    SetText(heading, run.Outcome > 0 ? "防守成功" : "本局结束");
-                    SetText(details, $"坚持 {Mathf.FloorToInt(run.Elapsed)} 秒，击退 {controller.World.Kills} 个敌人。\n下一局将生成新的资源布局。");
-                    SetText(actionLabel, "新地图，再来一局");
+                    SetText(heading, run.Outcome > 0 ? Loc.T("PreviewText6") : Loc.T("PreviewText7"));
+                    SetText(details, Loc.T("PreviewResult", Mathf.FloorToInt(run.Elapsed), controller.World.Kills));
+                    SetText(actionLabel, Loc.T("PreviewText8"));
                     break;
             }
         }
@@ -175,13 +179,13 @@ namespace OutpostLoop
             startScreen.AddComponent<Image>().color = new Color32(16, 26, 24, 255);
             startStage = Rect("StartLayout", backgroundRect, new Vector2(.5f,.5f), new Vector2(1920,1080), Vector2.zero);
             StartText(font, "Brand", "OUTPOST LOOP", 96, 55, 420, 48, 23, mint, FontStyle.Bold);
-            StartText(font, "Brief", "前哨行动", 1670, 55, 160, 48, 22, mint, alignment: TextAnchor.MiddleRight);
+            StartText(font, "Brief", Loc.T("PreviewText9"), 1670, 55, 160, 48, 22, mint, alignment: TextAnchor.MiddleRight);
             Fill("HeaderRule", 96, 122, 1728, 2, line);
             StartText(font, "Operations", "F I E L D   O P E R A T I O N S", 96, 230, 630, 40, 19, mint);
             var latinFont = UnityEngine.Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             StartText(latinFont, "TitleOutpost", "OUTPOST", 88, 268, 705, 150, 123, ink, FontStyle.Bold);
             StartText(latinFont, "TitleLoop", "LOOP", 89, 386, 640, 150, 123, mint, FontStyle.Bold);
-            StartText(font, "GameLoop", "探索  ·  采集  ·  升级  ·  防守", 96, 555, 650, 44, 26, muted);
+            StartText(font, "GameLoop", Loc.T("PreviewText10"), 96, 555, 650, 44, 26, muted);
 
             Fill("ArtFrame", 796, 160, 1028, 798, line);
             var hero = StartRect("BaseArtwork", 798, 162, 1024, 794).gameObject.AddComponent<RawImage>();
@@ -197,18 +201,19 @@ namespace OutpostLoop
             Fill("SectorPlate", 833, 198, 166, 47, new Color32(21, 39, 33, 230));
             StartText(font, "Sector", "SECTOR 01", 850, 198, 140, 47, 19, mint, FontStyle.Bold);
             Fill("ArtworkCaptionPlate", 798, 883, 1024, 73, new Color32(17, 30, 25, 218));
-            StartText(font, "ArtworkCaption", "前哨基地 · 概念图", 833, 891, 420, 50, 22, ink);
+            StartText(font, "ArtworkCaption", Loc.T("PreviewText11"), 833, 891, 420, 50, 22, ink);
 
             Fill("BriefingRule", 96, 644, 650, 2, line);
-            string briefing = $"回收废料与能源，强化基地防线。\n守住 {controller.World.Run.Config.Duration / 60:0.#} 分钟内的最后一波进攻。";
+            string briefing = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
             StartText(font, "Briefing", briefing, 96, 660, 650, 94, 27, ink);
-            var action = Button(startStage, font, "PrimaryAction", "开始这一局  →", new Vector2(390, 77),
+            startBriefing = startStage.Find("Briefing").GetComponent<Text>();
+            var action = Button(startStage, font, "PrimaryAction", Loc.T("PreviewText12"), new Vector2(390, 77),
                 new Vector2(291, -825), new Vector2(0, 1), controller.ActOnModal);
             action.color = new Color32(15, 32, 26, 255);
             action.fontStyle = FontStyle.Bold;
             action.transform.parent.GetComponent<Image>().color = mint;
             Fill("FooterRule", 96, 992, 1728, 2, line);
-            StartText(font, "Controls", "WASD 移动    E 采集    B 升级    ESC 暂停", 96, 1003, 800, 50, 20, muted);
+            StartText(font, "Controls", Loc.T("PreviewText13"), 96, 1003, 800, 50, 20, muted);
         }
 
         // 开始页按 1920×1080 的左上角坐标布置，整页随安全区缩放。
@@ -228,6 +233,11 @@ namespace OutpostLoop
             var label = StartRect(name, x, y, width, height).gameObject.AddComponent<Text>();
             label.font = font;
             label.text = text;
+            var key = LocalizationLanguages.All.Count > 0
+                ? Game.Game.Interface.GetUtility<LocalizationUtility>().GetKeys(Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value)
+                    .FirstOrDefault(candidate => Loc.T(candidate) == text)
+                : null;
+            if (key != null) label.gameObject.AddComponent<LocalizedText>().Key = key;
             label.fontSize = size;
             label.color = color;
             label.fontStyle = style;
@@ -267,6 +277,11 @@ namespace OutpostLoop
             button.onClick.AddListener(onClick);
             var label = Label(rect, font, "Label", size, Vector2.zero, 30);
             label.text = text;
+            var key = LocalizationLanguages.All.Count > 0
+                ? Game.Game.Interface.GetUtility<LocalizationUtility>().GetKeys(Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value)
+                    .FirstOrDefault(candidate => Loc.T(candidate) == text)
+                : null;
+            if (key != null) label.gameObject.AddComponent<LocalizedText>().Key = key;
             return label;
         }
 

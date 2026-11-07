@@ -8,6 +8,7 @@ namespace Game
         protected override void Init()
         {
             RegisterModel(new RuntimeLogModel());
+            RegisterModel(new ResourceUpdateModel());
             RegisterModel(new SaveModel());
             RegisterModel(new LocalizationModel());
             RegisterModel(new DisplaySettingsModel());
@@ -25,6 +26,12 @@ namespace Game
             RegisterSystem(new SaveSystem());
             RegisterSystem(new RedPointSystem());
             RegisterSystem(new DebugCommandSystem());
+            RegisterUtility<IResourceUpdateRuntimeChecker>(new YooAssetResourceUpdateRuntimeChecker());
+            RegisterUtility<IRemoteResourceVersionProbe>(new UnityWebRequestResourceVersionProbe());
+            RegisterUtility<IResourceUpdateNoticeClient>(new UnityWebRequestResourceUpdateNoticeClient());
+            RegisterUtility<IApplicationUpdateChecker>(new ApplicationUpdateChecker());
+            RegisterUtility<IApplicationRestartUtility>(new ApplicationRestartUtility());
+            RegisterSystem(new ResourceUpdateSystem());
         }
     }
 }

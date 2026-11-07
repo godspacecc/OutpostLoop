@@ -23,5 +23,200 @@ namespace Game
         /// 重试
         /// </summary>
         public static string Commonretry => Loc.T("CommonRetry");
+        /// <summary>
+        /// 背包 {0} / {1}
+        /// </summary>
+        public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);
+        /// <summary>
+        /// WASD 移动 · 靠近资源按住 E 采集 · 回基地自动卸货
+        /// 基地附近 B 升级 · ESC 暂停 · 守住最终进攻即获胜
+        /// </summary>
+        public static string Hudcontrols => Loc.T("HudControls");
+        /// <summary>
+        /// 基地 {0}   击退 {1}
+        /// </summary>
+        public static string Hudhealth(object arg0, object arg1) => Loc.T("HudHealth", arg0, arg1);
+        /// <summary>
+        /// 区域地图
+        /// </summary>
+        public static string Hudmap => Loc.T("HudMap");
+        /// <summary>
+        /// 库存：废料 {0}  能源 {1}
+        /// </summary>
+        public static string Hudstock(object arg0, object arg1) => Loc.T("HudStock", arg0, arg1);
+        /// <summary>
+        /// 剩余 {0} 秒   波次 {1} / {2}
+        /// </summary>
+        public static string Hudtime(object arg0, object arg1, object arg2) => Loc.T("HudTime", arg0, arg1, arg2);
+        /// <summary>
+        /// OUTPOST LOOP · 独立可玩预览
+        /// </summary>
+        public static string Hudtitle => Loc.T("HudTitle");
+        /// <summary>
+        /// 回收废料与能源，强化基地防线。
+        /// 守住 {0:0.#} 分钟内的最后一波进攻。
+        /// </summary>
+        public static string Previewbrief(object arg0) => Loc.T("PreviewBrief", arg0);
+        /// <summary>
+        /// 废料 {0} / 能源 {1}
+        /// </summary>
+        public static string Previewcost(object arg0, object arg1) => Loc.T("PreviewCost", arg0, arg1);
+        /// <summary>
+        /// 坚持 {0} 秒，击退 {1} 个敌人。
+        /// 下一局将生成新的资源布局。
+        /// </summary>
+        public static string Previewresult(object arg0, object arg1) => Loc.T("PreviewResult", arg0, arg1);
+        /// <summary>
+        /// 已暂停
+        /// </summary>
+        public static string Previewtext0 => Loc.T("PreviewText0");
+        /// <summary>
+        /// 本局计时与战斗已暂停。
+        /// </summary>
+        public static string Previewtext1 => Loc.T("PreviewText1");
+        /// <summary>
+        /// 探索  ·  采集  ·  升级  ·  防守
+        /// </summary>
+        public static string Previewtext10 => Loc.T("PreviewText10");
+        /// <summary>
+        /// 前哨基地 · 概念图
+        /// </summary>
+        public static string Previewtext11 => Loc.T("PreviewText11");
+        /// <summary>
+        /// 开始这一局  →
+        /// </summary>
+        public static string Previewtext12 => Loc.T("PreviewText12");
+        /// <summary>
+        /// WASD 移动    E 采集    B 升级    ESC 暂停
+        /// </summary>
+        public static string Previewtext13 => Loc.T("PreviewText13");
+        /// <summary>
+        /// 打开基地升级 [B]
+        /// </summary>
+        public static string Previewtext14 => Loc.T("PreviewText14");
+        /// <summary>
+        /// 采集 / 运输
+        /// </summary>
+        public static string Previewtext15 => Loc.T("PreviewText15");
+        /// <summary>
+        /// 炮塔火力 / 射程
+        /// </summary>
+        public static string Previewtext16 => Loc.T("PreviewText16");
+        /// <summary>
+        /// 基地耐久 / 修复
+        /// </summary>
+        public static string Previewtext17 => Loc.T("PreviewText17");
+        /// <summary>
+        /// 升级完成
+        /// </summary>
+        public static string Previewtext18 => Loc.T("PreviewText18");
+        /// <summary>
+        /// 资源不足或已满级
+        /// </summary>
+        public static string Previewtext19 => Loc.T("PreviewText19");
+        /// <summary>
+        /// 继续 [ESC]
+        /// </summary>
+        public static string Previewtext2 => Loc.T("PreviewText2");
+        /// <summary>
+        /// 基地升级 · 局时已暂停
+        /// </summary>
+        public static string Previewtext3 => Loc.T("PreviewText3");
+        /// <summary>
+        /// 返回探索 [B]
+        /// </summary>
+        public static string Previewtext4 => Loc.T("PreviewText4");
+        /// <summary>
+        /// 已满级
+        /// </summary>
+        public static string Previewtext5 => Loc.T("PreviewText5");
+        /// <summary>
+        /// 防守成功
+        /// </summary>
+        public static string Previewtext6 => Loc.T("PreviewText6");
+        /// <summary>
+        /// 本局结束
+        /// </summary>
+        public static string Previewtext7 => Loc.T("PreviewText7");
+        /// <summary>
+        /// 新地图，再来一局
+        /// </summary>
+        public static string Previewtext8 => Loc.T("PreviewText8");
+        /// <summary>
+        /// 前哨行动
+        /// </summary>
+        public static string Previewtext9 => Loc.T("PreviewText9");
+        /// <summary>
+        /// 请按新按键，ESC 取消；冲突时可确认替换
+        /// </summary>
+        public static string Settingscapture => Loc.T("SettingsCapture");
+        /// <summary>
+        /// 检查更新
+        /// </summary>
+        public static string Settingscheck => Loc.T("SettingsCheck");
+        /// <summary>
+        /// 请在 {0} 秒内确认显示设置
+        /// </summary>
+        public static string Settingscountdown(object arg0) => Loc.T("SettingsCountdown", arg0);
+        /// <summary>
+        /// 显示
+        /// </summary>
+        public static string Settingsdisplay => Loc.T("SettingsDisplay");
+        /// <summary>
+        /// 无边框全屏
+        /// </summary>
+        public static string Settingsfullscreen => Loc.T("SettingsFullscreen");
+        /// <summary>
+        /// 热键
+        /// </summary>
+        public static string Settingskeys => Loc.T("SettingsKeys");
+        /// <summary>
+        /// 主音量
+        /// </summary>
+        public static string Settingsmaster => Loc.T("SettingsMaster");
+        /// <summary>
+        /// 音乐音量
+        /// </summary>
+        public static string Settingsmusic => Loc.T("SettingsMusic");
+        /// <summary>
+        /// 静音
+        /// </summary>
+        public static string Settingsmute => Loc.T("SettingsMute");
+        /// <summary>
+        /// 预览显示设置
+        /// </summary>
+        public static string Settingspreview => Loc.T("SettingsPreview");
+        /// <summary>
+        /// 替换冲突绑定
+        /// </summary>
+        public static string Settingsreplace => Loc.T("SettingsReplace");
+        /// <summary>
+        /// 恢复默认设置
+        /// </summary>
+        public static string Settingsreset => Loc.T("SettingsReset");
+        /// <summary>
+        /// 重启并更新
+        /// </summary>
+        public static string Settingsrestart => Loc.T("SettingsRestart");
+        /// <summary>
+        /// 音效音量
+        /// </summary>
+        public static string Settingssound => Loc.T("SettingsSound");
+        /// <summary>
+        /// 设置
+        /// </summary>
+        public static string Settingstitle => Loc.T("SettingsTitle");
+        /// <summary>
+        /// 当前已是最新版本
+        /// </summary>
+        public static string Settingsuptodate => Loc.T("SettingsUpToDate");
+        /// <summary>
+        /// 发现更新，重启后由启动流程更新。
+        /// </summary>
+        public static string Settingsupdateavailable => Loc.T("SettingsUpdateAvailable");
+        /// <summary>
+        /// 请手动重新启动应用。
+        /// </summary>
+        public static string StartUpdateRestartManual => Loc.T("ui.start.update.restart_manual");
     }
 }
