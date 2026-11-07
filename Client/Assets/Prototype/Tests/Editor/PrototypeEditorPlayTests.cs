@@ -75,9 +75,12 @@ namespace OutpostLoop.Tests
             var run = controller.World.Run;
             Assert.IsTrue(run.Paused);
             Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            var artwork = GameObject.Find("BaseArtwork")?.GetComponent<RawImage>();
+            Assert.IsNotNull(artwork?.texture, "从 Boot 进入 Main 后，开始页应显示场景引用的基地概念图");
             Click("PrimaryAction");
             Assert.IsFalse(run.Paused);
             Assert.IsFalse(Game.UIHelper.HasUIOpen);
+            Assert.IsFalse(artwork.gameObject.activeInHierarchy);
 
             // 通过领域事务准备一笔库存，只验证界面接线；移动采集由原有玩法测试覆盖。
             controller.World.Step(.1f, Vector2.up, false);

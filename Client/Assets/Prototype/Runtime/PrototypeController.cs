@@ -31,6 +31,9 @@ namespace OutpostLoop
         private string startupError;
         // 显式场景依赖，确保资源包携带临时表现所需 Shader。
         [SerializeField] private Shader previewShader;
+        // Main 显式引用已确认用于开始界面的前哨概念图，随场景资源加载。
+        [SerializeField] private Texture2D startArtwork;
+        internal Texture2D StartArtwork => startArtwork;
         // 仅领域与表现均初始化成功后，允许更新及通知 Boot 就绪。
         private bool initialized;
         private readonly Color groundColor = new Color(0.16f,0.25f,0.24f);
@@ -284,6 +287,7 @@ namespace OutpostLoop
         private void OnGUI()
         {
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
+            if (!started) return;
             float scale=Mathf.Min(Screen.width/1280f,Screen.height/720f);
             GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
             GUI.skin.font=font;GUI.skin.label.fontSize=18;GUI.skin.button.fontSize=19;GUI.skin.box.fontSize=18;

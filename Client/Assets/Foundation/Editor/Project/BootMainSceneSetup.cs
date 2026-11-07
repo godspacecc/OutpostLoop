@@ -37,7 +37,9 @@ namespace OutpostLoop.Editor
             // 基础根独立于玩法入口，重载 Main 时由既有实例继续驱动。
             var foundation=GameObject.Find("FoundationRoot")??new GameObject("FoundationRoot");
             var driver=foundation.AddComponent<Game.FoundationLoop>();SetBool(driver,"persistAcrossScenes",true);
-            Set(UnityEngine.Object.FindObjectOfType<PrototypeController>(),"previewShader",Shader.Find("Standard"));
+            var prototype = UnityEngine.Object.FindObjectOfType<PrototypeController>();
+            Set(prototype,"previewShader",Shader.Find("Standard"));
+            Set(prototype,"startArtwork",AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Game/Art/Start/OutpostConcept.png"));
             EditorSceneManager.SaveScene(main);
             // 启动界面使用本项目临时 UGUI 几何，不引用参考项目美术。
             var boot=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
