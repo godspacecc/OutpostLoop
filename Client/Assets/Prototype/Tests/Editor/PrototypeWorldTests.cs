@@ -2,9 +2,21 @@ using NUnit.Framework;
 using UnityEngine;
 namespace OutpostLoop.Tests
 {
-    /// <summary>地图与战斗的六项限定验证，包含完整局时模拟。</summary>
+    /// <summary>地图与战斗的限定验证，包含完整局时模拟和敌波容量边界。</summary>
     public class PrototypeWorldTests
     {
+        [Test] public void ExtremeWaveConfigurationStillSpawnsWithinPoolLimit()
+        {
+            var config = PrototypeServices.LoadConfig();
+            // 构造独立极值快照，不修改权威CSV或生成产物。
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            typeof(OutpostLoop.Config.PrototypeConfig).GetField("<WaveCountBase>k__BackingField", flags).SetValue(config, int.MaxValue);
+            typeof(OutpostLoop.Config.PrototypeConfig).GetField("<WaveCountStep>k__BackingField", flags).SetValue(config, int.MaxValue);
+            var world = new WorldState(12, config);
+            world.Run.Tick(config.WaveTimes[0], 0);
+            world.Step(0.01f, Vector2.zero, false);
+            Assert.AreEqual(config.MaxEnemies, world.Enemies.Count);
+        }
         [Test] public void SeedProducesBoundedRepeatableMap()
         {
             var a = new WorldState(41); var b = new WorldState(41); var c = new WorldState(42);

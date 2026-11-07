@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
+using QFramework;
 
 namespace OutpostLoop
 {
-    /// <summary>独立原型的唯一帧入口：采集输入、推进纯规则、同步临时表现。无旧项目资源。</summary>
+    /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
     public sealed class PrototypeController : MonoBehaviour
     {
         // 本局领域状态、临时表现根和预分配敌人池。
@@ -19,14 +20,33 @@ namespace OutpostLoop
         private Font font;
         private string feedback = "";
         private float feedbackUntil;
+        // 权威规则由架构系统持有，视图只转发输入及读取快照。
+        private PrototypeSystem session;
+        private string startupError;
         private readonly Color groundColor = new Color(0.16f,0.25f,0.24f);
 
         private void Awake() { Initialize(); }
+        // 失活时停止接受输入并暂停，避免隐藏视图仍带着上一帧输入推进。
+        private void OnEnable(){if(session!=null)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
+        private void OnDisable()
+        {
+            Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
+            if(session!=null){session.SubmitInput(Vector2.zero,false);session.SetPaused(true);}
+        }
 
         /// <summary>创建全新临时几何体预览；可供编辑器截图入口调用。</summary>
         public void Initialize()
         {
             if(worldRoot != null)return;
+            if(GetComponent<Game.FoundationLoop>()==null)gameObject.AddComponent<Game.FoundationLoop>();
+            var architecture=Game.Game.Interface;
+            if(architecture.GetModel<PrototypeModel>()==null)architecture.RegisterModel(new PrototypeModel());
+            if(architecture.GetSystem<PrototypeSystem>()==null)architecture.RegisterSystem(new PrototypeSystem());
+            session=architecture.GetSystem<PrototypeSystem>();
+            if(isActiveAndEnabled)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);
+#if UNITY_EDITOR
+            Game.UIHelper.SetPrefabLoader(path=>UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Game/"+path+".prefab"));
+#endif
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
             gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true; gameCamera.orthographicSize=17;
@@ -37,7 +57,7 @@ namespace OutpostLoop
             light.transform.rotation=Quaternion.Euler(50,-35,0);
             RenderSettings.ambientLight=new Color(0.58f,0.63f,0.65f);
             RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
-            Restart(false);
+            try{Restart(false);}catch(System.Exception e){startupError=e.Message;Game.Log.Error("独立原型启动失败："+e.Message);}
         }
 
         /// <summary>重开替换完整领域状态和表现，不保留上一局能力与敌人。</summary>
@@ -46,7 +66,7 @@ namespace OutpostLoop
             if(worldRoot!=null){worldRoot.gameObject.SetActive(false);Release(worldRoot.gameObject);}
             foreach(var material in materials)Release(material);
             materials.Clear();resources.Clear();enemies.Clear();
-            World=new WorldState(++seed); started=begin;shop=false;World.Run.Paused=!begin;
+            World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
             var ground=Mat(groundColor);var stone=Mat(new Color(0.37f,0.40f,0.40f));
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
@@ -77,7 +97,7 @@ namespace OutpostLoop
                 if(node.Energy)item.rotation=Quaternion.Euler(0,45,20);
                 resources.Add(item);
             }
-            for(int i=0;i<48;i++)
+            for(int i=0;i<World.Run.Config.MaxEnemies;i++)
             {
                 var enemy=Shape("PooledEnemy",worldRoot,PrimitiveType.Capsule,Vector3.zero,new Vector3(0.65f,0.8f,0.65f),rust);
                 enemy.gameObject.SetActive(false);enemies.Add(enemy);
@@ -100,7 +120,7 @@ namespace OutpostLoop
         }
         private void Release(Object obj){if(obj==null)return;if(Application.isPlaying)Destroy(obj);else DestroyImmediate(obj);}
 
-        private void Update()
+        private void PollInputAndPresent()
         {
             if(World==null)return;
             if(Input.GetKeyDown(KeyCode.Escape)&&started&&World.Run.Outcome==0){shop=false;World.Run.Paused=!World.Run.Paused;}
@@ -109,7 +129,7 @@ namespace OutpostLoop
             if(started&&!World.Run.Paused&&World.Run.Outcome==0)
             {
                 var move=new Vector2(Input.GetAxisRaw("Horizontal"),Input.GetAxisRaw("Vertical"));
-                World.Step(Time.deltaTime,move,Input.GetKey(KeyCode.E));
+                session.SubmitInput(move,Input.GetKey(KeyCode.E));
                 if(move.sqrMagnitude>0.01f)player.rotation=Quaternion.LookRotation(new Vector3(-move.x,0,-move.y));
             }
             SyncView();
@@ -138,14 +158,14 @@ namespace OutpostLoop
 
         private void OnGUI()
         {
-            if(World==null)return;
+            if(World==null){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
             float scale=Mathf.Min(Screen.width/1280f,Screen.height/720f);
             GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
             GUI.skin.font=font;GUI.skin.label.fontSize=18;GUI.skin.button.fontSize=19;GUI.skin.box.fontSize=18;
             var s=World.Run;
             GUI.Box(new Rect(16,16,330,168),"");
             GUI.Label(new Rect(30,26,305,30),"OUTPOST LOOP · 独立可玩预览");
-            GUI.Label(new Rect(30,61,300,28),"剩余 "+Mathf.CeilToInt(720-s.Elapsed)+" 秒   波次 "+World.Wave+" / 6");
+            GUI.Label(new Rect(30,61,300,28),"剩余 "+Mathf.CeilToInt(s.Config.Duration-s.Elapsed)+" 秒   波次 "+World.Wave+" / "+s.Config.WaveTimes.Count);
             GUI.Label(new Rect(30,92,300,28),"基地 "+s.Health+"   击退 "+World.Kills);
             GUI.Label(new Rect(30,122,300,28),"库存：废料 "+s.Scrap+"  能源 "+s.Energy);
             GUI.Label(new Rect(30,151,300,28),"背包 "+(s.CargoScrap+s.CargoEnergy)+" / "+s.Capacity);
@@ -172,12 +192,12 @@ namespace OutpostLoop
                 string[] names={"采集 / 运输","炮塔火力 / 射程","基地耐久 / 修复"};
                 for(int i=0;i<3;i++)
                 {
-                    var label=names[i]+"  "+s.Levels[i]+" / 3";
-                    label+=s.Levels[i]>=3?"  已满级":"   废料 "+s.ScrapCost(i)+" / 能源 "+s.EnergyCost(i);
+                    var label=names[i]+"  "+s.Levels[i]+" / "+s.Config.MaxLevel;
+                    label+=s.Levels[i]>=s.Config.MaxLevel?"  已满级":"   废料 "+s.ScrapCost(i)+" / 能源 "+s.EnergyCost(i);
                     if(GUI.Button(new Rect(375,270+i*65,530,53),label))
                     {
                         // 面板暂停世界，购买事务仍需在允许动作的状态下校验。
-                        s.Paused=false;bool ok=s.Upgrade(i);s.Paused=true;
+                        bool ok=session.Purchase(i);
                         feedback=ok?"升级完成":"资源不足或已满级";feedbackUntil=Time.realtimeSinceStartup+2;
                     }
                 }
@@ -199,6 +219,6 @@ namespace OutpostLoop
         }
         private void Dot(Vector2 p,Color color,float size)
         {GUI.color=color;GUI.DrawTexture(new Rect(1155+p.x*2-size/2,140-p.y*2-size/2,size,size),Texture2D.whiteTexture);GUI.color=Color.white;}
-        private void OnDestroy(){foreach(var material in materials)Release(material);if(font!=null)Release(font);}
+        private void OnDestroy(){Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);foreach(var material in materials)Release(material);if(font!=null)Release(font);}
     }
 }

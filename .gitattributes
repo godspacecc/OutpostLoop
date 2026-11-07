@@ -6,3 +6,11 @@
 *.cs text eol=lf
 *.md text eol=lf
 *.json text eol=lf
+# 第三方原始源码、模板与Luban生成产物保留其格式，不手改生成代码。
+Config/Luban/** -whitespace
+Client/Assets/Foundation/Config/Generated/** -whitespace
+Client/Assets/Foundation/Config/Runtime/** -whitespace
+Server/Generated/Config/** -whitespace
+Client/Assets/Foundation/Core/QFramework.cs -whitespace
+Client/Assets/Foundation/UI/LoopScrollRect/** -whitespace
+Client/Assets/Foundation/Editor/UI/LoopScroll/** -whitespace

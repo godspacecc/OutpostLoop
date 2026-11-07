@@ -7,5 +7,5 @@
 - 核心手写类、函数和字段补中文注释。领域状态与表现分离；临时 Prototype 之外的正式化需重新审查职责与配置方案。
 - 预览/视频/日志/报告一律在本仓库 Backup/Artifacts/，按批次分目录。
 - 测试只运行真实非空 testClass 或完整 testMethod，声明范围和最大数量，includePassingTests=true；CLI 用完整 XML 保留通过项。禁止全套或无效筛选回退。
-- 不自动创建 worktree。修复并验证后可中文本地提交；远端尚未授权，不擅自使用 FirepowerLoop origin。
+- 不自动创建 worktree。修复并验证后使用中文提交并推送独立 OutpostLoop 仓库；用户于2026-11-07明确授权建仓和推送，不得使用 FirepowerLoop origin 代替。
 - 进度入口 Docs/执行总清单.md。用户已授权自主继续完成首版，不反复询问技术开工权限。

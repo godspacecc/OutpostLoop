@@ -1,0 +1,12 @@
+{
+  "name": "OutpostLoop.UI.Editor",
+  "references": [
+    "OutpostLoop.UI",
+    "OutpostLoop.Core",
+    "Unity.ugui",
+    "Unity.ugui.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

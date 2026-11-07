@@ -1,0 +1,1 @@
+{"name": "OutpostLoop.Resources.Editor", "references": ["OutpostLoop.Resources", "YooAsset", "YooAsset.Editor"], "includePlatforms": ["Editor"]}

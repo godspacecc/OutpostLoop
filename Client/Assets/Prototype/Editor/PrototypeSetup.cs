@@ -18,6 +18,8 @@ namespace OutpostLoop.Editor
             EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene("Assets/Prototype/Scenes/Boot.unity",true)};
             PlayerSettings.companyName="IndependentPrototype";PlayerSettings.productName="OutpostLoop";
             AssetDatabase.SaveAssets();
+            // 重建临时场景时同时恢复独立工程的生命周期与空UI层。
+            FoundationTools.Prepare();
             Debug.Log("OUTPOST_SETUP_READY");
         }
         public static void Capture()

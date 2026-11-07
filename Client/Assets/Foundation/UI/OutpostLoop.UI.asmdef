@@ -1,0 +1,9 @@
+{
+  "name": "OutpostLoop.UI",
+  "references": [
+    "OutpostLoop.Core",
+    "Unity.ugui",
+    "Unity.InputSystem"
+  ],
+  "includePlatforms": []
+}

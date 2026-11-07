@@ -1,0 +1,1 @@
+{"name": "OutpostLoop.Storage.Tests", "references": ["OutpostLoop.Core"], "includePlatforms": ["Editor"], "optionalUnityReferences": ["TestAssemblies"]}

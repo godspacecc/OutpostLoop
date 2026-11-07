@@ -1,0 +1,16 @@
+{
+  "name": "OutpostLoop.UI.Generator.Tests",
+  "references": [
+    "OutpostLoop.UI",
+    "OutpostLoop.UI.Editor",
+    "OutpostLoop.Core",
+    "Unity.ugui",
+    "OutpostLoop.UI.TestFixtures"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

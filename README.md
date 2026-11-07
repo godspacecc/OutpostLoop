@@ -23,8 +23,28 @@
 地图半径限制 46 米；36 个资源点；敌人固定池 48；不生成无限新区。边缘装饰不碰撞，首版没有自由建造、居民模拟、寻路障碍、音频、触屏输入或中途存档。手机性能与安装包尚未验证，未运行 Player Build。
 
 ## 实现与验证
-`RunState` 承担资源和局时事务，`WorldState` 承担地图、采集与自动战斗，`PrototypeController` 是唯一帧/输入与临时表现入口。没有引入服务器、热更新、YooAsset 或旧工程配置。规则中的数值是本次临时原型常量，正式化时再迁入本项目权威配置流程。
+已经补齐适合独立项目的通用开发基础，源码独立维护，不与 FirepowerLoop 自动同步：
 
-限定测试类：`PrototypeRuleTests`（8 项）、`PrototypeWorldTests`（6 项）、`PrototypeFlowTests`（2 项）。每次只运行一个真实类，保留全部通过项，禁止无效过滤回退完整套件。
+- QFramework 的 Model/System、事件、统一生命周期、日志和计时器。原型由 Model 保存本局，System 推进规则，Controller 提交操作并显示画面。
+- 独立 Luban 配置源 `Config/DataCsv/rules.csv`。运行 `Config/gen.bat` 会校验并生成客户端与服务端配置产物；`Server` 当前只有生成配置，没有服务器业务或数据。
+- YooAsset 2.3.17、独立 OutpostLoop 收集设置、资源句柄释放及错误处理接口。当前编辑器从源文件读取 `tbrule.bytes`，真实收集地址和 `startup` 标签已检查。尚无已构建清单，因此资源包运行加载未验证；不触发模拟构建或 Player Build。
+- BaseUI、Box/Page 控制器、UIRoot 空层、列表与对象池、ReferenceCollector 和 UI 代码生成器。未复制旧项目主题或 UI Prefab，游戏画面仍是原型 IMGUI。
+- 独立 JSON 文件存储：区分缺失、损坏、未知版本，完整写入后替换旧文件。这里只提供通用能力，没有增加游戏中途存档或局外成长。
+- UniTask、Input System、UGUI、TMP 等依赖由本工程自行安装。没有复制旧 Library、UserSettings、MCP 配置或玩家数据。
 
-预览、验证与日志在 `Backup/Artifacts/Prototype-20261106/`（本地资料，Git 忽略）。新项目尚未指定远端，不向 FirepowerLoop 的 origin 推送。
+## 编辑器工具
+
+| 入口 | 用途 |
+|---|---|
+| `OutpostLoop > Foundation > Prepare Prototype Foundation` | 给 Boot 场景补齐统一生命周期与空 UI 层 |
+| `OutpostLoop > Foundation > Generate Config (Client + Server)` | 从权威配置源双端生成 |
+| `OutpostLoop > Foundation > Diagnostics` | 检查配置、源收集和基础状态 |
+| `OutpostLoop > Resources > Audit Source Collection` | 查询真实 YooAsset 源收集结果，不构建资源包 |
+| `Tools > 场景 > 场景切换` | 场景快速切换 |
+| Prefab 右键 `智能更新UI/BoxUI/Page` | 按引用收集生成视图/控制器并绑定组件 |
+
+UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/Game/Prefabs/UI/`。正式 UI 必须先经过视觉预览确认；工具测试使用独立测试夹具。
+
+限定验证共 39 项，分 10 个真实测试类执行，包含配置、资源源收集、UI、生成代码编译/引用绑定、存储、架构、原型规则和实际进入 Play 的帧推进/暂停/重开检查。每次只运行一个真实类，声明数量并保留全部通过项，禁止无效过滤回退完整套件。详情见 `Docs/基础迁入验收.md`。
+
+预览、验证与日志在 `Backup/Artifacts/Prototype-20261106/` 和 `Backup/Artifacts/Foundation-20261107/`（本地资料，Git 忽略）。用户已授权独立 GitHub 仓库 `godspacecc/OutpostLoop`，不会推入 FirepowerLoop。
