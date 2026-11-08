@@ -20,6 +20,11 @@ namespace OutpostLoop
         private readonly List<Transform> enemies = new List<Transform>();
         private readonly List<Material> materials = new List<Material>();
         private bool started, shop;
+        internal bool WantScrapPack { get; private set; }
+        internal bool WantEnergyPack { get; private set; }
+        internal string SupplyError { get; private set; }
+        internal int SupplyCoins => session.SupplyCoins;
+        internal bool VictoryRewardRecorded => session.VictoryRewardRecorded;
         // 炮位面板的选中状态与本局炮塔所有权分离。
         internal bool TurretPanelOpen { get; private set; }
         internal int SelectedTurretSlot { get; private set; } = -1;
@@ -83,6 +88,7 @@ namespace OutpostLoop
             if(worldRoot != null)return;
             var architecture=Game.Game.Interface;
             if(architecture.GetModel<PrototypeModel>()==null)architecture.RegisterModel(new PrototypeModel());
+            if(architecture.GetUtility<PrototypeWallet>()==null)architecture.RegisterUtility(new PrototypeWallet());
             if(architecture.GetSystem<PrototypeSystem>()==null)architecture.RegisterSystem(new PrototypeSystem());
             session=architecture.GetSystem<PrototypeSystem>();
             architecture.GetUtility<Game.HotKeyActionRegistry>().Register(new Game.HotKeyAction
@@ -145,6 +151,8 @@ namespace OutpostLoop
             turretModels.Clear();
             turretShots.Clear();
             ResetTurretPanel();
+            WantScrapPack = WantEnergyPack = false;
+            SupplyError = null;
             World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
             var ground=Mat(groundColor);var stone=Mat(new Color(0.37f,0.40f,0.40f));
@@ -272,8 +280,12 @@ namespace OutpostLoop
             switch (Overlay)
             {
                 case PrototypeOverlay.Start:
+                    if (!session.StartWithSupplies(WantScrapPack, WantEnergyPack))
+                    {
+                        SupplyError = "SupplyPaymentFailed";
+                        break;
+                    }
                     started = true;
-                    session.SetPaused(false);
                     break;
                 case PrototypeOverlay.Paused:
                 case PrototypeOverlay.Upgrade:
@@ -287,8 +299,27 @@ namespace OutpostLoop
                     session.SetPaused(false);
                     break;
                 case PrototypeOverlay.Result:
-                    Restart(true);
+                    if (World.Run.Outcome <= 0 || session.TryRecordVictory())
+                        Restart(false);
                     break;
+            }
+            RefreshOverlay();
+        }
+
+        /// <summary>只在开局准备页选择补给，选择时不扣币。</summary>
+        internal void ToggleSupply(bool energy)
+        {
+            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Start) return;
+            bool selected = energy ? WantEnergyPack : WantScrapPack;
+            int committed = (WantScrapPack ? PrototypeWallet.SupplyPrice : 0) +
+                            (WantEnergyPack ? PrototypeWallet.SupplyPrice : 0);
+            if (!selected && SupplyCoins < committed + PrototypeWallet.SupplyPrice)
+                SupplyError = "SupplyInsufficient";
+            else
+            {
+                if (energy) WantEnergyPack = !selected;
+                else WantScrapPack = !selected;
+                SupplyError = null;
             }
             RefreshOverlay();
         }

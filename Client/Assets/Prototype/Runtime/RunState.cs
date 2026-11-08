@@ -18,6 +18,15 @@ namespace OutpostLoop
         public int Health { get; private set; }
         public int Outcome { get; private set; }
         public int[] Levels { get; } = new int[3];
+        // 每次新局使用独立结算标识，地图种子重复时仍可正常获得奖励。
+        internal string RewardId { get; } = System.Guid.NewGuid().ToString("N");
+
+        /// <summary>开局补给直接入库，由会话在支付成功后发放一次。</summary>
+        internal void AddStarterSupplies(bool scrap, bool energy)
+        {
+            if (scrap) Scrap += PrototypeWallet.ScrapPack;
+            if (energy) Energy += PrototypeWallet.EnergyPack;
+        }
         /// <summary>尝试装入一单位资源；暂停、终局与满载时拒绝。</summary>
         public bool Gather(bool energy)
         {

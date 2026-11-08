@@ -94,6 +94,7 @@ namespace OutpostLoop
         private GameObject startScreen;
         private Button startUpdateEntry;
         private Text startUpdateVersion, startUpdateStatus;
+        private Text supplyBalance, supplyScrap, supplyEnergy;
 
         internal static PrototypeOverlayView Create(string name)
         {
@@ -181,6 +182,12 @@ namespace OutpostLoop
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
                 SetText(startUpdateStatus, PrototypeUpdateText.Status(snapshot));
                 if (startBriefing != null) startBriefing.text = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
+                int selected = (controller.WantScrapPack ? 1 : 0) + (controller.WantEnergyPack ? 1 : 0);
+                string wallet = Loc.T("SupplyBalance", controller.SupplyCoins, selected * PrototypeWallet.SupplyPrice);
+                if (controller.SupplyError != null) wallet += "\n" + Loc.T(controller.SupplyError);
+                SetText(supplyBalance, wallet);
+                SetText(supplyScrap, SupplyLabel("SupplyScrap", PrototypeWallet.ScrapPack, controller.WantScrapPack));
+                SetText(supplyEnergy, SupplyLabel("SupplyEnergy", PrototypeWallet.EnergyPack, controller.WantEnergyPack));
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;
                 var safe = Screen.safeArea.size;
@@ -223,10 +230,21 @@ namespace OutpostLoop
                     break;
                 case PrototypeOverlay.Result:
                     SetText(heading, run.Outcome > 0 ? Loc.T("PreviewText6") : Loc.T("PreviewText7"));
-                    SetText(details, Loc.T("PreviewResult", Mathf.FloorToInt(run.Elapsed), controller.World.Kills));
-                    SetText(actionLabel, Loc.T("PreviewText8"));
+                    string result = Loc.T("PreviewResult", Mathf.FloorToInt(run.Elapsed), controller.World.Kills);
+                    bool pendingReward = run.Outcome > 0 && !controller.VictoryRewardRecorded;
+                    if (run.Outcome > 0)
+                        result += "\n" + (pendingReward ? Loc.T("SupplyRewardPending")
+                            : Loc.T("SupplyReward", PrototypeWallet.VictoryCoins, controller.SupplyCoins));
+                    SetText(details, result);
+                    SetText(actionLabel, Loc.T(pendingReward ? "SupplyRetryReward" : "SupplyNextRun"));
                     break;
             }
+        }
+
+        private static string SupplyLabel(string key, int amount, bool selected)
+        {
+            string label = Loc.T(key, amount, PrototypeWallet.SupplyPrice);
+            return selected ? Loc.T("SupplySelected", label) : label;
         }
 
         /// <summary>按炮位占用和选择状态刷新建造或迁移文案。</summary>
@@ -305,6 +323,14 @@ namespace OutpostLoop
             action.color = new Color32(15, 32, 26, 255);
             action.fontStyle = FontStyle.Bold;
             action.transform.parent.GetComponent<Image>().color = mint;
+            supplyBalance = Label(StartRect("SupplyBalance", 96, 867, 650, 49), font, "Label",
+                new Vector2(650, 49), Vector2.zero, 21);
+            supplyBalance.alignment = TextAnchor.MiddleLeft;
+            supplyScrap = Button(startStage, font, "SupplyScrap", "", new Vector2(310, 52),
+                new Vector2(251, -950), new Vector2(0, 1), () => controller.ToggleSupply(false));
+            supplyEnergy = Button(startStage, font, "SupplyEnergy", "", new Vector2(310, 52),
+                new Vector2(576, -950), new Vector2(0, 1), () => controller.ToggleSupply(true));
+            supplyScrap.fontSize = supplyEnergy.fontSize = 20;
             Fill("FooterRule", 96, 992, 1728, 2, line);
             StartText(font, "Controls", Loc.T("PreviewText13"), 96, 1003, 800, 50, 20, muted);
         }

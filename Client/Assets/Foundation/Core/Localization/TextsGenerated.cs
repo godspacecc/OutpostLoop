@@ -255,6 +255,46 @@ namespace Game
         /// </summary>
         public static string Settingsupdateavailable => Loc.T("SettingsUpdateAvailable");
         /// <summary>
+        /// 开局补给 · 余额 {0} 币 · 已选 {1} 币
+        /// </summary>
+        public static string Supplybalance(object arg0, object arg1) => Loc.T("SupplyBalance", arg0, arg1);
+        /// <summary>
+        /// {0} 能源 / {1} 币
+        /// </summary>
+        public static string Supplyenergy(object arg0, object arg1) => Loc.T("SupplyEnergy", arg0, arg1);
+        /// <summary>
+        /// 补给币不足
+        /// </summary>
+        public static string Supplyinsufficient => Loc.T("SupplyInsufficient");
+        /// <summary>
+        /// 准备下一局
+        /// </summary>
+        public static string Supplynextrun => Loc.T("SupplyNextRun");
+        /// <summary>
+        /// 购买未完成，可重试或取消所选补给
+        /// </summary>
+        public static string Supplypaymentfailed => Loc.T("SupplyPaymentFailed");
+        /// <summary>
+        /// 重试领取奖励
+        /// </summary>
+        public static string Supplyretryreward => Loc.T("SupplyRetryReward");
+        /// <summary>
+        /// 胜利奖励 +{0} 补给币 · 余额 {1}
+        /// </summary>
+        public static string Supplyreward(object arg0, object arg1) => Loc.T("SupplyReward", arg0, arg1);
+        /// <summary>
+        /// 补给币未能保存，请重试领取。
+        /// </summary>
+        public static string Supplyrewardpending => Loc.T("SupplyRewardPending");
+        /// <summary>
+        /// {0} 废料 / {1} 币
+        /// </summary>
+        public static string Supplyscrap(object arg0, object arg1) => Loc.T("SupplyScrap", arg0, arg1);
+        /// <summary>
+        /// ✓ {0}
+        /// </summary>
+        public static string Supplyselected(object arg0) => Loc.T("SupplySelected", arg0);
+        /// <summary>
         /// 返回基地升级
         /// </summary>
         public static string Turretback => Loc.T("TurretBack");

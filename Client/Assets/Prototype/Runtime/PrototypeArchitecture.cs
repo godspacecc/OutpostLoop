@@ -27,17 +27,52 @@ namespace OutpostLoop
         private Vector2 movement;
         private bool gathering;
         private PrototypeModel model;
+        private bool awaitingStart;
+        private bool rewardAttempted;
+        public bool VictoryRewardRecorded { get; private set; }
+        public int SupplyCoins => this.GetUtility<PrototypeWallet>()?.Coins ?? 0;
         protected override void OnInit(){model=this.GetModel<PrototypeModel>();Game.LifeCycle.RegisterUpdate(OnTick);}
         protected override void OnDeinit(){Game.LifeCycle.UnregisterUpdate(OnTick);}
         public WorldState Begin(int seed,bool running)
         {
             var next=new WorldState(seed);next.Run.Paused=!running;
             model.World=next;movement=Vector2.zero;gathering=false;
+            awaitingStart = !running;
+            rewardAttempted = false;
+            VictoryRewardRecorded = false;
             this.GetSystem<Game.AudioSystem>()?.SetPaused(!running);
             this.SendEvent(new PrototypeRunStarted{Seed=seed});return next;
         }
         public void SubmitInput(Vector2 direction,bool collect){movement=direction;gathering=collect;}
-        private void OnTick(){model.World?.Step(Time.deltaTime,movement,gathering);}
+        private void OnTick()
+        {
+            model.World?.Step(Time.deltaTime,movement,gathering);
+            if (model.World?.Run.Outcome > 0 && !rewardAttempted) TryRecordVictory();
+        }
+
+        /// <summary>只接受开局准备阶段的付款，成功后将物资加入库存并开始计时。</summary>
+        internal bool StartWithSupplies(bool scrap, bool energy)
+        {
+            var run = model.World?.Run;
+            if (!awaitingStart || run == null || run.Outcome != 0) return false;
+            int price = (scrap ? PrototypeWallet.SupplyPrice : 0) + (energy ? PrototypeWallet.SupplyPrice : 0);
+            if (price > 0 && this.GetUtility<PrototypeWallet>()?.Pay(price) != true) return false;
+            awaitingStart = false;
+            run.AddStarterSupplies(scrap, energy);
+            SetPaused(false);
+            return true;
+        }
+
+        /// <summary>胜利只结算一次；写盘失败可以从结算界面重试。</summary>
+        internal bool TryRecordVictory()
+        {
+            var run = model.World?.Run;
+            if (run == null || run.Outcome <= 0) return false;
+            rewardAttempted = true;
+            if (!VictoryRewardRecorded)
+                VictoryRewardRecorded = this.GetUtility<PrototypeWallet>()?.RewardVictory(run.RewardId) == true;
+            return VictoryRewardRecorded;
+        }
         /// <summary>同步本局暂停与基础音频状态；UI声音不受会话暂停影响。</summary>
         public void SetPaused(bool value)
         {

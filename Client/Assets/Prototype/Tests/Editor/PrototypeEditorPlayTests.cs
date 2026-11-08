@@ -72,6 +72,10 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
+            var walletDirectory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/VictorySupplies-20261108/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
+            var wallet = new PrototypeWallet(walletDirectory);
+            Game.Game.Interface.RegisterUtility(wallet);
             var run = controller.World.Run;
             Assert.IsTrue(run.Paused);
             Assert.IsTrue(Game.UIHelper.HasUIOpen);
@@ -134,11 +138,31 @@ namespace OutpostLoop.Tests
             run.Damage(run.Health);
             yield return null;
             Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            Assert.AreEqual(0, wallet.Coins, "失败不给补给币");
             var oldWorld = controller.World;
             Click("PrimaryAction");
             Assert.AreNotSame(oldWorld, controller.World);
             Assert.AreEqual(0, controller.World.Run.Levels[1]);
+            Assert.IsTrue(controller.World.Run.Paused, "结算后的下一局应先停在开局补给页");
+            Assert.IsNotNull(GameObject.Find("SupplyScrap"), "开局前应能选择废料补给");
+            Click("PrimaryAction");
             Assert.IsFalse(controller.World.Run.Paused);
+
+            // 直接推进结算条件，整局实战由原有流程测试覆盖。
+            var victory = controller.World.Run;
+            victory.Tick(victory.Config.Duration, 0);
+            for (int frame = 0; frame < 5; frame++) yield return null;
+            Assert.AreEqual(PrototypeWallet.VictoryCoins, wallet.Coins, "胜利发币一次");
+            Assert.AreEqual(wallet.Coins, new PrototypeWallet(walletDirectory).Coins, "退出后可读回胜利余额");
+            Click("PrimaryAction");
+            Click("SupplyScrap");
+            Click("SupplyEnergy");
+            Assert.AreEqual(PrototypeWallet.VictoryCoins, wallet.Coins, "只选择补给不扣币");
+            Click("PrimaryAction");
+            Assert.AreEqual(0, wallet.Coins);
+            Assert.AreEqual(0, new PrototypeWallet(walletDirectory).Coins, "购买后保存剩余余额");
+            Assert.AreEqual(PrototypeWallet.ScrapPack, controller.World.Run.Scrap);
+            Assert.AreEqual(PrototypeWallet.EnergyPack, controller.World.Run.Energy);
             yield return new ExitPlayMode();
         }
 
