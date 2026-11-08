@@ -255,6 +255,67 @@ namespace Game
         /// </summary>
         public static string Settingsupdateavailable => Loc.T("SettingsUpdateAvailable");
         /// <summary>
+        /// 返回基地升级
+        /// </summary>
+        public static string Turretback => Loc.T("TurretBack");
+        /// <summary>
+        /// {0} · 建造
+        /// 废料 {1} / 能源 {2}
+        /// </summary>
+        public static string Turretbuildhere(object arg0, object arg1, object arg2) => Loc.T("TurretBuildHere", arg0, arg1, arg2);
+        /// <summary>
+        /// 炮塔已建成
+        /// </summary>
+        public static string Turretbuilt => Loc.T("TurretBuilt");
+        /// <summary>
+        /// 选择空炮位免费迁移，再点原炮塔可取消
+        /// </summary>
+        public static string Turretchooseempty => Loc.T("TurretChooseEmpty");
+        /// <summary>
+        /// 东
+        /// </summary>
+        public static string Turreteast => Loc.T("TurretEast");
+        /// <summary>
+        /// 点空位建造，或选择已有炮塔开始迁移
+        /// </summary>
+        public static string Turretinstructions => Loc.T("TurretInstructions");
+        /// <summary>
+        /// 炮位管理
+        /// </summary>
+        public static string Turretmanage => Loc.T("TurretManage");
+        /// <summary>
+        /// {0} · 迁到这里
+        /// </summary>
+        public static string Turretmovehere(object arg0) => Loc.T("TurretMoveHere", arg0);
+        /// <summary>
+        /// 炮塔已迁移
+        /// </summary>
+        public static string Turretmoved => Loc.T("TurretMoved");
+        /// <summary>
+        /// 北
+        /// </summary>
+        public static string Turretnorth => Loc.T("TurretNorth");
+        /// <summary>
+        /// {0} · 已有炮塔
+        /// </summary>
+        public static string Turretoccupied(object arg0) => Loc.T("TurretOccupied", arg0);
+        /// <summary>
+        /// {0} · 已选中
+        /// </summary>
+        public static string Turretselected(object arg0) => Loc.T("TurretSelected", arg0);
+        /// <summary>
+        /// 南
+        /// </summary>
+        public static string Turretsouth => Loc.T("TurretSouth");
+        /// <summary>
+        /// 库存不足或炮位不可用
+        /// </summary>
+        public static string Turretunavailable => Loc.T("TurretUnavailable");
+        /// <summary>
+        /// 西
+        /// </summary>
+        public static string Turretwest => Loc.T("TurretWest");
+        /// <summary>
         /// Android 安装包：{0} → {1}，{2:F1} MiB
         /// </summary>
         public static string Updateapplication(object arg0, object arg1, object arg2) => Loc.T("UpdateApplication", arg0, arg1, arg2);

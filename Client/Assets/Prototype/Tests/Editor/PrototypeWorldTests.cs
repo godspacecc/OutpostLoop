@@ -53,6 +53,29 @@ namespace OutpostLoop.Tests
             for(int i=0;i<7200;i++) { w.Step(0.1f,Vector2.zero,false); Assert.LessOrEqual(w.Enemies.Count,48); }
             Assert.Greater(w.Wave,0); Assert.AreNotEqual(0,w.Run.Outcome);
         }
+        [Test] public void MovingTurretChangesWhichApproachItCanCover()
+        {
+            var west = new WorldState(1);
+            var north = new WorldState(1);
+            Assert.IsFalse(north.MoveTurret(0, 2), "远离基地时不能调整炮位");
+            north.Step(.1f, Vector2.up, false);
+            Assert.IsFalse(north.MoveTurret(0, 1), "不能覆盖已占用炮位");
+            Assert.IsTrue(north.MoveTurret(0, 2));
+            Assert.AreEqual(0, north.Run.Scrap, "迁移不扣费");
+            float distance = west.Run.Config.ShotRange + 2;
+            var westEnemy = new EnemyState { Position = Vector2.left * distance, Health = 100 };
+            var northEnemy = new EnemyState { Position = Vector2.left * distance, Health = 100 };
+            west.Enemies.Add(westEnemy);
+            north.Enemies.Add(northEnemy);
+            for (int i = 0; i < 5; i++)
+            {
+                west.Step(.1f, Vector2.zero, false);
+                north.Step(.1f, Vector2.zero, false);
+            }
+            Assert.Less(westEnemy.Health, 100, "西炮位可先打到西侧接近的敌人");
+            Assert.AreEqual(100, northEnemy.Health, "迁往北侧后不能再覆盖原来的距离");
+        }
+
         [Test] public void FullyPreparedBaseWinsCompleteRun()
         {
             foreach(int seed in new[]{11,22})

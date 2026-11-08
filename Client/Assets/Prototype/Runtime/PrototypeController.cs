@@ -14,11 +14,15 @@ namespace OutpostLoop
         public WorldState World { get; private set; }
         private Transform worldRoot, player, baseRoof;
         private Camera gameCamera;
-        private LineRenderer shotLine;
+        private readonly List<LineRenderer> turretShots = new List<LineRenderer>();
+        private readonly List<Transform> turretModels = new List<Transform>();
         private readonly List<Transform> resources = new List<Transform>();
         private readonly List<Transform> enemies = new List<Transform>();
         private readonly List<Material> materials = new List<Material>();
         private bool started, shop;
+        // 炮位面板的选中状态与本局炮塔所有权分离。
+        internal bool TurretPanelOpen { get; private set; }
+        internal int SelectedTurretSlot { get; private set; } = -1;
         private int seed = 731;
         private Font font;
         private string feedback = "";
@@ -138,24 +142,37 @@ namespace OutpostLoop
             if(worldRoot!=null){worldRoot.gameObject.SetActive(false);Release(worldRoot.gameObject);}
             foreach(var material in materials)Release(material);
             materials.Clear();resources.Clear();enemies.Clear();
+            turretModels.Clear();
+            turretShots.Clear();
+            ResetTurretPanel();
             World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
             var ground=Mat(groundColor);var stone=Mat(new Color(0.37f,0.40f,0.40f));
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
             var cyan=Mat(new Color(0.15f,0.88f,0.84f));var rust=Mat(new Color(0.52f,0.24f,0.17f));
-            var lineObject=new GameObject("TemporaryShotPreview");lineObject.transform.SetParent(worldRoot);
-            shotLine=lineObject.AddComponent<LineRenderer>();shotLine.sharedMaterial=amber;shotLine.positionCount=2;
-            shotLine.startWidth=0.1f;shotLine.endWidth=0.04f;shotLine.enabled=false;
             Shape("Ground",worldRoot,PrimitiveType.Cube,new Vector3(0,-0.3f,0),new Vector3(96,0.5f,96),ground);
             Shape("HomePad",worldRoot,PrimitiveType.Cylinder,new Vector3(0,0,0),new Vector3(9,0.1f,9),dark);
             Shape("Shelter",worldRoot,PrimitiveType.Cube,new Vector3(0,1.15f,0),new Vector3(3.6f,2.3f,3),stone);
             baseRoof=Shape("Roof",worldRoot,PrimitiveType.Cube,new Vector3(0,2.5f,0),new Vector3(4,0.5f,3.5f),dark);
             Shape("Door",worldRoot,PrimitiveType.Cube,new Vector3(0,0.8f,-1.55f),new Vector3(0.9f,1.6f,0.1f),amber);
-            for(int i=-1;i<=1;i+=2)
+            for (int i = 0; i < World.Turrets.Count; i++)
             {
-                var turret=Shape("Turret",worldRoot,PrimitiveType.Cylinder,new Vector3(i*4,0.5f,-1),new Vector3(1.5f,0.5f,1.5f),stone);
-                Shape("Head",turret,PrimitiveType.Cube,new Vector3(0,1.3f,0),new Vector3(0.8f,0.7f,0.8f),dark);
-                Shape("Barrel",turret,PrimitiveType.Cube,new Vector3(0,1.3f,-0.7f),new Vector3(0.2f,0.2f,1),amber);
+                var position = World.Turrets[i].Position;
+                var turret = new GameObject("Turret" + i).transform;
+                turret.SetParent(worldRoot, false);
+                turret.localPosition = new Vector3(position.x, 0, position.y);
+                turret.localRotation = Quaternion.LookRotation(new Vector3(position.x, 0, position.y));
+                Shape("Mount", turret, PrimitiveType.Cylinder, new Vector3(0,.5f,0), new Vector3(1.5f,.5f,1.5f), stone);
+                Shape("Head", turret, PrimitiveType.Cube, new Vector3(0,1.3f,0), new Vector3(.8f,.7f,.8f), dark);
+                Shape("Barrel", turret, PrimitiveType.Cube, new Vector3(0,1.3f,.7f), new Vector3(.2f,.2f,1), amber);
+                var shot = turret.gameObject.AddComponent<LineRenderer>();
+                shot.sharedMaterial = amber;
+                shot.positionCount = 2;
+                shot.startWidth = .1f;
+                shot.endWidth = .04f;
+                shot.enabled = false;
+                turretModels.Add(turret);
+                turretShots.Add(shot);
             }
             player=new GameObject("Collector").transform; player.SetParent(worldRoot);
             Shape("Coat",player,PrimitiveType.Capsule,new Vector3(0,0.8f,0),new Vector3(0.65f,0.7f,0.65f),amber);
@@ -239,8 +256,9 @@ namespace OutpostLoop
         internal void ToggleUpgrade()
         {
             if (UtilityWindowOpen) return;
-            if (!initialized || !started || World.Run.Outcome != 0 || World.Player.magnitude >= 5) return;
+            if (!initialized || !started || World.Run.Outcome != 0 || !World.IsAtBase) return;
             shop = !shop;
+            ResetTurretPanel();
             feedback = "";
             session.SetPaused(shop);
             RefreshOverlay();
@@ -259,6 +277,12 @@ namespace OutpostLoop
                     break;
                 case PrototypeOverlay.Paused:
                 case PrototypeOverlay.Upgrade:
+                    if (TurretPanelOpen)
+                    {
+                        ResetTurretPanel();
+                        feedback = "";
+                        break;
+                    }
                     shop = false;
                     session.SetPaused(false);
                     break;
@@ -272,10 +296,50 @@ namespace OutpostLoop
         internal void PurchaseUpgrade(int route)
         {
             if (UtilityWindowOpen) return;
-            if (!initialized || Overlay != PrototypeOverlay.Upgrade) return;
+            if (!initialized || TurretPanelOpen || Overlay != PrototypeOverlay.Upgrade) return;
             feedback = session.Purchase(route) ? Game.Loc.T("PreviewText18") : Game.Loc.T("PreviewText19");
             feedbackUntil = Time.realtimeSinceStartup + 2;
             RefreshOverlay();
+        }
+
+        /// <summary>打开炮位管理，保持基地面板的暂停状态。</summary>
+        internal void OpenTurretPanel()
+        {
+            if (UtilityWindowOpen || !initialized || Overlay != PrototypeOverlay.Upgrade) return;
+            TurretPanelOpen = true;
+            feedback = "";
+            RefreshOverlay();
+        }
+
+        /// <summary>点已有炮塔选作迁移来源，点空位时迁移或建造。</summary>
+        internal void ActOnTurretSlot(int index)
+        {
+            if (UtilityWindowOpen || !TurretPanelOpen || Overlay != PrototypeOverlay.Upgrade) return;
+            if (index < 0 || index >= World.Turrets.Count) return;
+            if (World.Turrets[index].Occupied)
+            {
+                SelectedTurretSlot = SelectedTurretSlot == index ? -1 : index;
+                feedback = "";
+            }
+            else
+            {
+                bool moving = SelectedTurretSlot >= 0;
+                bool success = moving ? session.MoveTurret(SelectedTurretSlot, index) : session.BuildTurret(index);
+                feedback = Game.Loc.T(success ? (moving ? "TurretMoved" : "TurretBuilt") : "TurretUnavailable");
+                feedbackUntil = Time.realtimeSinceStartup + 2;
+                if (success)
+                {
+                    SelectedTurretSlot = -1;
+                    SyncView();
+                }
+            }
+            RefreshOverlay();
+        }
+
+        private void ResetTurretPanel()
+        {
+            TurretPanelOpen = false;
+            SelectedTurretSlot = -1;
         }
 
         /// <summary>仅在基础会话就绪时显示窗口，退出后不重新生成 UI。</summary>
@@ -291,7 +355,7 @@ namespace OutpostLoop
             }
             else modal?.Hide();
 
-            if (mode == PrototypeOverlay.None && World.Player.magnitude < 5)
+            if (mode == PrototypeOverlay.None && World.IsAtBase)
             {
                 if (upgradeEntry?.IsShow() != true) upgradeEntry = Game.UIHelper.ShowUI<PrototypeUpgradeButtonCtrl>();
                 upgradeEntry.Bind(this, font);
@@ -311,12 +375,20 @@ namespace OutpostLoop
             }
             gameCamera.transform.position=player.position+new Vector3(0,32,-14.92f);
             gameCamera.transform.rotation=Quaternion.Euler(65,0,0);
-            shotLine.enabled=World.Run.Elapsed-World.LastShotTime<0.12f;
-            if(shotLine.enabled)
+            for (int i = 0; i < turretModels.Count; i++)
             {
-                var target=World.LastShotTarget;
-                shotLine.SetPosition(0,new Vector3(target.x<0?-4:4,1.4f,-1));
-                shotLine.SetPosition(1,new Vector3(target.x,0.8f,target.y));
+                var state = World.Turrets[i];
+                var model = turretModels[i];
+                var shot = turretShots[i];
+                model.gameObject.SetActive(state.Occupied);
+                shot.enabled = state.Occupied && World.Run.Elapsed - state.LastShotTime < .12f;
+                if (!shot.enabled) continue;
+                var target = state.LastShotTarget;
+                var direction = target - state.Position;
+                if (direction.sqrMagnitude > 0)
+                    model.localRotation = Quaternion.LookRotation(new Vector3(direction.x, 0, direction.y));
+                shot.SetPosition(0, model.position + Vector3.up * 1.3f + model.forward);
+                shot.SetPosition(1, new Vector3(target.x, .8f, target.y));
             }
         }
 

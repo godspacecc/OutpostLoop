@@ -96,8 +96,35 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(0, run.Scrap);
             Click("Purchase1");
             Assert.AreEqual(1, run.Levels[1], "资源不足时按钮不能改变升级等级");
+            Click("OpenTurrets");
+            Click("TurretSlot0");
+            Click("TurretSlot2");
+            Assert.IsNull(GameObject.Find("Turret0"), "迁出后原炮位应为空");
+            Assert.IsNotNull(GameObject.Find("Turret2"), "迁入后目标炮位应出现炮塔");
+            Click("TurretSlot3");
+            Assert.IsNull(GameObject.Find("Turret3"), "库存不足时不能建造");
+            Assert.AreEqual(0, run.Scrap);
+            Click("PrimaryAction");
             Click("PrimaryAction");
             Assert.IsFalse(run.Paused);
+
+            int scrap = run.Config.ScrapCostBase * 2;
+            int energy = run.Config.EnergyCostPerLevel;
+            for (int i = 0; i < scrap + energy; i++)
+            {
+                if (run.CargoScrap + run.CargoEnergy == run.Capacity) run.Deposit();
+                Assert.IsTrue(run.Gather(i >= scrap));
+            }
+            run.Deposit();
+            yield return null;
+            Click("OpenUpgrade");
+            Click("OpenTurrets");
+            Click("TurretSlot3");
+            Assert.IsNotNull(GameObject.Find("Turret3"), "有足够库存时应在空炮位建造");
+            Assert.AreEqual(0, run.Scrap);
+            Assert.AreEqual(0, run.Energy);
+            Click("PrimaryAction");
+            Click("PrimaryAction");
 
             Game.Game.Interface.GetSystem<PrototypeSystem>().SetPaused(true);
             yield return null;

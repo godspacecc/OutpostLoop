@@ -85,8 +85,10 @@ namespace OutpostLoop
     {
         private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
-        private Text heading, details, actionLabel, feedback, startBriefing;
-        private GameObject purchaseRows;
+        private Text heading, details, actionLabel, feedback, startBriefing, turretEntry, turretHint, turretStock;
+        private GameObject purchaseRows, turretRows;
+        private readonly Text[] turretLabels = new Text[4];
+        private static readonly string[] TurretDirections = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
         private GameObject startScreen;
@@ -140,7 +142,21 @@ namespace OutpostLoop
                 routeLabels[index] = Button(purchaseRows.transform, font, "Purchase" + index, "", new Vector2(620,60),
                     new Vector2(0,102 - index * 70), new Vector2(.5f,.5f), () => controller.PurchaseUpgrade(route));
             }
-            feedback = Label(purchaseRows.transform, font, "Feedback", new Vector2(640,48), new Vector2(0,-108), 28);
+            turretEntry = Button(purchaseRows.transform, font, "OpenTurrets", "", new Vector2(620,54),
+                new Vector2(0,-104), new Vector2(.5f,.5f), controller.OpenTurretPanel);
+            turretRows = Rect("TurretRows", panel, new Vector2(.5f,.5f), new Vector2(700,280), Vector2.zero).gameObject;
+            turretHint = Label(turretRows.transform, font, "TurretHint", new Vector2(700,52), new Vector2(0,115), 21);
+            turretStock = Label(turretRows.transform, font, "TurretStock", new Vector2(700,34), new Vector2(0,77), 22);
+            // 炮位按方位摆放，和场景中的四个位置对应。
+            var positions = new[] { new Vector2(-180,-26), new Vector2(180,-26), new Vector2(0,25), new Vector2(0,-77) };
+            for (int i = 0; i < turretLabels.Length; i++)
+            {
+                int slot = i;
+                turretLabels[i] = Button(turretRows.transform, font, "TurretSlot" + i, "", new Vector2(310,48),
+                    positions[i], new Vector2(.5f,.5f), () => controller.ActOnTurretSlot(slot));
+                turretLabels[i].fontSize = 18;
+            }
+            feedback = Label(panel, font, "Feedback", new Vector2(660,36), new Vector2(0,-145), 24);
             actionLabel = Button(panel, font, "PrimaryAction", "", new Vector2(450,68), new Vector2(0,-200),
                 new Vector2(.5f,.5f), controller.ActOnModal);
         }
@@ -177,7 +193,10 @@ namespace OutpostLoop
 
             var run = controller.World.Run;
             bool upgrading = mode == PrototypeOverlay.Upgrade;
-            purchaseRows.SetActive(upgrading);
+            bool managingTurrets = upgrading && controller.TurretPanelOpen;
+            purchaseRows.SetActive(upgrading && !managingTurrets);
+            turretRows.SetActive(managingTurrets);
+            feedback.gameObject.SetActive(upgrading);
             details.gameObject.SetActive(!upgrading);
             switch (mode)
             {
@@ -187,20 +206,45 @@ namespace OutpostLoop
                     SetText(actionLabel, Loc.T("PreviewText2"));
                     break;
                 case PrototypeOverlay.Upgrade:
+                    SetText(feedback, controller.UpgradeFeedback);
+                    if (managingTurrets)
+                    {
+                        PresentTurrets(controller);
+                        break;
+                    }
                     SetText(heading, Loc.T("PreviewText3"));
                     SetText(actionLabel, Loc.T("PreviewText4"));
+                    SetText(turretEntry, Loc.T("TurretManage"));
                     for (int i = 0; i < Routes.Length; i++)
                     {
                         var cost = run.Levels[i] >= run.Config.MaxLevel ? Loc.T("PreviewText5") : Loc.T("PreviewCost", run.ScrapCost(i), run.EnergyCost(i));
                         SetText(routeLabels[i], $"{Routes[i]}   {run.Levels[i]} / {run.Config.MaxLevel}   {cost}");
                     }
-                    SetText(feedback, controller.UpgradeFeedback);
                     break;
                 case PrototypeOverlay.Result:
                     SetText(heading, run.Outcome > 0 ? Loc.T("PreviewText6") : Loc.T("PreviewText7"));
                     SetText(details, Loc.T("PreviewResult", Mathf.FloorToInt(run.Elapsed), controller.World.Kills));
                     SetText(actionLabel, Loc.T("PreviewText8"));
                     break;
+            }
+        }
+
+        /// <summary>按炮位占用和选择状态刷新建造或迁移文案。</summary>
+        private void PresentTurrets(PrototypeController controller)
+        {
+            var world = controller.World;
+            var run = world.Run;
+            bool moving = controller.SelectedTurretSlot >= 0;
+            SetText(heading, Loc.T("TurretManage"));
+            SetText(actionLabel, Loc.T("TurretBack"));
+            SetText(turretHint, Loc.T(moving ? "TurretChooseEmpty" : "TurretInstructions"));
+            SetText(turretStock, Loc.T("HudStock", run.Scrap, run.Energy));
+            for (int i = 0; i < turretLabels.Length; i++)
+            {
+                var key = world.Turrets[i].Occupied
+                    ? (controller.SelectedTurretSlot == i ? "TurretSelected" : "TurretOccupied")
+                    : (moving ? "TurretMoveHere" : "TurretBuildHere");
+                SetText(turretLabels[i], Loc.T(key, Loc.T(TurretDirections[i]), world.TurretScrapCost, world.TurretEnergyCost));
             }
         }
 

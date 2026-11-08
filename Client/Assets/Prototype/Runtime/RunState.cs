@@ -40,9 +40,17 @@ namespace OutpostLoop
         {
             if (route < 0 || route >= 3 || Paused || Outcome != 0 || Levels[route] >= Config.MaxLevel) return false;
             int scrap = ScrapCost(route), energy = EnergyCost(route);
-            if (Scrap < scrap || Energy < energy) return false;
-            Scrap -= scrap; Energy -= energy; Levels[route]++;
+            if (!TrySpend(scrap, energy)) return false;
+            Levels[route]++;
             if (route == 2) Health = System.Math.Min(Config.InitialHealth + Levels[2] * Config.HealthPerLevel, Health + Config.UpgradeRepair);
+            return true;
+        }
+        /// <summary>原子扣除基地库存，供基地面板在暂停期间建造。</summary>
+        internal bool TrySpend(int scrap, int energy)
+        {
+            if (Outcome != 0 || scrap < 0 || energy < 0 || Scrap < scrap || Energy < energy) return false;
+            Scrap -= scrap;
+            Energy -= energy;
             return true;
         }
         /// <summary>推进有界局时；到期不无限拖延，仍有敌人时判防守失败。</summary>

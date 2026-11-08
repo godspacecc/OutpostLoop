@@ -47,9 +47,13 @@ namespace OutpostLoop
         }
         public bool Purchase(int route)
         {
-            if(model.World==null||model.World.Player.magnitude>=5)return false;
+            if(model.World==null||!model.World.IsAtBase)return false;
             var run=model.World.Run;bool paused=run.Paused;
             try{run.Paused=false;return run.Upgrade(route);}finally{run.Paused=paused;}
         }
+
+        /// <summary>将基地炮位操作转发给本局规则。</summary>
+        public bool BuildTurret(int slot) => model.World?.BuildTurret(slot) == true;
+        public bool MoveTurret(int source, int destination) => model.World?.MoveTurret(source, destination) == true;
     }
 }
