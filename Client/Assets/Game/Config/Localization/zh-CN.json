@@ -68,5 +68,10 @@
   "HudStock": "库存：废料 {0}  能源 {1}",
   "HudCargo": "背包 {0} / {1}",
   "HudControls": "WASD 移动 · 靠近资源按住 E 采集 · 回基地自动卸货\n基地附近 B 升级 · ESC 暂停 · 守住最终进攻即获胜",
-  "HudMap": "区域地图"
+  "HudMap": "区域地图",
+  "ResourceMarkerScrap": "废料",
+  "ResourceMarkerEnergy": "能源",
+  "ResourceMarkerRemaining": "{0} · 剩余 {1}",
+  "ResourceMarkerGather": "按住 E 采集",
+  "ResourceMarkerFull": "背包已满 · 返回基地卸货"
 }

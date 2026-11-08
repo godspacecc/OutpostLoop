@@ -68,5 +68,10 @@
   "HudStock": "Stock: Scrap {0}  Energy {1}",
   "HudCargo": "Cargo {0} / {1}",
   "HudControls": "WASD Move · Hold E near resources · Return to unload\nB Upgrade near base · ESC Pause · Survive the final wave",
-  "HudMap": "Area map"
+  "HudMap": "Area map",
+  "ResourceMarkerScrap": "Scrap",
+  "ResourceMarkerEnergy": "Energy",
+  "ResourceMarkerRemaining": "{0} · {1} remaining",
+  "ResourceMarkerGather": "Hold E to gather",
+  "ResourceMarkerFull": "Pack full · Return to base"
 }

@@ -147,6 +147,26 @@ namespace Game
         /// </summary>
         public static string Previewtext9 => Loc.T("PreviewText9");
         /// <summary>
+        /// 能源
+        /// </summary>
+        public static string Resourcemarkerenergy => Loc.T("ResourceMarkerEnergy");
+        /// <summary>
+        /// 背包已满 · 返回基地卸货
+        /// </summary>
+        public static string Resourcemarkerfull => Loc.T("ResourceMarkerFull");
+        /// <summary>
+        /// 按住 E 采集
+        /// </summary>
+        public static string Resourcemarkergather => Loc.T("ResourceMarkerGather");
+        /// <summary>
+        /// {0} · 剩余 {1}
+        /// </summary>
+        public static string Resourcemarkerremaining(object arg0, object arg1) => Loc.T("ResourceMarkerRemaining", arg0, arg1);
+        /// <summary>
+        /// 废料
+        /// </summary>
+        public static string Resourcemarkerscrap => Loc.T("ResourceMarkerScrap");
+        /// <summary>
         /// 请按新按键，ESC 取消；冲突时可确认替换
         /// </summary>
         public static string Settingscapture => Loc.T("SettingsCapture");

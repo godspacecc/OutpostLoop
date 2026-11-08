@@ -36,6 +36,16 @@ namespace OutpostLoop
                 Nodes.Add(new ResourceNode { Position=new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*radius, Energy=i%Rules.EnergyEvery==0, Remaining=i%Rules.EnergyEvery==0?Rules.EnergyAmount:Rules.ScrapAmount });
             }
         }
+        /// <summary>按实际采集顺序选出范围内首个未耗尽资源点，供交互和提示共用。</summary>
+        public ResourceNode FindGatherTarget()
+        {
+            float radiusSquared = Rules.GatherRadius * Rules.GatherRadius;
+            foreach (var node in Nodes)
+                if (node.Remaining > 0 && (Player - node.Position).sqrMagnitude < radiusSquared)
+                    return node;
+            return null;
+        }
+
         /// <summary>单步最多推进 0.1 秒，卡帧不瞬间跳过整段准备时间。</summary>
         public void Step(float seconds, Vector2 movement, bool gathering)
         {
@@ -47,9 +57,12 @@ namespace OutpostLoop
             gatherClock+=dt;
             if(gathering && gatherClock>=Rules.GatherInterval/(1+Run.Levels[0]*Rules.GatherLevelFactor))
             {
-                foreach(var node in Nodes)
-                    if(node.Remaining>0 && Vector2.Distance(Player,node.Position)<Rules.GatherRadius && Run.Gather(node.Energy))
-                    { node.Remaining--; gatherClock=0; break; }
+                var node = FindGatherTarget();
+                if (node != null && Run.Gather(node.Energy))
+                {
+                    node.Remaining--;
+                    gatherClock = 0;
+                }
             }
             if(Wave<WaveTimes.Count && Run.Elapsed+dt>=WaveTimes[Wave])
             {

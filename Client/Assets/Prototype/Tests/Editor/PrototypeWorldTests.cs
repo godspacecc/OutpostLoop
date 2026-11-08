@@ -39,11 +39,13 @@ namespace OutpostLoop.Tests
         {
             var w = new WorldState(1); var node = w.Nodes[0];
             for(int i=0;i<500 && Vector2.Distance(w.Player,node.Position)>0.2f;i++) w.Step(0.02f,node.Position-w.Player,false);
+            Assert.AreSame(node, w.FindGatherTarget(), "提示应定位按 E 实际采集的资源点");
             int before = node.Remaining;
             for(int i=0;i<50;i++) w.Step(0.02f,Vector2.zero,true);
             Assert.Less(node.Remaining,before); Assert.Greater(w.Run.CargoScrap+w.Run.CargoEnergy,0);
             for(int i=0;i<500 && w.Player.magnitude>0.2f;i++) w.Step(0.02f,-w.Player,false);
             Assert.AreEqual(0,w.Run.CargoScrap+w.Run.CargoEnergy); Assert.Greater(w.Run.Scrap+w.Run.Energy,0);
+            Assert.IsNull(w.FindGatherTarget(), "返回基地离开采集范围后不应继续提示");
         }
         [Test] public void WaveAndEnemyCountsStayBounded()
         {
