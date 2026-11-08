@@ -1,5 +1,8 @@
 using System.Linq;
+using Boot;
+using Cysharp.Threading.Tasks;
 using Game;
+using QFramework;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,13 +13,14 @@ namespace OutpostLoop
     {
         private PrototypeController owner;
         private PrototypeOverlayView view;
+        private bool wasShowingStart;
 
         protected override string Path() => null;
         public override UILayer Layer() => UILayer.Dialog;
         protected override BaseUI CreateView() => PrototypeOverlayView.Create("PrototypeModal");
         protected override void OnInit() => view = (PrototypeOverlayView)BaseUI;
         protected override void OnShow() { }
-        protected override void OnHide() { }
+        protected override void OnHide() => wasShowingStart = false;
         protected override void OnUnload() { owner = null; view = null; }
 
         /// <summary>同一个会话窗口在开局、暂停、升级与结算之间复用。</summary>
@@ -30,7 +34,17 @@ namespace OutpostLoop
 
         internal void Refresh(PrototypeController controller)
         {
-            if (owner == controller && IsShow()) view.Present(controller);
+            if (owner != controller || !IsShow()) return;
+            bool showingStart = controller.Overlay == PrototypeOverlay.Start;
+            if (showingStart && !wasShowingStart)
+            {
+                // 进入开始页时静默检查一次；内置回退保留手动重试入口。
+                var updates = Game.Game.Interface.GetSystem<ResourceUpdateSystem>();
+                if (updates.Snapshot.ResourceSource != BootResourceSource.BuiltinFallback)
+                    updates.CheckWithNoticeAsync(false).Forget();
+            }
+            wasShowingStart = showingStart;
+            view.Present(controller);
         }
 
         internal void Detach(PrototypeController controller)
@@ -76,6 +90,7 @@ namespace OutpostLoop
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
         private GameObject startScreen;
+        private Button startUpdateEntry;
 
         internal static PrototypeOverlayView Create(string name)
         {
@@ -92,6 +107,22 @@ namespace OutpostLoop
             BuildStartScreen(font, controller);
             Button(transform, font, "SettingsEntry", Loc.T("SettingsTitle"), new Vector2(180, 48),
                 new Vector2(-115, -40), new Vector2(1, 1), () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
+            var updateLabel = Button(transform, font, "StartUpdateEntry", Loc.T("SettingsCheck"), new Vector2(270, 48),
+                new Vector2(-356, -40), new Vector2(1, 1), OpenUpdateCheck);
+            startUpdateEntry = updateLabel.GetComponentInParent<Button>();
+            var mark = Label(startUpdateEntry.transform, font, "StartUpdateRedPoint", new Vector2(28, 28),
+                new Vector2(119, 16), 24);
+            mark.text = "●";
+            mark.color = new Color32(255, 96, 80, 255);
+            var architecture = Game.Game.Interface;
+            var redPoint = mark.gameObject;
+            redPoint.SetActive(architecture.GetSystem<RedPointSystem>().GetState(RedPointIds.StartResourceUpdate).Active);
+            // 设置窗口打开时底层界面停止逐帧刷新，红点仍随通用事件更新。
+            architecture.RegisterEvent<RedPointChangedEvent>(change =>
+            {
+                if (change.Id == RedPointIds.StartResourceUpdate && redPoint != null)
+                    redPoint.SetActive(change.Active);
+            }).UnRegisterWhenGameObjectDestroyed(gameObject);
             var panel = Rect("Panel", transform, new Vector2(.5f,.5f), new Vector2(780,530), Vector2.zero);
             sessionPanel = panel;
             panel.gameObject.AddComponent<Image>().color = new Color(.08f,.13f,.14f,.98f);
@@ -120,9 +151,12 @@ namespace OutpostLoop
             var mode = controller.Overlay;
             bool starting = mode == PrototypeOverlay.Start;
             startScreen.SetActive(starting);
+            startUpdateEntry.gameObject.SetActive(starting);
             sessionPanel.gameObject.SetActive(!starting);
             if (starting)
             {
+                startUpdateEntry.interactable = Game.Game.Interface.GetSystem<ResourceUpdateSystem>()
+                    .Snapshot.Status != ResourceUpdateStatus.Checking;
                 if (startBriefing != null) startBriefing.text = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;
@@ -161,6 +195,14 @@ namespace OutpostLoop
                     SetText(actionLabel, Loc.T("PreviewText8"));
                     break;
             }
+        }
+
+        /// <summary>复用设置窗口的公告与重启交互，打开时直接定位更新检查。</summary>
+        private static void OpenUpdateCheck()
+        {
+            if (UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() == true ||
+                UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true) return;
+            UIHelper.ShowUI<PrototypeSettingsCtrl>().CheckUpdateFromStart();
         }
 
         /// <summary>用已确认的构图搭建开始页，基地画面跟随 Main 场景引用。</summary>

@@ -33,8 +33,9 @@ namespace OutpostLoop
             var world = architecture.GetModel<PrototypeModel>()?.World;
             wasPaused = world == null || world.Run.Paused;
             session?.SetPaused(true);
-            view.LoadDisplay();
+            view.Open();
         }
+        internal void CheckUpdateFromStart() => view.CheckFromStart();
         protected override void OnHide()
         {
             view.Cancel();
@@ -54,17 +55,32 @@ namespace OutpostLoop
         private bool checking;
         private int generation;
         private bool canRestart;
+        private bool showUpdateFirst;
         private Vector2 scroll;
         private Font font;
         private IArchitecture Architecture => Game.Game.Interface;
 
-        internal void LoadDisplay()
+        internal void Open()
+        {
+            showUpdateFirst = false;
+            canRestart = false;
+            message = "";
+            scroll = Vector2.zero;
+            LoadDisplay();
+        }
+
+        internal void CheckFromStart()
+        {
+            showUpdateFirst = true;
+            Check().Forget();
+        }
+
+        private void LoadDisplay()
         {
             if (font == null) font = Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 18);
             var model = Architecture.GetModel<DisplaySettingsModel>();
             resolution = model.CurrentResolutionCode.Value;
             mode = model.CurrentWindowMode.Value;
-            message = "";
         }
 
         internal void Cancel()
@@ -87,6 +103,7 @@ namespace OutpostLoop
             GUILayout.BeginArea(new Rect(290, 30, 700, 660), GUI.skin.box);
             scroll = GUILayout.BeginScrollView(scroll);
             GUILayout.Label(Loc.T("SettingsTitle"));
+            if (showUpdateFirst) DrawUpdate();
             var language = Architecture.GetModel<LocalizationModel>();
             GUILayout.BeginHorizontal();
             foreach (var item in LocalizationLanguages.All)
@@ -147,20 +164,26 @@ namespace OutpostLoop
                 Architecture.GetUtility<IDisplayResolutionApplier>().Apply(display.GetCurrentResolution(), display.CurrentWindowMode.Value);
                 LoadDisplay();
             }
-            GUI.enabled = !checking;
-            if (GUILayout.Button(Loc.T("SettingsCheck"))) Check().Forget();
-            GUI.enabled = true;
-            GUILayout.Label(message);
-            if (canRestart && GUILayout.Button(Loc.T("SettingsRestart")))
-            {
-                Architecture.GetSystem<SettingsSystem>().Flush();
-                if (!Architecture.GetUtility<IApplicationRestartUtility>().TryRestart(out var error)) message = error;
-            }
+            if (!showUpdateFirst) DrawUpdate();
             if (GUILayout.Button(Loc.T("CommonBack"))) Close?.Invoke();
             GUILayout.EndScrollView();
             GUILayout.EndArea();
             GUI.matrix = oldMatrix;
             GUI.skin.font = previousFont;
+        }
+
+        private void DrawUpdate()
+        {
+            var wasEnabled = GUI.enabled;
+            GUI.enabled = wasEnabled && !checking;
+            if (GUILayout.Button(Loc.T("SettingsCheck"))) Check().Forget();
+            GUI.enabled = wasEnabled;
+            GUILayout.Label(message);
+            if (!checking && canRestart && GUILayout.Button(Loc.T("SettingsRestart")))
+            {
+                Architecture.GetSystem<SettingsSystem>().Flush();
+                if (!Architecture.GetUtility<IApplicationRestartUtility>().TryRestart(out var error)) message = error;
+            }
         }
 
         internal void ReleaseFont()
@@ -179,6 +202,8 @@ namespace OutpostLoop
         {
             int request = ++generation;
             checking = true;
+            canRestart = false;
+            message = "";
             try
             {
                 var result = await Architecture.GetSystem<ResourceUpdateSystem>().CheckWithNoticeAsync(true);
