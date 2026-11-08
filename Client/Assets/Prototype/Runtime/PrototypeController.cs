@@ -320,11 +320,6 @@ namespace OutpostLoop
             }
         }
 
-        // 标记与 HUD 共用布局边界，避免半透明面板叠字。
-        private static readonly Rect HudStatusBounds = new Rect(16, 16, 330, 168);
-        private static readonly Rect HudControlsBounds = new Rect(16, 640, 850, 62);
-        private static readonly Rect HudMapBounds = new Rect(1050, 18, 210, 235);
-
         private void OnGUI()
         {
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
@@ -334,62 +329,46 @@ namespace OutpostLoop
             GUI.skin.font=font;GUI.skin.label.fontSize=18;GUI.skin.button.fontSize=19;GUI.skin.box.fontSize=18;
             var s=World.Run;
             if (Event.current.type == EventType.Repaint && Overlay == PrototypeOverlay.None && !UtilityWindowOpen)
-                DrawResourceMarkers(scale);
-            GUI.Box(HudStatusBounds,"");
+                DrawGatherHint(scale);
+            GUI.Box(new Rect(16,16,330,168),"");
             GUI.Label(new Rect(30,26,305,30),Game.Loc.T("HudTitle"));
             GUI.Label(new Rect(30,61,300,28),Game.Loc.T("HudTime", Mathf.CeilToInt(s.Config.Duration-s.Elapsed), World.Wave, s.Config.WaveTimes.Count));
             GUI.Label(new Rect(30,92,300,28),Game.Loc.T("HudHealth", s.Health, World.Kills));
             GUI.Label(new Rect(30,122,300,28),Game.Loc.T("HudStock", s.Scrap, s.Energy));
             GUI.Label(new Rect(30,151,300,28),Game.Loc.T("HudCargo", s.CargoScrap+s.CargoEnergy, s.Capacity));
-            GUI.Box(HudControlsBounds,Game.Loc.T("HudControls"));
+            GUI.Box(new Rect(16,640,850,62),Game.Loc.T("HudControls"));
             DrawMap();
         }
 
-        /// <summary>在可见的资源点上标明种类，进入采集范围后显示真实可用操作和余量。</summary>
-        private void DrawResourceMarkers(float scale)
+        /// <summary>只为采集范围内的当前目标显示名称、余量及操作。</summary>
+        private void DrawGatherHint(float scale)
         {
             var target = World.FindGatherTarget();
-            string scrap = Game.Loc.T("ResourceMarkerScrap");
-            string energy = Game.Loc.T("ResourceMarkerEnergy");
+            if (target == null) return;
+            var point = gameCamera.WorldToScreenPoint(new Vector3(target.Position.x, 1.65f, target.Position.y));
+            if (point.z <= 0 || point.x < 0 || point.x > Screen.width || point.y < 0 || point.y > Screen.height) return;
+
+            var run = World.Run;
+            bool full = run.CargoScrap + run.CargoEnergy >= run.Capacity;
+            string name = Game.Loc.T(target.Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap");
+            string title = Game.Loc.T("ResourceMarkerRemaining", name, target.Remaining);
+            string hint = Game.Loc.T(full ? "ResourceMarkerFull" : "ResourceMarkerGather");
+            const float width = 250, height = 54;
+            float x = Mathf.Clamp(point.x / scale - width * .5f, 0, Screen.width / scale - width);
+            float y = Mathf.Max(0, (Screen.height - point.y) / scale - height);
+
             var oldColor = GUI.contentColor;
             var oldTint = GUI.backgroundColor;
             GUI.backgroundColor = new Color(.20f, .29f, .28f, 1);
-            foreach (var node in World.Nodes)
-            {
-                if (node.Remaining <= 0 || node == target) continue;
-                DrawResourceMarker(node, node.Energy ? energy : scrap, scale, false);
-            }
-            if (target != null)
-            {
-                var run = World.Run;
-                bool full = run.CargoScrap + run.CargoEnergy >= run.Capacity;
-                string title = Game.Loc.T("ResourceMarkerRemaining", target.Energy ? energy : scrap, target.Remaining);
-                string hint = Game.Loc.T(full ? "ResourceMarkerFull" : "ResourceMarkerGather");
-                DrawResourceMarker(target, title + "\n" + hint, scale, true);
-            }
+            GUI.contentColor = target.Energy ? new Color(.57f, 1, 1) : new Color(1, .82f, .52f);
+            GUI.Box(new Rect(x, y, width, height), title + "\n" + hint);
             GUI.contentColor = oldColor;
             GUI.backgroundColor = oldTint;
         }
 
-        /// <summary>把标记投影到场景资源点上方，排除镜头外的资源。</summary>
-        private void DrawResourceMarker(ResourceNode node, string text, float scale, bool focused)
-        {
-            var point = gameCamera.WorldToScreenPoint(new Vector3(node.Position.x, 1.65f, node.Position.y));
-            if (point.z <= 0 || point.x < 0 || point.x > Screen.width || point.y < 0 || point.y > Screen.height) return;
-            float width = focused ? 250 : 110;
-            float height = focused ? 54 : 28;
-            float x = Mathf.Clamp(point.x / scale - width * .5f, 0, Screen.width / scale - width);
-            float y = Mathf.Max(0, (Screen.height - point.y) / scale - height);
-            var bounds = new Rect(x, y, width, height);
-            if (!focused && (bounds.Overlaps(HudStatusBounds) || bounds.Overlaps(HudControlsBounds) || bounds.Overlaps(HudMapBounds)))
-                return;
-            GUI.contentColor = node.Energy ? new Color(.57f, 1, 1) : new Color(1, .82f, .52f);
-            GUI.Box(bounds, text);
-        }
-
         private void DrawMap()
         {
-            var old=GUI.color;GUI.Box(HudMapBounds,Game.Loc.T("HudMap"));
+            var old=GUI.color;GUI.Box(new Rect(1050,18,210,235),Game.Loc.T("HudMap"));
             foreach(var node in World.Nodes)if(node.Remaining>0)Dot(node.Position,node.Energy?Color.cyan:new Color(0.8f,0.5f,0.2f),4);
             foreach(var enemy in World.Enemies)Dot(enemy.Position,Color.red,5);
             Dot(Vector2.zero,Color.white,9);Dot(World.Player,Color.yellow,7);GUI.color=old;
