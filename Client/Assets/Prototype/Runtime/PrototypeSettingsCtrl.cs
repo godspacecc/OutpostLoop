@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using Game;
 using QFramework;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace OutpostLoop
@@ -150,7 +151,7 @@ namespace OutpostLoop
             GUILayout.Label(Loc.T("SettingsKeys"));
             var keys = Architecture.GetSystem<HotKeySystem>();
             foreach (var binding in Architecture.GetModel<HotKeyModel>().Bindings)
-                if (GUILayout.Button(binding.ActionId + "  " + binding.BindingPath)) keys.BeginRebind(binding.ActionId);
+                if (GUILayout.Button(HotKeyLabel(binding))) keys.BeginRebind(binding.ActionId);
             if (keys.IsCapturingRebind)
             {
                 GUILayout.Label(Loc.T("SettingsCapture"));
@@ -213,6 +214,20 @@ namespace OutpostLoop
             return GUILayout.HorizontalSlider(value, 0, 1);
         }
 
+        /// <summary>设置只展示动作名称和键帽文字，重绑与存储仍使用原始标识。</summary>
+        private static string HotKeyLabel(HotKeyBinding binding)
+        {
+            var action = Loc.T(binding.ActionId switch
+            {
+                HotKeyActionIds.TogglePause => "SettingsKeyPause",
+                HotKeyActionIds.ToggleRuntimeLog => "SettingsKeyLog",
+                _ => "SettingsKeyOther"
+            });
+            var key = binding.BindingPath == HotKeyDefaults.Escape ? "Esc" :
+                InputControlPath.ToHumanReadableString(binding.BindingPath, InputControlPath.HumanReadableStringOptions.OmitDevice);
+            return Loc.T("SettingsKeyLabel", action, string.IsNullOrWhiteSpace(key) ? Loc.T("SettingsKeyUnbound") : key);
+        }
+
         /// <summary>更新结果和公告只写回仍打开的窗口，重启让 Boot 执行下载与安装。</summary>
         private async UniTaskVoid Check()
         {
@@ -234,10 +249,15 @@ namespace OutpostLoop
     /// <summary>开始页与设置窗口共用资源版本和检查状态的本地化文案。</summary>
     internal static class PrototypeUpdateText
     {
-        internal static string CurrentVersion(ResourceUpdateSnapshot snapshot) =>
-            string.IsNullOrWhiteSpace(snapshot.CurrentVersion)
+        internal static string CurrentVersion(ResourceUpdateSnapshot snapshot)
+        {
+            if (snapshot.ResourceSource == BootResourceSource.EditorSimulate &&
+                string.Equals(snapshot.CurrentVersion, "Simulate", StringComparison.OrdinalIgnoreCase))
+                return Loc.T("UpdateEditorSimulation");
+            return string.IsNullOrWhiteSpace(snapshot.CurrentVersion)
                 ? Loc.T("UpdateVersionUnknown")
                 : Loc.T("UpdateCurrentVersion", snapshot.CurrentVersion);
+        }
 
         internal static string Status(ResourceUpdateSnapshot snapshot)
         {

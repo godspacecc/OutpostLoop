@@ -167,6 +167,26 @@ namespace Game
         /// </summary>
         public static string Settingsfullscreen => Loc.T("SettingsFullscreen");
         /// <summary>
+        /// {0}　{1}
+        /// </summary>
+        public static string Settingskeylabel(object arg0, object arg1) => Loc.T("SettingsKeyLabel", arg0, arg1);
+        /// <summary>
+        /// 打开／关闭诊断日志
+        /// </summary>
+        public static string Settingskeylog => Loc.T("SettingsKeyLog");
+        /// <summary>
+        /// 其他快捷操作
+        /// </summary>
+        public static string Settingskeyother => Loc.T("SettingsKeyOther");
+        /// <summary>
+        /// 暂停／继续
+        /// </summary>
+        public static string Settingskeypause => Loc.T("SettingsKeyPause");
+        /// <summary>
+        /// 未绑定
+        /// </summary>
+        public static string Settingskeyunbound => Loc.T("SettingsKeyUnbound");
+        /// <summary>
         /// 热键
         /// </summary>
         public static string Settingskeys => Loc.T("SettingsKeys");
@@ -238,6 +258,10 @@ namespace Game
         /// 当前资源版本：{0}
         /// </summary>
         public static string Updatecurrentversion(object arg0) => Loc.T("UpdateCurrentVersion", arg0);
+        /// <summary>
+        /// 当前资源：编辑器模拟
+        /// </summary>
+        public static string Updateeditorsimulation => Loc.T("UpdateEditorSimulation");
         /// <summary>
         /// 尚未检查更新
         /// </summary>
