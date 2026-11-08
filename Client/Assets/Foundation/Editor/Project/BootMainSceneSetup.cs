@@ -66,6 +66,13 @@ namespace OutpostLoop.Editor
             PlayerSettings.insecureHttpOption=InsecureHttpOption.AlwaysAllowed;
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android,"com.godspace.outpostloop");PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone,"com.godspace.outpostloop");
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone,ScriptingImplementation.IL2CPP);PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android,ScriptingImplementation.IL2CPP);
+            // 与完整 Android APK 的目标平台和横屏约束保持一致。
+            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
+            PlayerSettings.allowedAutorotateToPortrait = false;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+            PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+            PlayerSettings.allowedAutorotateToLandscapeRight = true;
             var hybrid=HybridCLR.Editor.Settings.HybridCLRSettings.Instance;hybrid.hotUpdateAssemblyDefinitions=new[]{AssetDatabase.LoadAssetAtPath<UnityEditorInternal.AssemblyDefinitionAsset>("Assets/Game/Game.asmdef")};HybridCLR.Editor.Settings.HybridCLRSettings.Save();
             var host="Assets/StreamingAssets/hostConfig.json";if(!File.Exists(host))File.WriteAllText(host,"{\"resourceServer\":\"http://127.0.0.1:8000\"}");
             File.WriteAllText("Assets/Game/Dlls/.gitkeep",string.Empty);

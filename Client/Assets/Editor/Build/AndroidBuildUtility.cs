@@ -619,11 +619,7 @@ namespace Game.Editor
                 throw new InvalidOperationException($"Android 包名必须是 {ApplicationIdentifier}。");
             if (PlayerSettings.Android.useCustomKeystore)
                 throw new InvalidOperationException("Development APK 必须使用 Unity 调试签名，不能启用自定义 keystore。");
-            if (PlayerSettings.defaultInterfaceOrientation != UIOrientation.AutoRotation ||
-                PlayerSettings.allowedAutorotateToPortrait ||
-                PlayerSettings.allowedAutorotateToPortraitUpsideDown ||
-                !PlayerSettings.allowedAutorotateToLandscapeLeft ||
-                !PlayerSettings.allowedAutorotateToLandscapeRight)
+            if (!HasLandscapeOnlyOrientation())
             {
                 throw new InvalidOperationException("Android 屏幕方向必须为自动旋转且仅允许左右横屏。");
             }
@@ -638,6 +634,14 @@ namespace Game.Editor
             RequireDirectory("Assets/Game/Config");
             RequireDirectory("Assets/Game/Dlls");
         }
+
+        /// <summary>完整 APK 与只读预检共用横屏校验。</summary>
+        internal static bool HasLandscapeOnlyOrientation() =>
+            PlayerSettings.defaultInterfaceOrientation == UIOrientation.AutoRotation &&
+            !PlayerSettings.allowedAutorotateToPortrait &&
+            !PlayerSettings.allowedAutorotateToPortraitUpsideDown &&
+            PlayerSettings.allowedAutorotateToLandscapeLeft &&
+            PlayerSettings.allowedAutorotateToLandscapeRight;
 
         /// <summary>校验写入 Host APK 的资源地址确实可由 Android 真机访问。</summary>
         internal static void ValidateAndroidHostConfig()

@@ -23,6 +23,7 @@ namespace Game.Editor
             public bool HybridClrPackageExists, HybridClrGameConfigured, HybridClrLocalInstalled;
             // 各平台的构建模块和脚本后端分别检查。
             public bool WindowsModuleInstalled, AndroidModuleInstalled, WindowsIl2CppConfigured, AndroidIl2CppConfigured;
+            public bool AndroidArm64Configured, AndroidLandscapeOnlyConfigured;
             // 安装器只能读取现有配置和文件，禁止预检时触发选择框或安装。
             public bool InnoCompilerExists, InstallerTemplateExists, AndroidInstallerSourcesExist;
             public bool WindowsSourceIdentityValid, HttpResourcesAllowed;
@@ -42,6 +43,8 @@ namespace Game.Editor
                 AndroidModuleInstalled = BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android),
                 WindowsIl2CppConfigured = PlayerSettings.GetScriptingBackend(NamedBuildTarget.Standalone) == ScriptingImplementation.IL2CPP,
                 AndroidIl2CppConfigured = PlayerSettings.GetScriptingBackend(NamedBuildTarget.Android) == ScriptingImplementation.IL2CPP,
+                AndroidArm64Configured = PlayerSettings.Android.targetArchitectures == AndroidArchitecture.ARM64,
+                AndroidLandscapeOnlyConfigured = AndroidBuildUtility.HasLandscapeOnlyOrientation(),
                 ActiveTarget = EditorUserBuildSettings.activeBuildTarget.ToString(), CheckedUtc = DateTime.UtcNow.ToString("O")
             };
             var missing = new List<string>();
@@ -87,6 +90,8 @@ namespace Game.Editor
             Require(result.HybridClrLocalInstalled, "HybridCLR 本地 IL2CPP 安装目录或版本标记缺失。");
             Require(result.WindowsModuleInstalled, "未检测到 Windows64 构建模块。"); Require(result.AndroidModuleInstalled, "未检测到 Android 构建模块。");
             Require(result.WindowsIl2CppConfigured, "Windows 脚本后端未配置 IL2CPP。"); Require(result.AndroidIl2CppConfigured, "Android 脚本后端未配置 IL2CPP。");
+            Require(result.AndroidArm64Configured, $"Android CPU 必须仅为 ARM64，当前为 {PlayerSettings.Android.targetArchitectures}。");
+            Require(result.AndroidLandscapeOnlyConfigured, "Android 屏幕方向必须为自动旋转且仅允许左右横屏。");
             Require(result.InnoCompilerExists, "缺少当前安装器路径规则可找到的 ISCC.exe。"); Require(result.InstallerTemplateExists, "缺少 OutpostLoop Inno Setup 模板。");
             Require(result.AndroidInstallerSourcesExist, "缺少 Android APK 安装器 Java 或 Manifest。");
             result.MissingRequirements = missing.ToArray();
