@@ -329,6 +329,39 @@ namespace Game.Tests.Flow
         }
 
         [Test]
+        public void SavedBootSceneHasStandardRecoveryContent()
+        {
+            Scene scene = EditorSceneManager.OpenScene(BootScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var roots = scene.GetRootGameObjects();
+                var launcher = roots.SelectMany(root => root.GetComponentsInChildren<Launcher>(true)).Single();
+                var view = (HotUpdateView)new SerializedObject(launcher).FindProperty("_updateView").objectReferenceValue;
+                var update = new SerializedObject(view);
+                var server = new SerializedObject(roots.SelectMany(root =>
+                    root.GetComponentsInChildren<BootResourceServerView>(true)).Single());
+                var actions = (GameObject)update.FindProperty("_buttonArea").objectReferenceValue;
+                var entry = (Button)server.FindProperty("_entryButton").objectReferenceValue;
+                var input = (InputField)server.FindProperty("_addressInput").objectReferenceValue;
+                Assert.That(input.placeholder, Is.TypeOf<Text>(), "空地址应显示输入格式示例");
+                Assert.That(((Text)input.placeholder).text, Does.StartWith("http://"));
+                Assert.That(entry.transform.parent, Is.EqualTo(actions.transform));
+                Assert.That(entry.GetComponentInChildren<Text>(true).text, Is.EqualTo("重设服务器"));
+                var reset = (Button)server.FindProperty("_resetButton").objectReferenceValue;
+                Assert.That(reset.GetComponentInChildren<Text>(true).text, Is.EqualTo("恢复默认并重试"));
+                foreach (var field in new[] { "_progressArea", "_downloadStatsArea", "_buttonArea" })
+                    Assert.That(((GameObject)update.FindProperty(field).objectReferenceValue).activeSelf, Is.False, field);
+                Assert.That(roots.Single(root => root.CompareTag("MainCamera")).GetComponent<AudioListener>(), Is.Not.Null);
+                Assert.That(roots.Select(root => root.GetComponent<Light>()).Single(light => light != null).type,
+                    Is.EqualTo(LightType.Directional));
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        [Test]
         public void VersionPresentationUsesActiveAndDetectedVersions()
         {
             var fixture = CreateLauncherFixture();
