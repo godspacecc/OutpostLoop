@@ -91,6 +91,7 @@ namespace OutpostLoop
         private RectTransform startStage, sessionPanel;
         private GameObject startScreen;
         private Button startUpdateEntry;
+        private Text startUpdateVersion, startUpdateStatus;
 
         internal static PrototypeOverlayView Create(string name)
         {
@@ -110,6 +111,10 @@ namespace OutpostLoop
             var updateLabel = Button(transform, font, "StartUpdateEntry", Loc.T("SettingsCheck"), new Vector2(270, 48),
                 new Vector2(-356, -40), new Vector2(1, 1), OpenUpdateCheck);
             startUpdateEntry = updateLabel.GetComponentInParent<Button>();
+            startUpdateVersion = Label(startUpdateEntry.transform, font, "StartUpdateVersion", new Vector2(270, 28),
+                new Vector2(0, -42), 16);
+            startUpdateStatus = Label(startUpdateEntry.transform, font, "StartUpdateStatus", new Vector2(270, 44),
+                new Vector2(0, -75), 16);
             var mark = Label(startUpdateEntry.transform, font, "StartUpdateRedPoint", new Vector2(28, 28),
                 new Vector2(119, 16), 24);
             mark.text = "●";
@@ -155,8 +160,10 @@ namespace OutpostLoop
             sessionPanel.gameObject.SetActive(!starting);
             if (starting)
             {
-                startUpdateEntry.interactable = Game.Game.Interface.GetSystem<ResourceUpdateSystem>()
-                    .Snapshot.Status != ResourceUpdateStatus.Checking;
+                var snapshot = Game.Game.Interface.GetSystem<ResourceUpdateSystem>().Snapshot;
+                startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
+                SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
+                SetText(startUpdateStatus, PrototypeUpdateText.Status(snapshot));
                 if (startBriefing != null) startBriefing.text = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;

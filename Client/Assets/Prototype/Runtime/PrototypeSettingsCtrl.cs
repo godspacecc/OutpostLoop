@@ -1,4 +1,5 @@
 using System;
+using Boot;
 using Cysharp.Threading.Tasks;
 using Game;
 using QFramework;
@@ -54,7 +55,8 @@ namespace OutpostLoop
         private string message = "";
         private bool checking;
         private int generation;
-        private bool canRestart;
+        // 保存结构化结果，切换语言后按当前语言重新显示。
+        private ResourceUpdateCheckWithNoticeResult? lastUpdate;
         private bool showUpdateFirst;
         private Vector2 scroll;
         private Font font;
@@ -63,7 +65,7 @@ namespace OutpostLoop
         internal void Open()
         {
             showUpdateFirst = false;
-            canRestart = false;
+            lastUpdate = null;
             message = "";
             scroll = Vector2.zero;
             LoadDisplay();
@@ -178,7 +180,21 @@ namespace OutpostLoop
             GUI.enabled = wasEnabled && !checking;
             if (GUILayout.Button(Loc.T("SettingsCheck"))) Check().Forget();
             GUI.enabled = wasEnabled;
-            GUILayout.Label(message);
+            var snapshot = lastUpdate?.Snapshot ?? Architecture.GetSystem<ResourceUpdateSystem>().Snapshot;
+            GUILayout.Label(PrototypeUpdateText.CurrentVersion(snapshot));
+            GUILayout.Label(checking ? Loc.T("UpdateChecking") : PrototypeUpdateText.Status(snapshot));
+            if (lastUpdate is { } result)
+            {
+                if (snapshot.Status == ResourceUpdateStatus.UpdateAvailable && snapshot.HasKnownDownloadSize)
+                    GUILayout.Label(Loc.T("UpdateResourceSize", snapshot.TotalDownloadCount, snapshot.TotalDownloadBytes / 1048576d));
+                if (result.ApplicationUpdate is { } app)
+                    GUILayout.Label(Loc.T("UpdateApplication", Application.version, app.versionName, app.sizeBytes / 1048576d));
+                if (result.Notice.HasNotice)
+                    GUILayout.Label(ResourceUpdateNoticeDocument.FormatForNotify(result.Notice.Content, true));
+            }
+            if (!string.IsNullOrEmpty(message)) GUILayout.Label(message);
+            bool canRestart = lastUpdate is { } update &&
+                              (update.Snapshot.Status == ResourceUpdateStatus.UpdateAvailable || update.ApplicationUpdate != null);
             if (!checking && canRestart && GUILayout.Button(Loc.T("SettingsRestart")))
             {
                 Architecture.GetSystem<SettingsSystem>().Flush();
@@ -202,20 +218,38 @@ namespace OutpostLoop
         {
             int request = ++generation;
             checking = true;
-            canRestart = false;
+            lastUpdate = null;
             message = "";
             try
             {
                 var result = await Architecture.GetSystem<ResourceUpdateSystem>().CheckWithNoticeAsync(true);
                 if (request != generation || this == null) return;
-                canRestart = result.Snapshot.Status == ResourceUpdateStatus.UpdateAvailable || result.ApplicationUpdate != null;
-                message = Loc.T(canRestart ? "SettingsUpdateAvailable" : "SettingsUpToDate");
-                if (result.Snapshot.Status == ResourceUpdateStatus.CheckFailed) message = result.Snapshot.Error;
-                if (result.Notice.HasNotice)
-                    message += "\n" + result.Notice.Content.Title + "\n" + result.Notice.Content.Summary + "\n" + string.Join("\n", result.Notice.Content.Items);
+                lastUpdate = result;
             }
             catch (Exception error) { if (request == generation && this != null) message = error.Message; }
             finally { if (request == generation && this != null) checking = false; }
+        }
+    }
+
+    /// <summary>开始页与设置窗口共用资源版本和检查状态的本地化文案。</summary>
+    internal static class PrototypeUpdateText
+    {
+        internal static string CurrentVersion(ResourceUpdateSnapshot snapshot) =>
+            string.IsNullOrWhiteSpace(snapshot.CurrentVersion)
+                ? Loc.T("UpdateVersionUnknown")
+                : Loc.T("UpdateCurrentVersion", snapshot.CurrentVersion);
+
+        internal static string Status(ResourceUpdateSnapshot snapshot)
+        {
+            bool builtin = snapshot.ResourceSource == BootResourceSource.BuiltinFallback;
+            return snapshot.Status switch
+            {
+                ResourceUpdateStatus.Checking => Loc.T("UpdateChecking"),
+                ResourceUpdateStatus.NoUpdate => Loc.T(builtin ? "UpdateBuiltinCurrent" : "SettingsUpToDate"),
+                ResourceUpdateStatus.UpdateAvailable => Loc.T("UpdateTargetVersion", snapshot.TargetVersion),
+                ResourceUpdateStatus.CheckFailed => Loc.T(builtin ? "UpdateServerUnavailable" : "UpdateCheckFailed"),
+                _ => Loc.T(builtin ? "UpdateBuiltinActive" : "UpdateNotChecked")
+            };
         }
     }
 }

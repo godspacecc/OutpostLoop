@@ -215,6 +215,50 @@ namespace Game
         /// </summary>
         public static string Settingsupdateavailable => Loc.T("SettingsUpdateAvailable");
         /// <summary>
+        /// Android 安装包：{0} → {1}，{2:F1} MiB
+        /// </summary>
+        public static string Updateapplication(object arg0, object arg1, object arg2) => Loc.T("UpdateApplication", arg0, arg1, arg2);
+        /// <summary>
+        /// 正在使用内置资源
+        /// </summary>
+        public static string Updatebuiltinactive => Loc.T("UpdateBuiltinActive");
+        /// <summary>
+        /// 内置资源已是最新版本
+        /// </summary>
+        public static string Updatebuiltincurrent => Loc.T("UpdateBuiltinCurrent");
+        /// <summary>
+        /// 资源版本检查失败
+        /// </summary>
+        public static string Updatecheckfailed => Loc.T("UpdateCheckFailed");
+        /// <summary>
+        /// 正在检查更新…
+        /// </summary>
+        public static string Updatechecking => Loc.T("UpdateChecking");
+        /// <summary>
+        /// 当前资源版本：{0}
+        /// </summary>
+        public static string Updatecurrentversion(object arg0) => Loc.T("UpdateCurrentVersion", arg0);
+        /// <summary>
+        /// 尚未检查更新
+        /// </summary>
+        public static string Updatenotchecked => Loc.T("UpdateNotChecked");
+        /// <summary>
+        /// 待下载资源：{0} 个文件，{1:F1} MiB
+        /// </summary>
+        public static string Updateresourcesize(object arg0, object arg1) => Loc.T("UpdateResourceSize", arg0, arg1);
+        /// <summary>
+        /// 资源服务器暂不可用
+        /// </summary>
+        public static string Updateserverunavailable => Loc.T("UpdateServerUnavailable");
+        /// <summary>
+        /// 资源 {0} 可更新，重启后生效
+        /// </summary>
+        public static string Updatetargetversion(object arg0) => Loc.T("UpdateTargetVersion", arg0);
+        /// <summary>
+        /// 当前资源版本：未知
+        /// </summary>
+        public static string Updateversionunknown => Loc.T("UpdateVersionUnknown");
+        /// <summary>
         /// 请手动重新启动应用。
         /// </summary>
         public static string StartUpdateRestartManual => Loc.T("ui.start.update.restart_manual");

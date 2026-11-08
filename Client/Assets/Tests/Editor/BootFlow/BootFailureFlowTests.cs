@@ -345,6 +345,9 @@ namespace Game.Tests.Flow
                 var input = (InputField)server.FindProperty("_addressInput").objectReferenceValue;
                 Assert.That(input.placeholder, Is.TypeOf<Text>(), "空地址应显示输入格式示例");
                 Assert.That(((Text)input.placeholder).text, Does.StartWith("http://"));
+                Assert.That(input.contentType, Is.EqualTo(InputField.ContentType.Custom));
+                Assert.That(input.keyboardType, Is.EqualTo(TouchScreenKeyboardType.URL));
+                Assert.That(input.characterLimit, Is.EqualTo(1024));
                 Assert.That(entry.transform.parent, Is.EqualTo(actions.transform));
                 Assert.That(entry.GetComponentInChildren<Text>(true).text, Is.EqualTo("重设服务器"));
                 var reset = (Button)server.FindProperty("_resetButton").objectReferenceValue;

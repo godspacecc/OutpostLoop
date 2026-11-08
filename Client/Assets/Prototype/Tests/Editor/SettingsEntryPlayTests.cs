@@ -111,6 +111,12 @@ namespace OutpostLoop.Tests
             // 红点由通用系统在帧尾聚合，界面在下一帧读取。
             for (int frame = 0; frame < 30 && GameObject.Find("StartUpdateRedPoint") == null; frame++) yield return null;
             Assert.NotNull(GameObject.Find("StartUpdateRedPoint"), "发现更新后开始页应显示红点");
+            var version = GameObject.Find("StartUpdateVersion")?.GetComponent<Text>();
+            var status = GameObject.Find("StartUpdateStatus")?.GetComponent<Text>();
+            Assert.NotNull(version, "开始页应展示当前资源版本");
+            Assert.NotNull(status, "开始页应展示检查状态");
+            Assert.That(version.text, Does.Contain("1"));
+            Assert.That(status.text, Does.Contain("2"));
             for (int frame = 0; frame < 5; frame++) yield return null;
             Assert.AreEqual(1, checker.CallCount, "显示期间不应逐帧检查");
 

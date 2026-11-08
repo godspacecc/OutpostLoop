@@ -204,6 +204,9 @@ namespace OutpostLoop.Editor
 
             var field = Box(card, "Address", 36, 120, 568, 44, BootLine);
             var input = field.AddComponent<InputField>();
+            input.contentType = InputField.ContentType.Custom;
+            input.keyboardType = TouchScreenKeyboardType.URL;
+            input.characterLimit = 1024;
             input.targetGraphic = field.GetComponent<Image>();
             input.targetGraphic.raycastTarget = true;
             input.textComponent = Text(field, "Value", 12, 0, 544, 44, 17, BootInk, TextAnchor.MiddleLeft);
