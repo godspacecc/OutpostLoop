@@ -94,5 +94,8 @@ namespace OutpostLoop
         /// <summary>将外围建设订单转发给运行中的本局规则。</summary>
         public bool BuildExpansion(int sector, ExpansionKind kind) =>
             !awaitingStart && model.World?.BuildExpansion(sector, kind) == true;
+
+        /// <summary>转发兵营独立的付费训练订单。</summary>
+        public bool TrainGarrison(int sector) => !awaitingStart && model.World?.TrainGarrison(sector) == true;
     }
 }

@@ -144,7 +144,7 @@ namespace OutpostLoop
         private readonly Text[] turretLabels = new Text[4];
         // 扩建面板先选方位，再显示该地块的产出预览或现有建筑状态。
         private GameObject expansionRows, expansionChoices;
-        private Text constructionStock, constructionFeedback, expansionDetail;
+        private Text constructionStock, constructionFeedback, expansionDetail, trainGarrison;
         private Button expansionTab, turretTab;
         private readonly Text[] expansionPlots = new Text[4];
         private readonly Text[] expansionOptions = new Text[3];
@@ -262,6 +262,9 @@ namespace OutpostLoop
                 expansionPlots[i].fontSize = 16;
             }
             expansionDetail = Label(expansionRows.transform, font, "ExpansionDetail", new Vector2(475, 48), new Vector2(0, 21), 18);
+            trainGarrison = Button(expansionRows.transform, font, "TrainGarrison", "", new Vector2(468, 46),
+                new Vector2(0, -28), new Vector2(.5f, .5f), controller.OrderGarrison);
+            trainGarrison.fontSize = 18;
             expansionChoices = Rect("ExpansionChoices", expansionRows.transform, new Vector2(.5f, .5f), new Vector2(475, 170), Vector2.zero).gameObject;
             for (int i = 0; i < expansionOptions.Length; i++)
             {
@@ -393,10 +396,17 @@ namespace OutpostLoop
             SetText(turretHint, Loc.T(moving ? "TurretChooseEmpty" : "TurretInstructions"));
             for (int i = 0; i < turretLabels.Length; i++)
             {
-                var key = world.Turrets[i].Occupied
+                var turret = world.Turrets[i];
+                var direction = Loc.T(SectorNames[i]);
+                if (turret.IsUnderConstruction)
+                {
+                    SetText(turretLabels[i], Loc.T("TurretConstructing", direction, Mathf.CeilToInt(turret.ConstructionLeft)));
+                    continue;
+                }
+                var key = turret.Occupied
                     ? (controller.SelectedTurretSlot == i ? "TurretSelected" : "TurretOccupied")
                     : (moving ? "TurretMoveHere" : "TurretBuildHere");
-                SetText(turretLabels[i], Loc.T(key, Loc.T(SectorNames[i]), world.TurretScrapCost, world.TurretEnergyCost));
+                SetText(turretLabels[i], Loc.T(key, direction, world.TurretScrapCost, world.TurretEnergyCost, TurretSlot.BuildSeconds));
             }
         }
 
@@ -414,6 +424,10 @@ namespace OutpostLoop
                 SetText(expansionPlots[i], i == selected ? Loc.T("ExpansionSelected", plot) : plot);
             }
             expansionChoices.SetActive(vacant);
+            trainGarrison.transform.parent.gameObject.SetActive(site.CanTrain);
+            if (site.CanTrain)
+                SetText(trainGarrison, Loc.T("GarrisonTrain", ExpansionSite.TrainingScrap, ExpansionSite.TrainingEnergy,
+                    ExpansionSite.TrainingSeconds));
             int node = vacant ? world.FindExpansionResource(selected) : site.NodeIndex;
             string resource = node >= 0
                 ? Loc.T("ResourceMarkerRemaining", Loc.T(world.Nodes[node].Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap"),
@@ -421,16 +435,18 @@ namespace OutpostLoop
                 : Loc.T("ExpansionNoResource");
             if (!vacant)
             {
-                string status = site.Kind switch
-                {
-                    ExpansionKind.Extractor => resource,
-                    ExpansionKind.Barracks => site.TrainingLeft > 0
-                        ? Loc.T("ExpansionTraining", Mathf.CeilToInt(site.TrainingLeft))
-                        : Loc.T("ExpansionGarrisonReady"),
-                    _ => Loc.T("ExpansionBarricadeHint")
-                };
+                string status = site.IsUnderConstruction ? Loc.T("ConstructionRemaining", Mathf.CeilToInt(site.ConstructionLeft))
+                    : site.Kind switch
+                    {
+                        ExpansionKind.Extractor => resource,
+                        ExpansionKind.Barracks when site.TrainingLeft > 0
+                            => Loc.T("ExpansionTraining", Mathf.CeilToInt(site.TrainingLeft)),
+                        ExpansionKind.Barracks when site.HasGarrison => Loc.T("ExpansionGarrisonReady"),
+                        ExpansionKind.Barracks => Loc.T("ExpansionGarrisonIdle"),
+                        _ => Loc.T("ExpansionBarricadeHint")
+                    };
                 SetText(expansionDetail, Loc.T("ExpansionStatus", Loc.T(ExpansionNames[(int)site.Kind]), site.Health,
-                    ExpansionSite.SpecFor(site.Kind).Health, status));
+                    site.HealthLimit, status));
                 return;
             }
             SetText(expansionDetail, Loc.T("ExpansionResourcePreview", resource));
@@ -439,7 +455,7 @@ namespace OutpostLoop
                 var kind = ExpansionOptions[i];
                 var spec = ExpansionSite.SpecFor(kind);
                 SetText(expansionOptions[i], Loc.T("ExpansionBuildOption", Loc.T(ExpansionNames[(int)kind]),
-                    Loc.T("PreviewCost", spec.Scrap, spec.Energy), Loc.T(ExpansionHints[i], spec.Cycle)));
+                    Loc.T("PreviewCost", spec.Scrap, spec.Energy), spec.BuildSeconds, Loc.T(ExpansionHints[i], spec.Cycle)));
                 expansionOptions[i].GetComponentInParent<Button>().interactable = kind != ExpansionKind.Extractor || node >= 0;
             }
         }

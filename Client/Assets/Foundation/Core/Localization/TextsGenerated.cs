@@ -32,6 +32,14 @@ namespace Game
         /// </summary>
         public static string Constructionopen => Loc.T("ConstructionOpen");
         /// <summary>
+        /// 施工剩余 {0} 秒
+        /// </summary>
+        public static string Constructionremaining(object arg0) => Loc.T("ConstructionRemaining", arg0);
+        /// <summary>
+        /// 已开工
+        /// </summary>
+        public static string Constructionstarted => Loc.T("ConstructionStarted");
+        /// <summary>
         /// 建造
         /// </summary>
         public static string Constructiontitle => Loc.T("ConstructionTitle");
@@ -40,9 +48,9 @@ namespace Game
         /// </summary>
         public static string Expansionbarracks => Loc.T("ExpansionBarracks");
         /// <summary>
-        /// {0:0} 秒训练后派驻守军，自动攻击近敌
+        /// 完工后可单独下令训练驻军
         /// </summary>
-        public static string Expansionbarrackshint(object arg0) => Loc.T("ExpansionBarracksHint", arg0);
+        public static string Expansionbarrackshint => Loc.T("ExpansionBarracksHint");
         /// <summary>
         /// 路障
         /// </summary>
@@ -52,14 +60,10 @@ namespace Game
         /// </summary>
         public static string Expansionbarricadehint => Loc.T("ExpansionBarricadeHint");
         /// <summary>
-        /// {0} · {1}
-        /// {2}
+        /// {0} · {1} · {2} 秒
+        /// {3}
         /// </summary>
-        public static string Expansionbuildoption(object arg0, object arg1, object arg2) => Loc.T("ExpansionBuildOption", arg0, arg1, arg2);
-        /// <summary>
-        /// 已建成
-        /// </summary>
-        public static string Expansionbuilt => Loc.T("ExpansionBuilt");
+        public static string Expansionbuildoption(object arg0, object arg1, object arg2, object arg3) => Loc.T("ExpansionBuildOption", arg0, arg1, arg2, arg3);
         /// <summary>
         /// 空地
         /// </summary>
@@ -72,6 +76,10 @@ namespace Game
         /// 每 {0:0.#} 秒开采并入库 1 单位，采尽后停产
         /// </summary>
         public static string Expansionextractorhint(object arg0) => Loc.T("ExpansionExtractorHint", arg0);
+        /// <summary>
+        /// 等待训练订单
+        /// </summary>
+        public static string Expansiongarrisonidle => Loc.T("ExpansionGarrisonIdle");
         /// <summary>
         /// 守军已就位
         /// </summary>
@@ -109,6 +117,18 @@ namespace Game
         /// 库存不足或该地块不可建造
         /// </summary>
         public static string Expansionunavailable => Loc.T("ExpansionUnavailable");
+        /// <summary>
+        /// 训练守军 · 废料 {0} / 能源 {1} · {2} 秒
+        /// </summary>
+        public static string Garrisontrain(object arg0, object arg1, object arg2) => Loc.T("GarrisonTrain", arg0, arg1, arg2);
+        /// <summary>
+        /// 还缺废料 {0} / 能源 {1}
+        /// </summary>
+        public static string Garrisontrainingshortfall(object arg0, object arg1) => Loc.T("GarrisonTrainingShortfall", arg0, arg1);
+        /// <summary>
+        /// 守军开始训练
+        /// </summary>
+        public static string Garrisontrainingstarted => Loc.T("GarrisonTrainingStarted");
         /// <summary>
         /// 工人载货 {0} / {1}
         /// </summary>
@@ -345,14 +365,6 @@ namespace Game
         /// </summary>
         public static string Strategydeploy(object arg0) => Loc.T("StrategyDeploy", arg0);
         /// <summary>
-        /// 最终波已出发
-        /// </summary>
-        public static string Strategyfinalwave => Loc.T("StrategyFinalWave");
-        /// <summary>
-        /// 下波来向：{0} · {1} 秒
-        /// </summary>
-        public static string Strategynextwave(object arg0, object arg1) => Loc.T("StrategyNextWave", arg0, arg1);
-        /// <summary>
         /// 当前采集任务
         /// </summary>
         public static string Strategyresourceassigned => Loc.T("StrategyResourceAssigned");
@@ -397,18 +409,19 @@ namespace Game
         /// </summary>
         public static string Supplyselected(object arg0) => Loc.T("SupplySelected", arg0);
         /// <summary>
-        /// {0} · 建造
+        /// {0} · 建造 {3} 秒
         /// 废料 {1} / 能源 {2}
         /// </summary>
-        public static string Turretbuildhere(object arg0, object arg1, object arg2) => Loc.T("TurretBuildHere", arg0, arg1, arg2);
-        /// <summary>
-        /// 炮塔已建成
-        /// </summary>
-        public static string Turretbuilt => Loc.T("TurretBuilt");
+        public static string Turretbuildhere(object arg0, object arg1, object arg2, object arg3) => Loc.T("TurretBuildHere", arg0, arg1, arg2, arg3);
         /// <summary>
         /// 选择空炮位免费迁移，再点原炮塔可取消
         /// </summary>
         public static string Turretchooseempty => Loc.T("TurretChooseEmpty");
+        /// <summary>
+        /// {0} · 施工中
+        /// 剩余 {1} 秒
+        /// </summary>
+        public static string Turretconstructing(object arg0, object arg1) => Loc.T("TurretConstructing", arg0, arg1);
         /// <summary>
         /// 东
         /// </summary>

@@ -109,12 +109,11 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(100, northEnemy.Health, "迁往北侧后不能再覆盖原来的距离");
         }
 
-        [Test] public void ForecastMatchesSpawnAndSquadCoversAssignedApproach()
+        [Test] public void SquadCoversAssignedApproach()
         {
             var w = new WorldState(1);
-            int sector = w.NextWaveSector;
+            const int sector = 2;
             Vector2 approach = w.Turrets[sector].Position.normalized;
-            Assert.AreEqual(w.Run.Config.WaveTimes[0], w.NextWaveTime);
             Assert.IsTrue(w.DeploySquad(sector));
             for (int i = 0; i < 50; i++) w.Step(.1f);
             Assert.AreEqual(approach * 12, w.SquadPosition);
@@ -123,13 +122,6 @@ namespace OutpostLoop.Tests
             w.Step(.1f);
             Assert.Less(enemy.Health, 100, "守军应在基础炮塔射程外接敌");
             Assert.AreEqual(0, w.Run.Scrap, "调防不扣费");
-            w.Enemies.Clear();
-            w.Run.Tick(w.NextWaveTime - w.Run.Elapsed, 0);
-            w.Step(.1f);
-            Assert.AreEqual(1, w.Wave);
-            Assert.Greater(w.Enemies.Count, 0);
-            foreach (var spawned in w.Enemies)
-                Assert.Greater(Vector2.Dot(approach, spawned.Position.normalized), .42f, "生成来向应落在预告侧");
         }
 
         [Test] public void FullyPreparedBaseWinsCompleteRun()

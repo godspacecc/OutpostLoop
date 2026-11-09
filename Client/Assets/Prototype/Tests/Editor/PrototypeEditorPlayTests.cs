@@ -146,10 +146,16 @@ namespace OutpostLoop.Tests
             Click("OpenConstruction");
             Click("ConstructionTurretTab");
             Click("TurretSlot3");
-            Assert.IsNotNull(GameObject.Find("Turret3"), "有足够库存时应在空炮位建造");
+            Assert.IsTrue(controller.World.Turrets[3].IsUnderConstruction);
+            Assert.IsNotNull(GameObject.Find("TurretWorksite3"));
+            Assert.IsNull(GameObject.Find("Turret3"), "施工中不得出现可开火的炮塔");
             Assert.AreEqual(0, run.Scrap);
             Assert.AreEqual(0, run.Energy);
             Click("CloseConstruction");
+            for (int i = 0; i < 62; i++) controller.World.Step(.1f);
+            yield return null;
+            Assert.IsNotNull(GameObject.Find("Turret3"), "关闭侧栏后也应按时完工");
+            Assert.IsNull(GameObject.Find("TurretWorksite3"));
 
             Assert.IsFalse(run.Paused);
             run.Damage(run.Health);
@@ -184,7 +190,7 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
-        /// <summary>真实 Boot 启动后，用工人取得首笔库存，通过按钮建站并验证自动入库。</summary>
+        /// <summary>从 Boot 用真实按钮派工、施工和付费出兵，核对所选地块及完工模型。</summary>
         [UnityTest]
         public IEnumerator BootExpansionButtonsBuildExtractorFromWorkerStock()
         {
@@ -205,6 +211,8 @@ namespace OutpostLoop.Tests
             while (sector < world.ExpansionSites.Count && world.FindExpansionResource(sector) < 0) sector++;
             Assert.Less(sector, world.ExpansionSites.Count);
             Click("OpenConstruction");
+            Assert.IsTrue(GameObject.Find("ExpansionPlotButton0").GetComponentInChildren<Text>().text.StartsWith("✓"),
+                "初次打开固定选中西侧");
             Assert.IsFalse(world.Run.Paused, "建造侧栏应保持战斗实时推进");
             Assert.IsFalse(Game.UIHelper.HasUIOpen, "建造不应登记为阻断玩法的窗口");
             Click("ExpansionPlotButton" + sector);
@@ -212,21 +220,65 @@ namespace OutpostLoop.Tests
             var site = world.ExpansionSites[sector];
             Assert.AreEqual(ExpansionKind.Extractor, site.Kind);
             Assert.AreEqual(before - spec.Scrap, world.Run.Scrap);
-            var model = GameObject.Find("ExpansionSite" + sector).transform.Find("Extractor").gameObject;
-            Assert.IsTrue(model.activeInHierarchy);
+            var plot = GameObject.Find("ExpansionSite" + sector).transform;
+            var model = plot.Find("Extractor").gameObject;
+            Assert.IsTrue(plot.Find("ExpansionWorksite").gameObject.activeInHierarchy);
+            Assert.IsFalse(model.activeInHierarchy);
             var source = world.Nodes[site.NodeIndex];
             int beforeRemaining = source.Remaining;
             var elapsed = world.Run.Elapsed;
             for (int i = 0; i < 5; i++) yield return null;
             Assert.Greater(world.Run.Elapsed, elapsed, "真实生命周期应在面板打开时推进");
-            for (int i = 0; i < 30; i++) world.Step(.1f);
-            Assert.Less(source.Remaining, beforeRemaining);
-            Assert.Greater(world.Run.Scrap + world.Run.Energy, before - spec.Scrap);
-            Assert.IsNotNull(GameObject.Find("ConstructionPanel"));
+            Assert.AreEqual(beforeRemaining, source.Remaining);
             Click("OpenUpgrade");
             Assert.IsNull(GameObject.Find("ConstructionPanel"), "打开基地升级应关闭独立建造面板");
-            Assert.IsTrue(world.Run.Paused);
+            var pausedConstruction = site.ConstructionLeft;
+            for (int i = 0; i < 5; i++) yield return null;
+            Assert.AreEqual(pausedConstruction, site.ConstructionLeft);
             Click("PrimaryAction");
+            for (int i = 0; i < 80; i++) world.Step(.1f);
+            yield return null;
+            Assert.IsTrue(model.activeInHierarchy);
+            Assert.IsFalse(plot.Find("ExpansionWorksite").gameObject.activeInHierarchy);
+            Assert.Less(source.Remaining, beforeRemaining);
+            Assert.Greater(world.Run.Scrap + world.Run.Energy, before - spec.Scrap);
+
+            foreach (int resource in new[] { 2, 0 })
+            {
+                Assert.IsTrue(world.AssignResource(resource));
+                for (int i = 0; i < 600 && (world.ResourceOrder >= 0 || world.WorkerReturning); i++) world.Step(.1f);
+            }
+            int barracksSector = (sector + 1) % world.ExpansionSites.Count;
+            Click("OpenConstruction");
+            Click("ExpansionPlotButton" + barracksSector);
+            Click("BuildBarracks");
+            var barracks = world.ExpansionSites[barracksSector];
+            Assert.AreEqual(ExpansionKind.Barracks, barracks.Kind);
+            Assert.IsNull(GameObject.Find("TrainGarrison"));
+            Click("CloseConstruction");
+            for (int i = 0; i < 85; i++) world.Step(.1f);
+            Click("OpenConstruction");
+            Assert.IsTrue(GameObject.Find("ExpansionPlotButton" + barracksSector).GetComponentInChildren<Text>().text.StartsWith("✓"),
+                "重新打开时记住玩家选中的地块");
+            Assert.IsFalse(barracks.HasGarrison);
+            int beforeTrainingScrap = world.Run.Scrap;
+            int beforeTrainingEnergy = world.Run.Energy;
+            Click("TrainGarrison");
+            Assert.AreEqual(beforeTrainingScrap - ExpansionSite.TrainingScrap, world.Run.Scrap);
+            Assert.AreEqual(beforeTrainingEnergy - ExpansionSite.TrainingEnergy, world.Run.Energy);
+            Assert.AreEqual(ExpansionSite.TrainingSeconds, barracks.TrainingLeft);
+            Assert.IsNull(GameObject.Find("TrainGarrison"));
+            for (int i = 0; i < 125; i++) world.Step(.1f);
+            yield return null;
+            Assert.IsTrue(barracks.HasGarrison);
+            var garrison = GameObject.Find("ExpansionSite" + barracksSector).transform.Find("Garrison").gameObject;
+            Assert.IsTrue(garrison.activeInHierarchy);
+            for (int i = 0; i < 40; i++)
+                world.Enemies.Add(new EnemyState { Position = barracks.Position * 1.05f, Health = 10000 });
+            for (int i = 0; i < 20; i++) world.Step(.1f);
+            yield return null;
+            Assert.AreEqual(ExpansionKind.Empty, barracks.Kind);
+            Assert.IsFalse(garrison.activeInHierarchy, "兵营被毁时移除已部署守军");
             yield return new ExitPlayMode();
         }
 

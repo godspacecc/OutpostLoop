@@ -15,6 +15,7 @@ namespace OutpostLoop.Tests
             foreach(int seed in new[]{732,733})
             {
                 var w=new WorldState(seed); int purchases=0;
+                int observedWave = 0;
                 for(int step=0;step<7201&&w.Run.Outcome==0;step++)
                 {
                     var s = w.Run;
@@ -34,8 +35,16 @@ namespace OutpostLoop.Tests
                         }
                         if (nearest >= 0) Assert.IsTrue(w.AssignResource(nearest));
                     }
-                    if (w.NextWaveSector >= 0 && w.NextWaveTime - s.Elapsed <= 8 && w.SquadSector != w.NextWaveSector)
-                        Assert.IsTrue(w.DeploySquad(w.NextWaveSector));
+                    if (w.Wave != observedWave && w.Enemies.Count > 0)
+                    {
+                        // 只读取已经进场的敌人，按主要方向反应调防。
+                        observedWave = w.Wave;
+                        var approach = Vector2.zero;
+                        foreach (var enemy in w.Enemies) approach += enemy.Position;
+                        int sector = Mathf.Abs(approach.x) >= Mathf.Abs(approach.y)
+                            ? (approach.x < 0 ? 0 : 1) : (approach.y > 0 ? 2 : 3);
+                        Assert.IsTrue(w.DeploySquad(sector));
+                    }
                     w.Step(.1f);
                 }
                 Debug.Log("BALANCE seed="+seed+" outcome="+w.Run.Outcome+" time="+w.Run.Elapsed+" hp="+w.Run.Health+" purchases="+purchases+" kills="+w.Kills);
