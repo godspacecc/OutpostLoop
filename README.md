@@ -61,7 +61,6 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 
 | 入口 | 功能 |
 |---|---|
-| `Tools > 打包 > 构建前检查` | 只读检查场景、收集配置、HybridCLR、平台模块与安装器依赖，并输出缺失项 |
 | `Tools > 打包 > PC` | 完整包、复用全部/复用 AOT 快速包、代码与资源热更新、重建内置资源、安装器 |
 | `Tools > 打包 > Android` | 完整包、宿主基线、首次下载资源启动包、两类快速包、代码与资源热更新 |
 | `Tools > 服务器 > PC / Android` | 生成、更新、启动独立资源服 |

@@ -635,7 +635,7 @@ namespace Game.Editor
             RequireDirectory("Assets/Game/Dlls");
         }
 
-        /// <summary>完整 APK 与只读预检共用横屏校验。</summary>
+        /// <summary>检查自动旋转是否仅允许左右横屏。</summary>
         internal static bool HasLandscapeOnlyOrientation() =>
             PlayerSettings.defaultInterfaceOrientation == UIOrientation.AutoRotation &&
             !PlayerSettings.allowedAutorotateToPortrait &&
