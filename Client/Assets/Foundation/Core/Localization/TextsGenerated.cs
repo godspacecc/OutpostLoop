@@ -24,6 +24,18 @@ namespace Game
         /// </summary>
         public static string Commonretry => Loc.T("CommonRetry");
         /// <summary>
+        /// 关闭
+        /// </summary>
+        public static string Constructionclose => Loc.T("ConstructionClose");
+        /// <summary>
+        /// 建造 [V]
+        /// </summary>
+        public static string Constructionopen => Loc.T("ConstructionOpen");
+        /// <summary>
+        /// 建造
+        /// </summary>
+        public static string Constructiontitle => Loc.T("ConstructionTitle");
+        /// <summary>
         /// 兵营
         /// </summary>
         public static string Expansionbarracks => Loc.T("ExpansionBarracks");
@@ -103,7 +115,7 @@ namespace Game
         public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);
         /// <summary>
         /// 点击场景或小地图资源点派工 · 滚轮缩放
-        /// 四向按钮调防 · B 升级 · ESC 暂停
+        /// 四向按钮调防 · V 建造 · B 升级 · ESC 暂停
         /// </summary>
         public static string Hudcontrols => Loc.T("HudControls");
         /// <summary>
@@ -165,7 +177,7 @@ namespace Game
         /// </summary>
         public static string Previewtext12 => Loc.T("PreviewText12");
         /// <summary>
-        /// 点击资源派工    四向按钮调防    B 升级    ESC 暂停
+        /// 点击资源派工    四向按钮调防    V 建造    B 升级    ESC 暂停
         /// </summary>
         public static string Previewtext13 => Loc.T("PreviewText13");
         /// <summary>
@@ -384,10 +396,6 @@ namespace Game
         /// ✓ {0}
         /// </summary>
         public static string Supplyselected(object arg0) => Loc.T("SupplySelected", arg0);
-        /// <summary>
-        /// 返回基地升级
-        /// </summary>
-        public static string Turretback => Loc.T("TurretBack");
         /// <summary>
         /// {0} · 建造
         /// 废料 {1} / 能源 {2}

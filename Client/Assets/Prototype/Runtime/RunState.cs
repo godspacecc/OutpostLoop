@@ -60,7 +60,7 @@ namespace OutpostLoop
             if (route == 2) Health = System.Math.Min(Config.InitialHealth + Levels[2] * Config.HealthPerLevel, Health + Config.UpgradeRepair);
             return true;
         }
-        /// <summary>原子扣除基地库存，供基地面板在暂停期间建造。</summary>
+        /// <summary>在调用方校验操作状态后，原子扣除两种基地库存。</summary>
         internal bool TrySpend(int scrap, int energy)
         {
             if (Outcome != 0 || scrap < 0 || energy < 0 || Scrap < scrap || Energy < energy) return false;

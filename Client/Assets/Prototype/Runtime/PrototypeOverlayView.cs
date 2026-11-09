@@ -100,17 +100,52 @@ namespace OutpostLoop
         }
     }
 
-    /// <summary>开始页与局内弹窗复用会话控制器，展示逻辑不修改玩法状态。</summary>
+    /// <summary>独立建造侧栏与指挥 HUD 同层，保持局时和地图输入可用。</summary>
+    public sealed class PrototypeConstructionCtrl : BaseUICtrl
+    {
+        private PrototypeController owner;
+        private PrototypeOverlayView view;
+
+        protected override string Path() => null;
+        public override UILayer Layer() => UILayer.HUD;
+        public override bool BlocksGame => false;
+        protected override BaseUI CreateView() => PrototypeOverlayView.Create("PrototypeConstruction");
+        protected override void OnInit() => view = (PrototypeOverlayView)BaseUI;
+        protected override void OnShow() { }
+        protected override void OnHide() { }
+        protected override void OnUnload() { owner = null; view = null; }
+
+        internal void Bind(PrototypeController controller, Font font)
+        {
+            if (view == null || owner == controller) return;
+            owner = controller;
+            view.BuildConstruction(font, controller);
+            view.GetComponent<SafeAreaFitter>().ApplyNow();
+        }
+
+        internal void Refresh(PrototypeController controller)
+        {
+            if (owner == controller && IsShow()) view.PresentConstruction(controller);
+        }
+
+        internal void Detach(PrototypeController controller)
+        {
+            if (owner == controller) Unload();
+        }
+    }
+
+    /// <summary>临时玩法窗口复用同一套视图工具，展示逻辑不修改玩法状态。</summary>
     internal sealed class PrototypeOverlayView : BaseUI
     {
         private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
-        private Text heading, details, actionLabel, feedback, startBriefing, turretEntry, turretHint, turretStock;
+        private Text heading, details, actionLabel, feedback, startBriefing, turretHint;
         private GameObject purchaseRows, turretRows;
         private readonly Text[] turretLabels = new Text[4];
         // 扩建面板先选方位，再显示该地块的产出预览或现有建筑状态。
         private GameObject expansionRows, expansionChoices;
-        private Text expansionEntry, expansionStock, expansionDetail;
+        private Text constructionStock, constructionFeedback, expansionDetail;
+        private Button expansionTab, turretTab;
         private readonly Text[] expansionPlots = new Text[4];
         private readonly Text[] expansionOptions = new Text[3];
         private static readonly ExpansionKind[] ExpansionOptions =
@@ -174,48 +209,66 @@ namespace OutpostLoop
                 routeLabels[index] = Button(purchaseRows.transform, font, "Purchase" + index, "", new Vector2(620,60),
                     new Vector2(0,102 - index * 70), new Vector2(.5f,.5f), () => controller.PurchaseUpgrade(route));
             }
-            turretEntry = Button(purchaseRows.transform, font, "OpenTurrets", "", new Vector2(300,54),
-                new Vector2(-160,-104), new Vector2(.5f,.5f), controller.OpenTurretPanel);
-            expansionEntry = Button(purchaseRows.transform, font, "OpenExpansion", "", new Vector2(300,54),
-                new Vector2(160,-104), new Vector2(.5f,.5f), controller.OpenExpansionPanel);
-            turretRows = Rect("TurretRows", panel, new Vector2(.5f,.5f), new Vector2(700,280), Vector2.zero).gameObject;
-            turretHint = Label(turretRows.transform, font, "TurretHint", new Vector2(700,52), new Vector2(0,115), 21);
-            turretStock = Label(turretRows.transform, font, "TurretStock", new Vector2(700,34), new Vector2(0,77), 22);
-            // 炮位按方位摆放，和场景中的四个位置对应。
-            var positions = new[] { new Vector2(-180,-26), new Vector2(180,-26), new Vector2(0,25), new Vector2(0,-77) };
-            for (int i = 0; i < turretLabels.Length; i++)
-            {
-                int slot = i;
-                turretLabels[i] = Button(turretRows.transform, font, "TurretSlot" + i, "", new Vector2(310,48),
-                    positions[i], new Vector2(.5f,.5f), () => controller.ActOnTurretSlot(slot));
-                turretLabels[i].fontSize = 18;
-            }
-            BuildExpansionRows(panel, font, controller);
             feedback = Label(panel, font, "Feedback", new Vector2(660,36), new Vector2(0,-145), 24);
             actionLabel = Button(panel, font, "PrimaryAction", "", new Vector2(450,68), new Vector2(0,-200),
                 new Vector2(.5f,.5f), controller.ActOnModal);
         }
 
-        /// <summary>用同一个暂停窗口展示四向地块和三种建筑选项。</summary>
+        /// <summary>建造侧栏直接挂在局内 HUD，地图和基地升级保持各自入口。</summary>
+        internal void BuildConstruction(Font font, PrototypeController controller)
+        {
+            var panel = Rect("ConstructionPanel", transform, new Vector2(1, .5f), new Vector2(512, 438), new Vector2(-286, -85));
+            panel.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .98f);
+            var title = Label(panel, font, "ConstructionTitle", new Vector2(270, 44), new Vector2(0, 187), 30);
+            var localizedTitle = title.gameObject.AddComponent<LocalizedText>();
+            localizedTitle.Key = "ConstructionTitle";
+            localizedTitle.Refresh();
+            var close = Button(panel, font, "CloseConstruction", Loc.T("ConstructionClose"), new Vector2(84, 34),
+                new Vector2(192, 187), new Vector2(.5f, .5f), controller.CloseConstruction);
+            close.fontSize = 18;
+            expansionTab = Button(panel, font, "ConstructionExpansionTab", Loc.T("ExpansionManage"), new Vector2(225, 39),
+                new Vector2(-119, 141), new Vector2(.5f, .5f), () => controller.SelectConstructionTab(ConstructionTab.Expansion))
+                .GetComponentInParent<Button>();
+            turretTab = Button(panel, font, "ConstructionTurretTab", Loc.T("TurretManage"), new Vector2(225, 39),
+                new Vector2(119, 141), new Vector2(.5f, .5f), () => controller.SelectConstructionTab(ConstructionTab.Turrets))
+                .GetComponentInParent<Button>();
+            expansionTab.GetComponentInChildren<Text>().fontSize = 21;
+            turretTab.GetComponentInChildren<Text>().fontSize = 21;
+            constructionStock = Label(panel, font, "ConstructionStock", new Vector2(480, 30), new Vector2(0, 106), 20);
+            constructionFeedback = Label(panel, font, "ConstructionFeedback", new Vector2(480, 30), new Vector2(0, -185), 19);
+            turretRows = Rect("TurretRows", panel, new Vector2(.5f,.5f), new Vector2(480,260), Vector2.zero).gameObject;
+            turretHint = Label(turretRows.transform, font, "TurretHint", new Vector2(480,44), new Vector2(0,71), 17);
+            // 炮位按方位摆放，和场景中的四个位置对应。
+            var positions = new[] { new Vector2(-118,-38), new Vector2(118,-38), new Vector2(0,15), new Vector2(0,-91) };
+            for (int i = 0; i < turretLabels.Length; i++)
+            {
+                int slot = i;
+                turretLabels[i] = Button(turretRows.transform, font, "TurretSlot" + i, "", new Vector2(218,48),
+                    positions[i], new Vector2(.5f,.5f), () => controller.ActOnTurretSlot(slot));
+                turretLabels[i].fontSize = 18;
+            }
+            BuildExpansionRows(panel, font, controller);
+        }
+
+        /// <summary>建造侧栏按方位显示四个地块，再列出可建项目。</summary>
         private void BuildExpansionRows(Transform panel, Font font, PrototypeController controller)
         {
-            expansionRows = Rect("ExpansionRows", panel, new Vector2(.5f, .5f), new Vector2(700, 350), Vector2.zero).gameObject;
-            expansionStock = Label(expansionRows.transform, font, "ExpansionStock", new Vector2(700, 28), new Vector2(0, 160), 21);
+            expansionRows = Rect("ExpansionRows", panel, new Vector2(.5f, .5f), new Vector2(480, 285), Vector2.zero).gameObject;
             for (int i = 0; i < expansionPlots.Length; i++)
             {
                 int sector = i;
-                expansionPlots[i] = Button(expansionRows.transform, font, "ExpansionPlotButton" + i, "", new Vector2(160, 50),
-                    new Vector2(-255 + 170 * i, 116), new Vector2(.5f, .5f), () => controller.SelectExpansionSite(sector));
-                expansionPlots[i].fontSize = 19;
+                expansionPlots[i] = Button(expansionRows.transform, font, "ExpansionPlotButton" + i, "", new Vector2(110, 40),
+                    new Vector2(-177 + 118 * i, 68), new Vector2(.5f, .5f), () => controller.SelectExpansionSite(sector));
+                expansionPlots[i].fontSize = 16;
             }
-            expansionDetail = Label(expansionRows.transform, font, "ExpansionDetail", new Vector2(700, 52), new Vector2(0, 62), 20);
-            expansionChoices = Rect("ExpansionChoices", expansionRows.transform, new Vector2(.5f, .5f), new Vector2(680, 170), Vector2.zero).gameObject;
+            expansionDetail = Label(expansionRows.transform, font, "ExpansionDetail", new Vector2(475, 48), new Vector2(0, 21), 18);
+            expansionChoices = Rect("ExpansionChoices", expansionRows.transform, new Vector2(.5f, .5f), new Vector2(475, 170), Vector2.zero).gameObject;
             for (int i = 0; i < expansionOptions.Length; i++)
             {
                 var kind = ExpansionOptions[i];
-                expansionOptions[i] = Button(expansionChoices.transform, font, "Build" + kind, "", new Vector2(650, 48),
-                    new Vector2(0, 8 - i * 54), new Vector2(.5f, .5f), () => controller.PurchaseExpansion(kind));
-                expansionOptions[i].fontSize = 18;
+                expansionOptions[i] = Button(expansionChoices.transform, font, "Build" + kind, "", new Vector2(468, 46),
+                    new Vector2(0, -28 - i * 51), new Vector2(.5f, .5f), () => controller.PurchaseExpansion(kind));
+                expansionOptions[i].fontSize = 17;
             }
         }
 
@@ -226,6 +279,8 @@ namespace OutpostLoop
                 new Vector2(-106,172), new Vector2(1,0), controller.PauseFromHud);
             Button(transform, font, "OpenUpgrade", Loc.T("PreviewText14"), new Vector2(300,64),
                 new Vector2(-180,62), new Vector2(1,0), controller.ToggleUpgrade);
+            Button(transform, font, "OpenConstruction", Loc.T("ConstructionOpen"), new Vector2(240,64),
+                new Vector2(-460,62), new Vector2(1,0), controller.ToggleConstruction);
             var guideSize = new Vector2(652, 80);
             var guide = Rect("CommandGuide", transform, Vector2.zero, guideSize, new Vector2(348, 62));
             guide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
@@ -276,11 +331,7 @@ namespace OutpostLoop
 
             var run = controller.World.Run;
             bool upgrading = mode == PrototypeOverlay.Upgrade;
-            bool managingTurrets = upgrading && controller.BasePanel == PrototypeBasePanel.Turrets;
-            bool managingExpansion = upgrading && controller.BasePanel == PrototypeBasePanel.Expansion;
-            purchaseRows.SetActive(upgrading && controller.BasePanel == PrototypeBasePanel.Upgrades);
-            turretRows.SetActive(managingTurrets);
-            expansionRows.SetActive(managingExpansion);
+            purchaseRows.SetActive(upgrading);
             feedback.gameObject.SetActive(upgrading);
             details.gameObject.SetActive(!upgrading);
             switch (mode)
@@ -291,21 +342,9 @@ namespace OutpostLoop
                     SetText(actionLabel, Loc.T("PreviewText2"));
                     break;
                 case PrototypeOverlay.Upgrade:
-                    SetText(feedback, controller.UpgradeFeedback);
-                    if (managingTurrets)
-                    {
-                        PresentTurrets(controller);
-                        break;
-                    }
-                    if (managingExpansion)
-                    {
-                        PresentExpansion(controller);
-                        break;
-                    }
+                    SetText(feedback, controller.ActionFeedback);
                     SetText(heading, Loc.T("PreviewText3"));
                     SetText(actionLabel, Loc.T("PreviewText4"));
-                    SetText(turretEntry, Loc.T("TurretManage"));
-                    SetText(expansionEntry, Loc.T("ExpansionManage"));
                     for (int i = 0; i < Routes.Length; i++)
                     {
                         var cost = run.Levels[i] >= run.Config.MaxLevel ? Loc.T("PreviewText5") : Loc.T("PreviewCost", run.ScrapCost(i), run.EnergyCost(i));
@@ -331,16 +370,27 @@ namespace OutpostLoop
             return selected ? Loc.T("SupplySelected", label) : label;
         }
 
+        /// <summary>持续显示实时库存和建筑状态，不冻结战斗或采运。</summary>
+        internal void PresentConstruction(PrototypeController controller)
+        {
+            var run = controller.World.Run;
+            bool turrets = controller.BuildTab == ConstructionTab.Turrets;
+            expansionTab.interactable = turrets;
+            turretTab.interactable = !turrets;
+            turretRows.SetActive(turrets);
+            expansionRows.SetActive(!turrets);
+            SetText(constructionStock, Loc.T("HudStock", run.Scrap, run.Energy));
+            SetText(constructionFeedback, controller.ActionFeedback);
+            if (turrets) PresentTurrets(controller);
+            else PresentExpansion(controller);
+        }
+
         /// <summary>按炮位占用和选择状态刷新建造或迁移文案。</summary>
         private void PresentTurrets(PrototypeController controller)
         {
             var world = controller.World;
-            var run = world.Run;
             bool moving = controller.SelectedTurretSlot >= 0;
-            SetText(heading, Loc.T("TurretManage"));
-            SetText(actionLabel, Loc.T("TurretBack"));
             SetText(turretHint, Loc.T(moving ? "TurretChooseEmpty" : "TurretInstructions"));
-            SetText(turretStock, Loc.T("HudStock", run.Scrap, run.Energy));
             for (int i = 0; i < turretLabels.Length; i++)
             {
                 var key = world.Turrets[i].Occupied
@@ -357,9 +407,6 @@ namespace OutpostLoop
             int selected = controller.SelectedExpansionSite;
             var site = world.ExpansionSites[selected];
             bool vacant = site.Kind == ExpansionKind.Empty;
-            SetText(heading, Loc.T("ExpansionManage"));
-            SetText(actionLabel, Loc.T("TurretBack"));
-            SetText(expansionStock, Loc.T("HudStock", world.Run.Scrap, world.Run.Energy));
             for (int i = 0; i < expansionPlots.Length; i++)
             {
                 string name = Loc.T(ExpansionNames[(int)world.ExpansionSites[i].Kind]);

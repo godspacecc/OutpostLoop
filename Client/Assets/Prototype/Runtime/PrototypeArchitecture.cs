@@ -91,7 +91,7 @@ namespace OutpostLoop
         public bool BuildTurret(int slot) => model.World?.BuildTurret(slot) == true;
         public bool MoveTurret(int source, int destination) => model.World?.MoveTurret(source, destination) == true;
 
-        /// <summary>开局后才接受扩建，面板暂停期间可预先安排建设。</summary>
+        /// <summary>将外围建设订单转发给运行中的本局规则。</summary>
         public bool BuildExpansion(int sector, ExpansionKind kind) =>
             !awaitingStart && model.World?.BuildExpansion(sector, kind) == true;
     }

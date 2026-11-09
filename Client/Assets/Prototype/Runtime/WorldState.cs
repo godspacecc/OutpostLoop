@@ -124,7 +124,7 @@ namespace OutpostLoop
         /// <summary>从指挥视图建造，先校验炮位与库存，再一次性扣费。</summary>
         public bool BuildTurret(int index)
         {
-            if (!IsValidSlot(index) || Turrets[index].Occupied ||
+            if (Run.Paused || !IsValidSlot(index) || Turrets[index].Occupied ||
                 !Run.TrySpend(TurretScrapCost, TurretEnergyCost)) return false;
             Turrets[index].Occupied = true;
             return true;
@@ -133,7 +133,7 @@ namespace OutpostLoop
         /// <summary>免费迁入空位，保留开火冷却，清掉旧炮位的射线。</summary>
         public bool MoveTurret(int source, int destination)
         {
-            if (Run.Outcome != 0 || !IsValidSlot(source) || !IsValidSlot(destination)) return false;
+            if (Run.Paused || Run.Outcome != 0 || !IsValidSlot(source) || !IsValidSlot(destination)) return false;
             var from = Turrets[source];
             var to = Turrets[destination];
             if (!from.Occupied || to.Occupied) return false;
@@ -169,7 +169,7 @@ namespace OutpostLoop
         public bool BuildExpansion(int sector, ExpansionKind kind)
         {
             var spec = ExpansionSite.SpecFor(kind);
-            if (!IsValidSlot(sector) || spec.Health == 0 || ExpansionSites[sector].Kind != ExpansionKind.Empty) return false;
+            if (Run.Paused || !IsValidSlot(sector) || spec.Health == 0 || ExpansionSites[sector].Kind != ExpansionKind.Empty) return false;
             int node = kind == ExpansionKind.Extractor ? FindExpansionResource(sector) : -1;
             if ((kind == ExpansionKind.Extractor && node < 0) || !Run.TrySpend(spec.Scrap, spec.Energy)) return false;
             ExpansionSites[sector].Build(kind, spec, node);

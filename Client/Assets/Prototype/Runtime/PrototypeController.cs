@@ -7,8 +7,8 @@ namespace OutpostLoop
 {
     /// <summary>临时玩法界面从当前会话推导的显示状态。</summary>
     internal enum PrototypeOverlay { None, Start, Paused, Upgrade, Result }
-    /// <summary>基地暂停窗口中的互斥子面板。</summary>
-    internal enum PrototypeBasePanel { Upgrades, Turrets, Expansion }
+    /// <summary>独立建造面板的显示状态。</summary>
+    internal enum ConstructionTab { Closed, Expansion, Turrets }
 
     /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
     public sealed class PrototypeController : MonoBehaviour
@@ -41,8 +41,8 @@ namespace OutpostLoop
         internal string SupplyError { get; private set; }
         internal int SupplyCoins => session.SupplyCoins;
         internal bool VictoryRewardRecorded => session.VictoryRewardRecorded;
-        // 炮位面板的选中状态与本局炮塔所有权分离。
-        internal PrototypeBasePanel BasePanel { get; private set; }
+        // 面板选中状态与本局建筑所有权分离。
+        internal ConstructionTab BuildTab { get; private set; }
         internal int SelectedTurretSlot { get; private set; } = -1;
         internal int SelectedExpansionSite { get; private set; }
         private int seed = 731;
@@ -52,6 +52,7 @@ namespace OutpostLoop
         // 主场景窗口随基础会话清理；临时截图工具仍可仅初始化世界。
         private PrototypeModalCtrl modal;
         private PrototypeHudCtrl hud;
+        private PrototypeConstructionCtrl construction;
         // 权威规则由架构系统持有，视图只转发输入及读取快照。
         private PrototypeSystem session;
         private string startupError;
@@ -96,6 +97,7 @@ namespace OutpostLoop
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Hide();
             hud?.Hide();
+            CloseConstruction();
             session?.SetPaused(true);
         }
 
@@ -168,7 +170,7 @@ namespace OutpostLoop
             turretModels.Clear();
             turretShots.Clear();
             expansionModels.Clear();
-            ResetBasePanel();
+            CloseConstruction();
             WantScrapPack = WantEnergyPack = false;
             SupplyError = null;
             mapView = DefaultMapView;
@@ -313,8 +315,13 @@ namespace OutpostLoop
         private void PollInputAndPresent()
         {
             if(!initialized)return;
-            if (UtilityWindowOpen) return;
+            if (UtilityWindowOpen)
+            {
+                CloseConstruction();
+                return;
+            }
             if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
+            if (Input.GetKeyDown(KeyCode.V)) ToggleConstruction();
             if (Overlay == PrototypeOverlay.None && EventSystem.current?.IsPointerOverGameObject() != true)
             {
                 if (Input.GetMouseButtonDown(0)) OrderResourceAt(Input.mousePosition);
@@ -364,6 +371,7 @@ namespace OutpostLoop
             if (shop || World.Run.Paused) ActOnModal();
             else
             {
+                CloseConstruction();
                 session.SetPaused(true);
                 RefreshOverlay();
             }
@@ -373,15 +381,15 @@ namespace OutpostLoop
             World.Run.Outcome != 0 ? PrototypeOverlay.Result :
             shop ? PrototypeOverlay.Upgrade : World.Run.Paused ? PrototypeOverlay.Paused : PrototypeOverlay.None;
 
-        internal string UpgradeFeedback => Time.realtimeSinceStartup < feedbackUntil ? feedback : "";
+        internal string ActionFeedback => Time.realtimeSinceStartup < feedbackUntil ? feedback : "";
 
         /// <summary>键盘与临时按钮共用同一个基地入口，购买权限仍由玩法系统判断。</summary>
         internal void ToggleUpgrade()
         {
             if (UtilityWindowOpen) return;
             if (!initialized || (Overlay != PrototypeOverlay.None && Overlay != PrototypeOverlay.Upgrade)) return;
+            CloseConstruction();
             shop = !shop;
-            ResetBasePanel();
             feedback = "";
             session.SetPaused(shop);
             RefreshOverlay();
@@ -404,12 +412,6 @@ namespace OutpostLoop
                     break;
                 case PrototypeOverlay.Paused:
                 case PrototypeOverlay.Upgrade:
-                    if (BasePanel != PrototypeBasePanel.Upgrades)
-                    {
-                        ResetBasePanel();
-                        feedback = "";
-                        break;
-                    }
                     shop = false;
                     session.SetPaused(false);
                     break;
@@ -442,17 +444,35 @@ namespace OutpostLoop
         internal void PurchaseUpgrade(int route)
         {
             if (UtilityWindowOpen) return;
-            if (!initialized || BasePanel != PrototypeBasePanel.Upgrades || Overlay != PrototypeOverlay.Upgrade) return;
+            if (!initialized || Overlay != PrototypeOverlay.Upgrade) return;
             feedback = session.Purchase(route) ? Game.Loc.T("PreviewText18") : Game.Loc.T("PreviewText19");
             feedbackUntil = Time.realtimeSinceStartup + 2;
             RefreshOverlay();
         }
 
-        /// <summary>打开炮位管理，保持基地面板的暂停状态。</summary>
-        internal void OpenTurretPanel()
+        /// <summary>建造入口与暂停升级独立，打开时默认选中预告的进攻方位。</summary>
+        internal void ToggleConstruction()
         {
-            if (UtilityWindowOpen || !initialized || Overlay != PrototypeOverlay.Upgrade) return;
-            BasePanel = PrototypeBasePanel.Turrets;
+            if (!CanBuild) return;
+            if (BuildTab != ConstructionTab.Closed)
+            {
+                CloseConstruction();
+                return;
+            }
+            BuildTab = ConstructionTab.Expansion;
+            SelectedExpansionSite = Mathf.Max(0, World.NextWaveSector);
+            feedback = "";
+            RefreshOverlay();
+        }
+
+        private bool CanBuild => initialized && Overlay == PrototypeOverlay.None && !UtilityWindowOpen;
+
+        /// <summary>在建造面板内切换设施和炮位，取消上一个炮位的迁移选中。</summary>
+        internal void SelectConstructionTab(ConstructionTab tab)
+        {
+            if (!CanBuild || BuildTab == ConstructionTab.Closed || BuildTab == tab) return;
+            BuildTab = tab;
+            SelectedTurretSlot = -1;
             feedback = "";
             RefreshOverlay();
         }
@@ -460,7 +480,7 @@ namespace OutpostLoop
         /// <summary>点已有炮塔选作迁移来源，点空位时迁移或建造。</summary>
         internal void ActOnTurretSlot(int index)
         {
-            if (UtilityWindowOpen || BasePanel != PrototypeBasePanel.Turrets || Overlay != PrototypeOverlay.Upgrade) return;
+            if (!CanBuild || BuildTab != ConstructionTab.Turrets) return;
             if (index < 0 || index >= World.Turrets.Count) return;
             if (World.Turrets[index].Occupied)
             {
@@ -482,19 +502,10 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        /// <summary>打开扩建面板时默认选中预告的进攻方位，仍可直接切换地块。</summary>
-        internal void OpenExpansionPanel()
-        {
-            if (UtilityWindowOpen || !initialized || Overlay != PrototypeOverlay.Upgrade) return;
-            BasePanel = PrototypeBasePanel.Expansion;
-            SelectedExpansionSite = Mathf.Max(0, World.NextWaveSector);
-            feedback = "";
-            RefreshOverlay();
-        }
-
+        /// <summary>选中一块外围地块，继续显示它的可建项目或建筑状态。</summary>
         internal void SelectExpansionSite(int sector)
         {
-            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Upgrade || BasePanel != PrototypeBasePanel.Expansion ||
+            if (!CanBuild || BuildTab != ConstructionTab.Expansion ||
                 sector < 0 || sector >= World.ExpansionSites.Count) return;
             SelectedExpansionSite = sector;
             feedback = "";
@@ -504,7 +515,7 @@ namespace OutpostLoop
         /// <summary>将选中地块和建筑类型交给规则层扣费，成功后立即刷新模型。</summary>
         internal void PurchaseExpansion(ExpansionKind kind)
         {
-            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Upgrade || BasePanel != PrototypeBasePanel.Expansion) return;
+            if (!CanBuild || BuildTab != ConstructionTab.Expansion) return;
             bool built = session.BuildExpansion(SelectedExpansionSite, kind);
             feedback = Game.Loc.T(built ? "ExpansionBuilt" : "ExpansionUnavailable");
             feedbackUntil = Time.realtimeSinceStartup + 2;
@@ -512,11 +523,14 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        private void ResetBasePanel()
+        /// <summary>关闭建造时丢弃界面中的临时选择。</summary>
+        internal void CloseConstruction()
         {
-            BasePanel = PrototypeBasePanel.Upgrades;
+            if (BuildTab == ConstructionTab.Closed) return;
+            BuildTab = ConstructionTab.Closed;
             SelectedTurretSlot = -1;
-            SelectedExpansionSite = 0;
+            feedback = "";
+            construction?.Hide();
         }
 
         /// <summary>仅在基础会话就绪时显示窗口，退出后不重新生成 UI。</summary>
@@ -526,6 +540,7 @@ namespace OutpostLoop
             var mode = Overlay;
             if (mode != PrototypeOverlay.None)
             {
+                CloseConstruction();
                 if (modal?.IsShow() != true) modal = Game.UIHelper.ShowUI<PrototypeModalCtrl>();
                 modal.Bind(this, font);
                 modal.Refresh(this);
@@ -537,6 +552,12 @@ namespace OutpostLoop
                 if (hud?.IsShow() != true) hud = Game.UIHelper.ShowUI<PrototypeHudCtrl>();
                 hud.Bind(this, font);
                 hud.Refresh(World.SquadSector);
+                if (BuildTab != ConstructionTab.Closed)
+                {
+                    if (construction?.IsShow() != true) construction = Game.UIHelper.ShowUI<PrototypeConstructionCtrl>();
+                    construction.Bind(this, font);
+                    construction.Refresh(this);
+                }
             }
             else hud?.Hide();
         }
@@ -694,6 +715,7 @@ namespace OutpostLoop
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Detach(this);
             hud?.Detach(this);
+            construction?.Detach(this);
             foreach(var material in materials)Release(material);
             if(font!=null)Release(font);
         }

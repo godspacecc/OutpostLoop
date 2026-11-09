@@ -19,7 +19,10 @@ namespace OutpostLoop.Tests
             Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Empty));
             Assert.AreEqual(20, world.Run.Scrap);
             world.Run.Paused = true;
-            Assert.IsTrue(world.BuildExpansion(0, ExpansionKind.Barricade), "暂停的建设面板应能下单");
+            Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Barricade), "真正暂停期间不接受建造");
+            Assert.AreEqual(20, world.Run.Scrap);
+            world.Run.Paused = false;
+            Assert.IsTrue(world.BuildExpansion(0, ExpansionKind.Barricade));
             Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Extractor));
             Assert.AreEqual(20 - ExpansionSite.SpecFor(ExpansionKind.Barricade).Scrap, world.Run.Scrap);
         }

@@ -115,12 +115,15 @@ namespace OutpostLoop.Tests
             Click("OpenUpgrade");
             Assert.IsTrue(run.Paused);
             Assert.IsNull(GameObject.Find("OpenPause"), "升级窗口应隐藏暂停入口");
+            Assert.IsNull(GameObject.Find("OpenConstruction"), "建造入口只在局内 HUD 显示");
             Click("Purchase1");
             Assert.AreEqual(1, run.Levels[1]);
             Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
             Click("Purchase1");
             Assert.AreEqual(1, run.Levels[1], "资源不足时按钮不能改变升级等级");
-            Click("OpenTurrets");
+            Click("PrimaryAction");
+            Click("OpenConstruction");
+            Click("ConstructionTurretTab");
             Click("TurretSlot0");
             Click("TurretSlot2");
             Assert.IsNull(GameObject.Find("Turret0"), "迁出后原炮位应为空");
@@ -128,8 +131,7 @@ namespace OutpostLoop.Tests
             Click("TurretSlot3");
             Assert.IsNull(GameObject.Find("Turret3"), "库存不足时不能建造");
             Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
-            Click("PrimaryAction");
-            Click("PrimaryAction");
+            Click("CloseConstruction");
             Assert.IsFalse(run.Paused);
 
             int scrap = run.Config.ScrapCostBase * 2 - run.Scrap;
@@ -141,14 +143,13 @@ namespace OutpostLoop.Tests
             }
             run.Deposit();
             yield return null;
-            Click("OpenUpgrade");
-            Click("OpenTurrets");
+            Click("OpenConstruction");
+            Click("ConstructionTurretTab");
             Click("TurretSlot3");
             Assert.IsNotNull(GameObject.Find("Turret3"), "有足够库存时应在空炮位建造");
             Assert.AreEqual(0, run.Scrap);
             Assert.AreEqual(0, run.Energy);
-            Click("PrimaryAction");
-            Click("PrimaryAction");
+            Click("CloseConstruction");
 
             Assert.IsFalse(run.Paused);
             run.Damage(run.Health);
@@ -203,8 +204,9 @@ namespace OutpostLoop.Tests
             int sector = 0;
             while (sector < world.ExpansionSites.Count && world.FindExpansionResource(sector) < 0) sector++;
             Assert.Less(sector, world.ExpansionSites.Count);
-            Click("OpenUpgrade");
-            Click("OpenExpansion");
+            Click("OpenConstruction");
+            Assert.IsFalse(world.Run.Paused, "建造侧栏应保持战斗实时推进");
+            Assert.IsFalse(Game.UIHelper.HasUIOpen, "建造不应登记为阻断玩法的窗口");
             Click("ExpansionPlotButton" + sector);
             Click("BuildExtractor");
             var site = world.ExpansionSites[sector];
@@ -214,13 +216,17 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(model.activeInHierarchy);
             var source = world.Nodes[site.NodeIndex];
             int beforeRemaining = source.Remaining;
-            world.Step(.1f);
-            Assert.AreEqual(beforeRemaining, source.Remaining, "扩建界面暂停生产");
-            Click("PrimaryAction");
-            Click("PrimaryAction");
+            var elapsed = world.Run.Elapsed;
+            for (int i = 0; i < 5; i++) yield return null;
+            Assert.Greater(world.Run.Elapsed, elapsed, "真实生命周期应在面板打开时推进");
             for (int i = 0; i < 30; i++) world.Step(.1f);
             Assert.Less(source.Remaining, beforeRemaining);
             Assert.Greater(world.Run.Scrap + world.Run.Energy, before - spec.Scrap);
+            Assert.IsNotNull(GameObject.Find("ConstructionPanel"));
+            Click("OpenUpgrade");
+            Assert.IsNull(GameObject.Find("ConstructionPanel"), "打开基地升级应关闭独立建造面板");
+            Assert.IsTrue(world.Run.Paused);
+            Click("PrimaryAction");
             yield return new ExitPlayMode();
         }
 
