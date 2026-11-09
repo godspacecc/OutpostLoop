@@ -2,14 +2,10 @@
   "name": "OutpostLoop.Project.Editor",
   "references": [
     "Game",
-    "OutpostLoop.Resources.Editor",
     "Unity.ugui",
     "Unity.InputSystem",
     "Boot",
-    "UniTask",
-    "YooAsset",
-    "YooAsset.Editor",
-    "HybridCLR.Editor"
+    "UniTask"
   ],
   "includePlatforms": [
     "Editor"

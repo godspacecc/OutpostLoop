@@ -1,84 +1,18 @@
 using System;
-using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.EventSystems;
-using UnityEngine.InputSystem.UI;
-using YooAsset.Editor;
 using Boot;
 using Boot.UI;
 namespace OutpostLoop.Editor
 {
-    /// <summary>创建独立启动界面并拆分场景；不构建、不发布、不导入旧视觉。</summary>
+    /// <summary>维护现有 Boot 场景的启动界面。</summary>
     public static class BootMainSceneSetup
     {
-        /// <summary>宿主场景路径，唯一随 Player 打包的入口。</summary>
-        public const string BootPath="Assets/Game/Scenes/Boot.unity";
-        /// <summary>主场景路径，以 Scenes/Main 地址加入资源包。</summary>
-        public const string MainPath="Assets/Game/Scenes/Main.unity";
-        [MenuItem("Tools/开发/初始化Boot与Main")]
-        /// <summary>生成启动场景并配置独立主场景；不会执行构建。</summary>
-        public static void Prepare()
-        {
-            if(EditorApplication.isPlaying)throw new InvalidOperationException("请先退出Play。");
-            for(int i=0;i<UnityEngine.SceneManagement.SceneManager.sceneCount;i++)
-                if(UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).isDirty)throw new InvalidOperationException("场景有未保存修改，请先保存后再拆分。");
-            Directory.CreateDirectory("Assets/Game/Scenes");Directory.CreateDirectory("Assets/Game/Dlls");Directory.CreateDirectory("Assets/StreamingAssets");AssetDatabase.Refresh();
-            if(!File.Exists(MainPath))
-            {
-                var error=AssetDatabase.MoveAsset("Assets/Prototype/Scenes/Boot.unity",MainPath);
-                if(!string.IsNullOrEmpty(error))throw new InvalidOperationException(error);
-            }
-            var main=EditorSceneManager.OpenScene(MainPath);
-            foreach(var loop in UnityEngine.Object.FindObjectsOfType<Game.FoundationLoop>())UnityEngine.Object.DestroyImmediate(loop);
-            // 基础根独立于玩法入口，重载 Main 时由既有实例继续驱动。
-            var foundation=GameObject.Find("FoundationRoot")??new GameObject("FoundationRoot");
-            var driver=foundation.AddComponent<Game.FoundationLoop>();SetBool(driver,"persistAcrossScenes",true);
-            var prototype = UnityEngine.Object.FindObjectOfType<PrototypeController>();
-            Set(prototype,"previewShader",Shader.Find("Standard"));
-            Set(prototype,"startArtwork",AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Game/Art/Start/OutpostConcept.png"));
-            EditorSceneManager.SaveScene(main);
-            var boot=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
-            EnsureBootEnvironment(boot);
-            var canvasObject=new GameObject("BootCanvas",typeof(RectTransform));
-            canvasObject.SetActive(false);
-            var canvas=canvasObject.AddComponent<Canvas>();
-            canvas.renderMode=RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder=1000;
-            canvasObject.AddComponent<CanvasScaler>();
-            canvasObject.AddComponent<GraphicRaycaster>();
-            canvasObject.AddComponent<TemporaryBootFont>();
-            var entry=new GameObject("BootEntry");
-            entry.SetActive(false);
-            var launcher=entry.AddComponent<Launcher>();
-            BuildBootVisual(canvas, launcher);
-            // Boot 输入根跟随 Boot 场景卸载，避免进入 Main 后出现两个事件系统。
-            new GameObject("BootEventSystem",typeof(EventSystem),typeof(InputSystemUIInputModule));
-            canvasObject.SetActive(true);entry.SetActive(true);
-            // Canvas 首次激活会重置原生排序标记，激活后再持久化覆盖设置。
-            SetBool(canvas,"m_OverrideSorting",true);
-            EditorSceneManager.SaveScene(boot,BootPath);EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(BootPath,true)};
-            PlayerSettings.companyName="Godspace";PlayerSettings.productName="OutpostLoop";
-            // 参考构建链使用本机 HTTP 资源服，正式 Windows 包同样需要允许该传输。
-            PlayerSettings.insecureHttpOption=InsecureHttpOption.AlwaysAllowed;
-            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android,"com.godspace.outpostloop");PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone,"com.godspace.outpostloop");
-            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone,ScriptingImplementation.IL2CPP);PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android,ScriptingImplementation.IL2CPP);
-            // 与完整 Android APK 的目标平台和横屏约束保持一致。
-            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
-            PlayerSettings.allowedAutorotateToPortrait = false;
-            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
-            PlayerSettings.allowedAutorotateToLandscapeLeft = true;
-            PlayerSettings.allowedAutorotateToLandscapeRight = true;
-            var hybrid=HybridCLR.Editor.Settings.HybridCLRSettings.Instance;hybrid.hotUpdateAssemblyDefinitions=new[]{AssetDatabase.LoadAssetAtPath<UnityEditorInternal.AssemblyDefinitionAsset>("Assets/Game/Game.asmdef")};HybridCLR.Editor.Settings.HybridCLRSettings.Save();
-            var host="Assets/StreamingAssets/hostConfig.json";if(!File.Exists(host))File.WriteAllText(host,"{\"resourceServer\":\"http://127.0.0.1:8000\"}");
-            File.WriteAllText("Assets/Game/Dlls/.gitkeep",string.Empty);
-            EnsureCollectors();AssetDatabase.SaveAssets();AssetDatabase.Refresh();
-            Debug.Log("Boot/Main 已拆分并生成启动界面。");
-        }
+        /// <summary>现有宿主场景路径。</summary>
+        public const string BootPath = "Assets/Game/Scenes/Boot.unity";
 
         /// <summary>在现有 Boot 场景内重新生成界面，沿用已保存的 Launcher、Canvas 和输入组件。</summary>
         public static void RefreshBootVisual()
@@ -233,22 +167,6 @@ namespace OutpostLoop.Editor
         {
             component.gameObject.SetActive(false);
             return component;
-        }
-        /// <summary>收集Main、配置与代码；Boot留在Player宿主，不打入热更包。</summary>
-        public static void EnsureCollectors()
-        {
-            Resources.Editor.ResourceSourceAudit.EnsureSettings();
-            var setting=AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>("Assets/AssetBundleCollectorSetting.asset");var package=setting.Packages.Single(p=>p.PackageName=="OutpostLoop");
-            AddGroup(package,"Main","Assets/Game/Scenes/Main.unity","AddressByGameRelativePathNoExtension","startup");
-            AddGroup(package,"Code","Assets/Game/Dlls","AddressByFileNameWithExtension","startup");
-            EditorUtility.SetDirty(setting);AssetDatabase.SaveAssets();
-        }
-        /// <summary>按组名幂等补齐资源收集声明。</summary>
-        private static void AddGroup(AssetBundleCollectorPackage package,string name,string path,string rule,string tag)
-        {
-            if(package.Groups.Any(g=>g.GroupName==name))return;
-            var group=new AssetBundleCollectorGroup{GroupName=name,ActiveRuleName="EnableGroup",AssetTags=tag};
-            group.Collectors.Add(new AssetBundleCollector{CollectPath=path,CollectorGUID=AssetDatabase.AssetPathToGUID(path),CollectorType=ECollectorType.MainAssetCollector,AddressRuleName=rule,PackRuleName="PackSeparately",FilterRuleName="CollectAll"});package.Groups.Add(group);
         }
         /// <summary>建立铺满父节点的临时 UI 容器。</summary>
         private static GameObject Child(GameObject parent,string name){var go=new GameObject(name,typeof(RectTransform));go.transform.SetParent(parent.transform,false);var r=(RectTransform)go.transform;r.anchorMin=Vector2.zero;r.anchorMax=Vector2.one;r.offsetMin=r.offsetMax=Vector2.zero;return go;}

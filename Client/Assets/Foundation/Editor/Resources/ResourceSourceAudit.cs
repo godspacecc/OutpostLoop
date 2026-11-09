@@ -37,7 +37,6 @@ namespace OutpostLoop.Resources.Editor
     {
         public const string SettingPath = "Assets/AssetBundleCollectorSetting.asset";
         /// <summary>只创建本项目设置；遇到已有外来包拒绝覆盖。</summary>
-        [MenuItem("Tools/资源/初始化收集设置")]
         public static void EnsureSettings()
         {
             var setting = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(SettingPath);
@@ -74,12 +73,20 @@ namespace OutpostLoop.Resources.Editor
             group.Collectors.Add(new AssetBundleCollector{CollectPath="Assets/Game/Audio",CollectorGUID=AssetDatabase.AssetPathToGUID("Assets/Game/Audio"),CollectorType=ECollectorType.MainAssetCollector,AddressRuleName=nameof(OutpostAudioAddress),PackRuleName="PackSeparately",FilterRuleName=nameof(OutpostAudioFilter)});
             package.Groups.Add(group); EditorUtility.SetDirty(setting); AssetDatabase.SaveAssets();
         }
-        /// <summary>调用正式收集器，仅查询源结果，不执行任何构建。</summary>
+        /// <summary>使用现有配置查询源收集结果，不写入配置或执行构建。</summary>
         [MenuItem("Tools/诊断/检查资源源收集")]
         public static void Audit()
         {
-            EnsureSettings();
             var setting = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(SettingPath);
+            if (setting == null)
+                throw new InvalidOperationException($"缺少资源收集设置：{SettingPath}");
+            if (setting.Packages.Count != 1 || setting.Packages[0].PackageName != ResourcePackageRuntime.PackageName)
+                throw new InvalidOperationException("资源收集设置必须只包含本项目资源包。");
+
+            var groups = setting.Packages[0].Groups;
+            if (!groups.Any(group => group.GroupName == "UI") || !groups.Any(group => group.GroupName == "Audio"))
+                throw new InvalidOperationException("资源收集设置缺少 UI 或 Audio 收集组。");
+
             var result = setting.BeginCollect(ResourcePackageRuntime.PackageName, true, false);
             var config = result.CollectAssets.Single(x => x.Address == "tbrule.bytes");
             if (config.AssetInfo.AssetPath != "Assets/Game/Config/tbrule.bytes" || !config.AssetTags.Contains("startup")) throw new InvalidOperationException("配置地址或启动标签不匹配。");
