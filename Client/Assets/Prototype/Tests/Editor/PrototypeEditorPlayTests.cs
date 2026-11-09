@@ -183,6 +183,47 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
+        /// <summary>真实 Boot 启动后，用工人取得首笔库存，通过按钮建站并验证自动入库。</summary>
+        [UnityTest]
+        public IEnumerator BootExpansionButtonsBuildExtractorFromWorkerStock()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var world = controller.World;
+            Click("PrimaryAction");
+            var node = world.Nodes[1];
+            var camera = controller.GetComponentInChildren<Camera>();
+            Assert.IsTrue(controller.OrderResourceAt(camera.WorldToScreenPoint(new Vector3(node.Position.x, .6f, node.Position.y))));
+            for (int i = 0; i < 400 && world.Run.Scrap == 0; i++) world.Step(.1f);
+            int before = world.Run.Scrap;
+            var spec = ExpansionSite.SpecFor(ExpansionKind.Extractor);
+            Assert.GreaterOrEqual(before, spec.Scrap);
+            int sector = 0;
+            while (sector < world.ExpansionSites.Count && world.FindExpansionResource(sector) < 0) sector++;
+            Assert.Less(sector, world.ExpansionSites.Count);
+            Click("OpenUpgrade");
+            Click("OpenExpansion");
+            Click("ExpansionPlotButton" + sector);
+            Click("BuildExtractor");
+            var site = world.ExpansionSites[sector];
+            Assert.AreEqual(ExpansionKind.Extractor, site.Kind);
+            Assert.AreEqual(before - spec.Scrap, world.Run.Scrap);
+            var model = GameObject.Find("ExpansionSite" + sector).transform.Find("Extractor").gameObject;
+            Assert.IsTrue(model.activeInHierarchy);
+            var source = world.Nodes[site.NodeIndex];
+            int beforeRemaining = source.Remaining;
+            world.Step(.1f);
+            Assert.AreEqual(beforeRemaining, source.Remaining, "扩建界面暂停生产");
+            Click("PrimaryAction");
+            Click("PrimaryAction");
+            for (int i = 0; i < 30; i++) world.Step(.1f);
+            Assert.Less(source.Remaining, beforeRemaining);
+            Assert.Greater(world.Run.Scrap + world.Run.Energy, before - spec.Scrap);
+            yield return new ExitPlayMode();
+        }
+
         /// <summary>通过活动 EventSystem 分发 UGUI 左键事件，不绕过按钮监听器调用玩法。</summary>
         private static void Click(string name)
         {

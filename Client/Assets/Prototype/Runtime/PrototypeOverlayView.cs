@@ -108,6 +108,17 @@ namespace OutpostLoop
         private Text heading, details, actionLabel, feedback, startBriefing, turretEntry, turretHint, turretStock;
         private GameObject purchaseRows, turretRows;
         private readonly Text[] turretLabels = new Text[4];
+        // 扩建面板先选方位，再显示该地块的产出预览或现有建筑状态。
+        private GameObject expansionRows, expansionChoices;
+        private Text expansionEntry, expansionStock, expansionDetail;
+        private readonly Text[] expansionPlots = new Text[4];
+        private readonly Text[] expansionOptions = new Text[3];
+        private static readonly ExpansionKind[] ExpansionOptions =
+            { ExpansionKind.Extractor, ExpansionKind.Barracks, ExpansionKind.Barricade };
+        private static readonly string[] ExpansionNames =
+            { "ExpansionEmpty", "ExpansionExtractor", "ExpansionBarracks", "ExpansionBarricade" };
+        private static readonly string[] ExpansionHints =
+            { "ExpansionExtractorHint", "ExpansionBarracksHint", "ExpansionBarricadeHint" };
         internal static readonly string[] SectorNames = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
@@ -163,8 +174,10 @@ namespace OutpostLoop
                 routeLabels[index] = Button(purchaseRows.transform, font, "Purchase" + index, "", new Vector2(620,60),
                     new Vector2(0,102 - index * 70), new Vector2(.5f,.5f), () => controller.PurchaseUpgrade(route));
             }
-            turretEntry = Button(purchaseRows.transform, font, "OpenTurrets", "", new Vector2(620,54),
-                new Vector2(0,-104), new Vector2(.5f,.5f), controller.OpenTurretPanel);
+            turretEntry = Button(purchaseRows.transform, font, "OpenTurrets", "", new Vector2(300,54),
+                new Vector2(-160,-104), new Vector2(.5f,.5f), controller.OpenTurretPanel);
+            expansionEntry = Button(purchaseRows.transform, font, "OpenExpansion", "", new Vector2(300,54),
+                new Vector2(160,-104), new Vector2(.5f,.5f), controller.OpenExpansionPanel);
             turretRows = Rect("TurretRows", panel, new Vector2(.5f,.5f), new Vector2(700,280), Vector2.zero).gameObject;
             turretHint = Label(turretRows.transform, font, "TurretHint", new Vector2(700,52), new Vector2(0,115), 21);
             turretStock = Label(turretRows.transform, font, "TurretStock", new Vector2(700,34), new Vector2(0,77), 22);
@@ -177,9 +190,33 @@ namespace OutpostLoop
                     positions[i], new Vector2(.5f,.5f), () => controller.ActOnTurretSlot(slot));
                 turretLabels[i].fontSize = 18;
             }
+            BuildExpansionRows(panel, font, controller);
             feedback = Label(panel, font, "Feedback", new Vector2(660,36), new Vector2(0,-145), 24);
             actionLabel = Button(panel, font, "PrimaryAction", "", new Vector2(450,68), new Vector2(0,-200),
                 new Vector2(.5f,.5f), controller.ActOnModal);
+        }
+
+        /// <summary>用同一个暂停窗口展示四向地块和三种建筑选项。</summary>
+        private void BuildExpansionRows(Transform panel, Font font, PrototypeController controller)
+        {
+            expansionRows = Rect("ExpansionRows", panel, new Vector2(.5f, .5f), new Vector2(700, 350), Vector2.zero).gameObject;
+            expansionStock = Label(expansionRows.transform, font, "ExpansionStock", new Vector2(700, 28), new Vector2(0, 160), 21);
+            for (int i = 0; i < expansionPlots.Length; i++)
+            {
+                int sector = i;
+                expansionPlots[i] = Button(expansionRows.transform, font, "ExpansionPlotButton" + i, "", new Vector2(160, 50),
+                    new Vector2(-255 + 170 * i, 116), new Vector2(.5f, .5f), () => controller.SelectExpansionSite(sector));
+                expansionPlots[i].fontSize = 19;
+            }
+            expansionDetail = Label(expansionRows.transform, font, "ExpansionDetail", new Vector2(700, 52), new Vector2(0, 62), 20);
+            expansionChoices = Rect("ExpansionChoices", expansionRows.transform, new Vector2(.5f, .5f), new Vector2(680, 170), Vector2.zero).gameObject;
+            for (int i = 0; i < expansionOptions.Length; i++)
+            {
+                var kind = ExpansionOptions[i];
+                expansionOptions[i] = Button(expansionChoices.transform, font, "Build" + kind, "", new Vector2(650, 48),
+                    new Vector2(0, 8 - i * 54), new Vector2(.5f, .5f), () => controller.PurchaseExpansion(kind));
+                expansionOptions[i].fontSize = 18;
+            }
         }
 
         /// <summary>在安全区内摆放指挥按钮，防线按钮按下后立即派队。</summary>
@@ -239,9 +276,11 @@ namespace OutpostLoop
 
             var run = controller.World.Run;
             bool upgrading = mode == PrototypeOverlay.Upgrade;
-            bool managingTurrets = upgrading && controller.TurretPanelOpen;
-            purchaseRows.SetActive(upgrading && !managingTurrets);
+            bool managingTurrets = upgrading && controller.BasePanel == PrototypeBasePanel.Turrets;
+            bool managingExpansion = upgrading && controller.BasePanel == PrototypeBasePanel.Expansion;
+            purchaseRows.SetActive(upgrading && controller.BasePanel == PrototypeBasePanel.Upgrades);
             turretRows.SetActive(managingTurrets);
+            expansionRows.SetActive(managingExpansion);
             feedback.gameObject.SetActive(upgrading);
             details.gameObject.SetActive(!upgrading);
             switch (mode)
@@ -258,9 +297,15 @@ namespace OutpostLoop
                         PresentTurrets(controller);
                         break;
                     }
+                    if (managingExpansion)
+                    {
+                        PresentExpansion(controller);
+                        break;
+                    }
                     SetText(heading, Loc.T("PreviewText3"));
                     SetText(actionLabel, Loc.T("PreviewText4"));
                     SetText(turretEntry, Loc.T("TurretManage"));
+                    SetText(expansionEntry, Loc.T("ExpansionManage"));
                     for (int i = 0; i < Routes.Length; i++)
                     {
                         var cost = run.Levels[i] >= run.Config.MaxLevel ? Loc.T("PreviewText5") : Loc.T("PreviewCost", run.ScrapCost(i), run.EnergyCost(i));
@@ -302,6 +347,53 @@ namespace OutpostLoop
                     ? (controller.SelectedTurretSlot == i ? "TurretSelected" : "TurretOccupied")
                     : (moving ? "TurretMoveHere" : "TurretBuildHere");
                 SetText(turretLabels[i], Loc.T(key, Loc.T(SectorNames[i]), world.TurretScrapCost, world.TurretEnergyCost));
+            }
+        }
+
+        /// <summary>预览最近可用资源、建造价格以及已建建筑的运行状态。</summary>
+        private void PresentExpansion(PrototypeController controller)
+        {
+            var world = controller.World;
+            int selected = controller.SelectedExpansionSite;
+            var site = world.ExpansionSites[selected];
+            bool vacant = site.Kind == ExpansionKind.Empty;
+            SetText(heading, Loc.T("ExpansionManage"));
+            SetText(actionLabel, Loc.T("TurretBack"));
+            SetText(expansionStock, Loc.T("HudStock", world.Run.Scrap, world.Run.Energy));
+            for (int i = 0; i < expansionPlots.Length; i++)
+            {
+                string name = Loc.T(ExpansionNames[(int)world.ExpansionSites[i].Kind]);
+                string plot = Loc.T("ExpansionPlot", Loc.T(SectorNames[i]), name);
+                SetText(expansionPlots[i], i == selected ? Loc.T("ExpansionSelected", plot) : plot);
+            }
+            expansionChoices.SetActive(vacant);
+            int node = vacant ? world.FindExpansionResource(selected) : site.NodeIndex;
+            string resource = node >= 0
+                ? Loc.T("ResourceMarkerRemaining", Loc.T(world.Nodes[node].Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap"),
+                    world.Nodes[node].Remaining)
+                : Loc.T("ExpansionNoResource");
+            if (!vacant)
+            {
+                string status = site.Kind switch
+                {
+                    ExpansionKind.Extractor => resource,
+                    ExpansionKind.Barracks => site.TrainingLeft > 0
+                        ? Loc.T("ExpansionTraining", Mathf.CeilToInt(site.TrainingLeft))
+                        : Loc.T("ExpansionGarrisonReady"),
+                    _ => Loc.T("ExpansionBarricadeHint")
+                };
+                SetText(expansionDetail, Loc.T("ExpansionStatus", Loc.T(ExpansionNames[(int)site.Kind]), site.Health,
+                    ExpansionSite.SpecFor(site.Kind).Health, status));
+                return;
+            }
+            SetText(expansionDetail, Loc.T("ExpansionResourcePreview", resource));
+            for (int i = 0; i < expansionOptions.Length; i++)
+            {
+                var kind = ExpansionOptions[i];
+                var spec = ExpansionSite.SpecFor(kind);
+                SetText(expansionOptions[i], Loc.T("ExpansionBuildOption", Loc.T(ExpansionNames[(int)kind]),
+                    Loc.T("PreviewCost", spec.Scrap, spec.Energy), Loc.T(ExpansionHints[i], spec.Cycle)));
+                expansionOptions[i].GetComponentInParent<Button>().interactable = kind != ExpansionKind.Extractor || node >= 0;
             }
         }
 

@@ -5,7 +5,14 @@ namespace OutpostLoop
     /// <summary>资源点的领域数据，不持有场景对象。</summary>
     public sealed class ResourceNode { public Vector2 Position; public bool Energy; public int Remaining; }
     /// <summary>敌人的领域数据，实例数受世界规则限制。</summary>
-    public sealed class EnemyState { public Vector2 Position; public float Health; public float AttackClock; }
+    public sealed class EnemyState
+    {
+        public Vector2 Position;
+        public float Health;
+        public float AttackClock;
+        // 攻击对象变化时重置蓄力，-1 表示中央基地。
+        internal int AttackSite = -1;
+    }
     /// <summary>一个固定炮位及其本局开火状态，位置不依赖场景对象。</summary>
     public sealed class TurretSlot
     {
@@ -52,6 +59,8 @@ namespace OutpostLoop
         });
         public int TurretScrapCost => Rules.ScrapCostBase * 2;
         public int TurretEnergyCost => Rules.EnergyCostPerLevel;
+        // 扩建地块在现有炮位外侧，方位顺序与调防按钮一致。
+        public IReadOnlyList<ExpansionSite> ExpansionSites { get; }
 
         // 本局独立随机源。提前抽取下一波角度，预告和生成共用同一个值。
         private readonly System.Random random;
@@ -64,13 +73,32 @@ namespace OutpostLoop
         {
             Run = new RunState(config);
             random = new System.Random(seed);
+            var sites = new ExpansionSite[Turrets.Count];
+            for (int i = 0; i < sites.Length; i++)
+                sites[i] = new ExpansionSite(Turrets[i].Position * 4f);
+            ExpansionSites = System.Array.AsReadOnly(sites);
             for(int i=0;i<Rules.ResourceNodeCount;i++)
             {
                 float angle = (float)random.NextDouble()*Mathf.PI*2;
                 float radius = i < Rules.NearNodeCount ? Rules.NearRadius+i*Rules.NearRadiusStep : Rules.FarRadius+(float)random.NextDouble()*Rules.FarRadiusRange;
-                Nodes.Add(new ResourceNode { Position=new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*radius, Energy=i%Rules.EnergyEvery==0, Remaining=i%Rules.EnergyEvery==0?Rules.EnergyAmount:Rules.ScrapAmount });
+                var position = KeepPlotsClear(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius);
+                Nodes.Add(new ResourceNode { Position=position, Energy=i%Rules.EnergyEvery==0, Remaining=i%Rules.EnergyEvery==0?Rules.EnergyAmount:Rules.ScrapAmount });
             }
             PlanNextWave();
+        }
+
+        /// <summary>沿原方向挪开落在预留地块上的资源，不额外消耗地图随机数。</summary>
+        private Vector2 KeepPlotsClear(Vector2 position)
+        {
+            const float clearance = 3.8f;
+            foreach (var site in ExpansionSites)
+            {
+                var offset = position - site.Position;
+                if (offset.sqrMagnitude >= clearance * clearance) continue;
+                var direction = offset.sqrMagnitude > .0001f ? offset.normalized : site.Position.normalized;
+                return site.Position + direction * clearance;
+            }
+            return position;
         }
 
         /// <summary>改派带货工人时先卸货，再执行新的资源任务。</summary>
@@ -118,6 +146,35 @@ namespace OutpostLoop
         }
 
         private bool IsValidSlot(int index) => index >= 0 && index < Turrets.Count;
+
+        /// <summary>空地预览及开工都选择本侧距地块最近的未耗尽资源点。</summary>
+        public int FindExpansionResource(int sector)
+        {
+            if (!IsValidSlot(sector)) return -1;
+            int nearest = -1;
+            float distance = float.PositiveInfinity;
+            for (int i = 0; i < Nodes.Count; i++)
+            {
+                var node = Nodes[i];
+                if (node.Remaining <= 0 || SectorFor(node.Position) != sector) continue;
+                float candidate = (node.Position - ExpansionSites[sector].Position).sqrMagnitude;
+                if (candidate >= distance) continue;
+                nearest = i;
+                distance = candidate;
+            }
+            return nearest;
+        }
+
+        /// <summary>占地、绑定资源和双币种扣费在同一条建造事务内完成。</summary>
+        public bool BuildExpansion(int sector, ExpansionKind kind)
+        {
+            var spec = ExpansionSite.SpecFor(kind);
+            if (!IsValidSlot(sector) || spec.Health == 0 || ExpansionSites[sector].Kind != ExpansionKind.Empty) return false;
+            int node = kind == ExpansionKind.Extractor ? FindExpansionResource(sector) : -1;
+            if ((kind == ExpansionKind.Extractor && node < 0) || !Run.TrySpend(spec.Scrap, spec.Energy)) return false;
+            ExpansionSites[sector].Build(kind, spec, node);
+            return true;
+        }
 
         /// <summary>各炮塔以自身位置独立索敌，开局两座炮塔平分原基础火力。</summary>
         private void FireTurrets(float dt)
@@ -168,6 +225,12 @@ namespace OutpostLoop
             }
             if (ResourceOrder < 0) return;
             var node = Nodes[ResourceOrder];
+            if (node.Remaining <= 0)
+            {
+                ResourceOrder = -1;
+                WorkerReturning = true;
+                return;
+            }
             WorkerPosition = Vector2.MoveTowards(WorkerPosition, node.Position, travel);
             if ((WorkerPosition - node.Position).sqrMagnitude >= Rules.GatherRadius * Rules.GatherRadius) return;
             gatherClock += dt;
@@ -176,6 +239,65 @@ namespace OutpostLoop
             if (Run.Gather(node.Energy)) node.Remaining--;
             if (node.Remaining <= 0) ResourceOrder = -1;
             WorkerReturning = ResourceOrder < 0 || Run.CargoScrap + Run.CargoEnergy >= Run.Capacity;
+        }
+
+        /// <summary>已建成的采集站和兵营随局时生产，暂停时不会推进。</summary>
+        private void StepExpansions(float dt)
+        {
+            foreach (var site in ExpansionSites)
+            {
+                switch (site.Kind)
+                {
+                    case ExpansionKind.Extractor:
+                        var node = Nodes[site.NodeIndex];
+                        if (node.Remaining <= 0) break;
+                        site.WorkClock += dt;
+                        float cycle = ExpansionSite.SpecFor(site.Kind).Cycle;
+                        if (site.WorkClock < cycle) break;
+                        site.WorkClock -= cycle;
+                        node.Remaining--;
+                        Run.ReceiveExtractedResource(node.Energy);
+                        break;
+                    case ExpansionKind.Barracks:
+                        if (site.TrainingLeft > 0)
+                        {
+                            site.TrainingLeft = Mathf.Max(0, site.TrainingLeft - dt);
+                            break;
+                        }
+                        site.WorkClock += dt;
+                        if (site.WorkClock < Rules.ShotInterval) break;
+                        var target = FindEnemy(site.Position, Rules.ShotRange * .75f);
+                        if (target == null) break;
+                        target.Health -= Rules.ShotDamage / 2f;
+                        site.LastShotTarget = target.Position;
+                        site.LastShotTime = Run.Elapsed;
+                        site.WorkClock = 0;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>外围建筑拦截从本方位接近的敌人。已经越过地块的敌人继续攻向基地。</summary>
+        private void StepEnemy(EnemyState enemy, float dt)
+        {
+            int sector = SectorFor(enemy.Position);
+            var site = ExpansionSites[sector];
+            bool intercept = site.Kind != ExpansionKind.Empty &&
+                Vector2.Dot(enemy.Position - site.Position, site.Position.normalized) >= -Rules.AttackRadius;
+            var goal = intercept ? site.Position : Vector2.zero;
+            int attackSite = intercept ? sector : -1;
+            if (enemy.AttackSite != attackSite)
+            {
+                enemy.AttackSite = attackSite;
+                enemy.AttackClock = 0;
+            }
+            enemy.Position = Vector2.MoveTowards(enemy.Position, goal, dt * (Rules.EnemySpeed + Wave * Rules.EnemySpeedPerWave));
+            if ((enemy.Position - goal).sqrMagnitude >= Rules.AttackRadius * Rules.AttackRadius) return;
+            enemy.AttackClock += dt;
+            if (enemy.AttackClock < Rules.AttackInterval) return;
+            enemy.AttackClock -= Rules.AttackInterval;
+            if (intercept) site.Damage(Rules.AttackDamage);
+            else Run.Damage(Rules.AttackDamage);
         }
 
         /// <summary>小队在指定防线驻守，途中和到位后均可自动开火。</summary>
@@ -227,16 +349,12 @@ namespace OutpostLoop
             }
             FireTurrets(dt);
             StepSquad(dt);
+            StepExpansions(dt);
             for(int i=Enemies.Count-1;i>=0;i--)
             {
                 var enemy=Enemies[i];
                 if(enemy.Health<=0){Enemies.RemoveAt(i);Kills++;continue;}
-                enemy.Position=Vector2.MoveTowards(enemy.Position,Vector2.zero,dt*(Rules.EnemySpeed+Wave*Rules.EnemySpeedPerWave));
-                if(enemy.Position.magnitude<Rules.AttackRadius)
-                {
-                    enemy.AttackClock+=dt;
-                    if(enemy.AttackClock>=Rules.AttackInterval){enemy.AttackClock-=Rules.AttackInterval;Run.Damage(Rules.AttackDamage);}
-                }
+                StepEnemy(enemy, dt);
             }
             Run.Tick(dt,Enemies.Count);
         }

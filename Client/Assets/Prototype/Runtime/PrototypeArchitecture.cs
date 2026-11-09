@@ -90,5 +90,9 @@ namespace OutpostLoop
         /// <summary>将基地炮位操作转发给本局规则。</summary>
         public bool BuildTurret(int slot) => model.World?.BuildTurret(slot) == true;
         public bool MoveTurret(int source, int destination) => model.World?.MoveTurret(source, destination) == true;
+
+        /// <summary>开局后才接受扩建，面板暂停期间可预先安排建设。</summary>
+        public bool BuildExpansion(int sector, ExpansionKind kind) =>
+            !awaitingStart && model.World?.BuildExpansion(sector, kind) == true;
     }
 }

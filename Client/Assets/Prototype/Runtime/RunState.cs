@@ -27,6 +27,12 @@ namespace OutpostLoop
             if (scrap) Scrap += PrototypeWallet.ScrapPack;
             if (energy) Energy += PrototypeWallet.EnergyPack;
         }
+        /// <summary>采集站的自动补给直接进入基地库存，不占用工人背包。</summary>
+        internal void ReceiveExtractedResource(bool energy)
+        {
+            if (energy) Energy++;
+            else Scrap++;
+        }
         /// <summary>尝试装入一单位资源；暂停、终局与满载时拒绝。</summary>
         public bool Gather(bool energy)
         {

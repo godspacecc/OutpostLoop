@@ -24,6 +24,80 @@ namespace Game
         /// </summary>
         public static string Commonretry => Loc.T("CommonRetry");
         /// <summary>
+        /// 兵营
+        /// </summary>
+        public static string Expansionbarracks => Loc.T("ExpansionBarracks");
+        /// <summary>
+        /// {0:0} 秒训练后派驻守军，自动攻击近敌
+        /// </summary>
+        public static string Expansionbarrackshint(object arg0) => Loc.T("ExpansionBarracksHint", arg0);
+        /// <summary>
+        /// 路障
+        /// </summary>
+        public static string Expansionbarricade => Loc.T("ExpansionBarricade");
+        /// <summary>
+        /// 用高耐久拖住同侧进攻
+        /// </summary>
+        public static string Expansionbarricadehint => Loc.T("ExpansionBarricadeHint");
+        /// <summary>
+        /// {0} · {1}
+        /// {2}
+        /// </summary>
+        public static string Expansionbuildoption(object arg0, object arg1, object arg2) => Loc.T("ExpansionBuildOption", arg0, arg1, arg2);
+        /// <summary>
+        /// 已建成
+        /// </summary>
+        public static string Expansionbuilt => Loc.T("ExpansionBuilt");
+        /// <summary>
+        /// 空地
+        /// </summary>
+        public static string Expansionempty => Loc.T("ExpansionEmpty");
+        /// <summary>
+        /// 采集站
+        /// </summary>
+        public static string Expansionextractor => Loc.T("ExpansionExtractor");
+        /// <summary>
+        /// 每 {0:0.#} 秒开采并入库 1 单位，采尽后停产
+        /// </summary>
+        public static string Expansionextractorhint(object arg0) => Loc.T("ExpansionExtractorHint", arg0);
+        /// <summary>
+        /// 守军已就位
+        /// </summary>
+        public static string Expansiongarrisonready => Loc.T("ExpansionGarrisonReady");
+        /// <summary>
+        /// 外围扩建
+        /// </summary>
+        public static string Expansionmanage => Loc.T("ExpansionManage");
+        /// <summary>
+        /// 本侧资源已耗尽或没有资源
+        /// </summary>
+        public static string Expansionnoresource => Loc.T("ExpansionNoResource");
+        /// <summary>
+        /// {0} · {1}
+        /// </summary>
+        public static string Expansionplot(object arg0, object arg1) => Loc.T("ExpansionPlot", arg0, arg1);
+        /// <summary>
+        /// 采集站可接入：{0}
+        /// </summary>
+        public static string Expansionresourcepreview(object arg0) => Loc.T("ExpansionResourcePreview", arg0);
+        /// <summary>
+        /// ✓ {0}
+        /// </summary>
+        public static string Expansionselected(object arg0) => Loc.T("ExpansionSelected", arg0);
+        /// <summary>
+        /// {0} · 耐久 {1} / {2}
+        /// {3}
+        /// </summary>
+        public static string Expansionstatus(object arg0, object arg1, object arg2, object arg3) => Loc.T("ExpansionStatus", arg0, arg1, arg2, arg3);
+        /// <summary>
+        /// 驻军训练剩余 {0} 秒
+        /// </summary>
+        public static string Expansiontraining(object arg0) => Loc.T("ExpansionTraining", arg0);
+        /// <summary>
+        /// 库存不足或该地块不可建造
+        /// </summary>
+        public static string Expansionunavailable => Loc.T("ExpansionUnavailable");
+        /// <summary>
         /// 工人载货 {0} / {1}
         /// </summary>
         public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);

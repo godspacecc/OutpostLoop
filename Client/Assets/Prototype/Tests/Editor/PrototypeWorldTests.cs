@@ -27,6 +27,10 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(36, a.Nodes.Count); Assert.AreEqual(a.Nodes[5].Position, b.Nodes[5].Position);
             Assert.AreNotEqual(a.Nodes[5].Position, c.Nodes[5].Position);
             foreach (var node in a.Nodes) { Assert.LessOrEqual(node.Position.magnitude, 47); Assert.Greater(node.Position.magnitude, 5); }
+            var opening = new WorldState(732);
+            foreach (var node in opening.Nodes)
+                foreach (var site in opening.ExpansionSites)
+                    Assert.Greater(Vector2.Distance(node.Position, site.Position), 3.7f, "资源应留出建筑地块");
         }
         [Test] public void WorkerOrdersRespectPauseAndRejectInvalidTargets()
         {

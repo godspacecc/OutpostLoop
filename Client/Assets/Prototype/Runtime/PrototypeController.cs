@@ -7,6 +7,8 @@ namespace OutpostLoop
 {
     /// <summary>临时玩法界面从当前会话推导的显示状态。</summary>
     internal enum PrototypeOverlay { None, Start, Paused, Upgrade, Result }
+    /// <summary>基地暂停窗口中的互斥子面板。</summary>
+    internal enum PrototypeBasePanel { Upgrades, Turrets, Expansion }
 
     /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
     public sealed class PrototypeController : MonoBehaviour
@@ -28,6 +30,8 @@ namespace OutpostLoop
         private static float HudScale => Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
         private readonly List<LineRenderer> turretShots = new List<LineRenderer>();
         private readonly List<Transform> turretModels = new List<Transform>();
+        // 每块地复用预建的临时模型，重建时切换显示即可。
+        private readonly List<ExpansionPreview> expansionModels = new List<ExpansionPreview>();
         private readonly List<Transform> resources = new List<Transform>();
         private readonly List<Transform> enemies = new List<Transform>();
         private readonly List<Material> materials = new List<Material>();
@@ -38,8 +42,9 @@ namespace OutpostLoop
         internal int SupplyCoins => session.SupplyCoins;
         internal bool VictoryRewardRecorded => session.VictoryRewardRecorded;
         // 炮位面板的选中状态与本局炮塔所有权分离。
-        internal bool TurretPanelOpen { get; private set; }
+        internal PrototypeBasePanel BasePanel { get; private set; }
         internal int SelectedTurretSlot { get; private set; } = -1;
+        internal int SelectedExpansionSite { get; private set; }
         private int seed = 731;
         private Font font;
         private string feedback = "";
@@ -162,7 +167,8 @@ namespace OutpostLoop
             materials.Clear();resources.Clear();enemies.Clear();
             turretModels.Clear();
             turretShots.Clear();
-            ResetTurretPanel();
+            expansionModels.Clear();
+            ResetBasePanel();
             WantScrapPack = WantEnergyPack = false;
             SupplyError = null;
             mapView = DefaultMapView;
@@ -209,6 +215,7 @@ namespace OutpostLoop
             squadShot.endWidth = .05f;
             resourceOrderMark = Shape("ResourceOrder", worldRoot, PrimitiveType.Cylinder, Vector3.zero,
                 new Vector3(2.6f, .08f, 2.6f), amber);
+            CreateExpansionModels(stone, cyan, blue, rust);
             foreach(var node in World.Nodes)
             {
                 var item=Shape(node.Energy?"Energy":"Scrap",worldRoot,node.Energy?PrimitiveType.Cube:PrimitiveType.Cylinder,
@@ -228,6 +235,62 @@ namespace OutpostLoop
                 Shape("Boundary",worldRoot,PrimitiveType.Cube,pos,new Vector3(2,3,2),stone);
             }
             feedback="";SyncView();initialized=true;
+        }
+
+        /// <summary>外围建筑用独立临时几何体区分功能，炮位仍走原有表现。</summary>
+        private void CreateExpansionModels(Material pad, Material extractor, Material barracks, Material barricade)
+        {
+            for (int i = 0; i < World.ExpansionSites.Count; i++)
+            {
+                var root = new GameObject("ExpansionSite" + i).transform;
+                root.SetParent(worldRoot, false);
+                root.localPosition = At(World.ExpansionSites[i].Position, 0);
+                root.localRotation = Quaternion.LookRotation(root.localPosition);
+                Shape("Plot", root, PrimitiveType.Cube, new Vector3(0, .05f, 0), new Vector3(4, .2f, 4), pad);
+                var station = Shape("Extractor", root, PrimitiveType.Cylinder, new Vector3(0, 1.1f, 0),
+                    new Vector3(2.25f, 1, 2.25f), extractor);
+                var quarters = Shape("Barracks", root, PrimitiveType.Cube, new Vector3(0, 1.15f, 0),
+                    new Vector3(2.8f, 2.2f, 1.8f), barracks);
+                var wall = Shape("Barricade", root, PrimitiveType.Cube, new Vector3(0, .95f, .25f),
+                    new Vector3(3.6f, 1.8f, .65f), barricade);
+                var guard = Shape("Garrison", root, PrimitiveType.Capsule, new Vector3(1.35f, .8f, -1.65f),
+                    new Vector3(.85f, .8f, .85f), barracks);
+                var shot = root.gameObject.AddComponent<LineRenderer>();
+                shot.sharedMaterial = barracks;
+                shot.positionCount = 2;
+                shot.startWidth = .13f;
+                shot.endWidth = .05f;
+                expansionModels.Add(new ExpansionPreview(station, quarters, wall, guard, shot));
+            }
+        }
+
+        /// <summary>把单块地的建筑、训练状态与射击反馈映射到预建对象。</summary>
+        private sealed class ExpansionPreview
+        {
+            private readonly Transform extractor, barracks, barricade, garrison;
+            private readonly LineRenderer shot;
+
+            internal ExpansionPreview(Transform extractor, Transform barracks, Transform barricade, Transform garrison,
+                LineRenderer shot)
+            {
+                this.extractor = extractor;
+                this.barracks = barracks;
+                this.barricade = barricade;
+                this.garrison = garrison;
+                this.shot = shot;
+            }
+
+            internal void Show(ExpansionSite site, float time)
+            {
+                extractor.gameObject.SetActive(site.Kind == ExpansionKind.Extractor);
+                barracks.gameObject.SetActive(site.Kind == ExpansionKind.Barracks);
+                barricade.gameObject.SetActive(site.Kind == ExpansionKind.Barricade);
+                garrison.gameObject.SetActive(site.Kind == ExpansionKind.Barracks && site.TrainingLeft <= 0);
+                shot.enabled = time - site.LastShotTime < .12f;
+                if (!shot.enabled) return;
+                shot.SetPosition(0, garrison.position);
+                shot.SetPosition(1, At(site.LastShotTarget, .8f));
+            }
         }
 
         /// <summary>Player 只使用序列化依赖；编辑器动态预览可使用内置 Shader。</summary>
@@ -318,7 +381,7 @@ namespace OutpostLoop
             if (UtilityWindowOpen) return;
             if (!initialized || (Overlay != PrototypeOverlay.None && Overlay != PrototypeOverlay.Upgrade)) return;
             shop = !shop;
-            ResetTurretPanel();
+            ResetBasePanel();
             feedback = "";
             session.SetPaused(shop);
             RefreshOverlay();
@@ -341,9 +404,9 @@ namespace OutpostLoop
                     break;
                 case PrototypeOverlay.Paused:
                 case PrototypeOverlay.Upgrade:
-                    if (TurretPanelOpen)
+                    if (BasePanel != PrototypeBasePanel.Upgrades)
                     {
-                        ResetTurretPanel();
+                        ResetBasePanel();
                         feedback = "";
                         break;
                     }
@@ -379,7 +442,7 @@ namespace OutpostLoop
         internal void PurchaseUpgrade(int route)
         {
             if (UtilityWindowOpen) return;
-            if (!initialized || TurretPanelOpen || Overlay != PrototypeOverlay.Upgrade) return;
+            if (!initialized || BasePanel != PrototypeBasePanel.Upgrades || Overlay != PrototypeOverlay.Upgrade) return;
             feedback = session.Purchase(route) ? Game.Loc.T("PreviewText18") : Game.Loc.T("PreviewText19");
             feedbackUntil = Time.realtimeSinceStartup + 2;
             RefreshOverlay();
@@ -389,7 +452,7 @@ namespace OutpostLoop
         internal void OpenTurretPanel()
         {
             if (UtilityWindowOpen || !initialized || Overlay != PrototypeOverlay.Upgrade) return;
-            TurretPanelOpen = true;
+            BasePanel = PrototypeBasePanel.Turrets;
             feedback = "";
             RefreshOverlay();
         }
@@ -397,7 +460,7 @@ namespace OutpostLoop
         /// <summary>点已有炮塔选作迁移来源，点空位时迁移或建造。</summary>
         internal void ActOnTurretSlot(int index)
         {
-            if (UtilityWindowOpen || !TurretPanelOpen || Overlay != PrototypeOverlay.Upgrade) return;
+            if (UtilityWindowOpen || BasePanel != PrototypeBasePanel.Turrets || Overlay != PrototypeOverlay.Upgrade) return;
             if (index < 0 || index >= World.Turrets.Count) return;
             if (World.Turrets[index].Occupied)
             {
@@ -419,10 +482,41 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        private void ResetTurretPanel()
+        /// <summary>打开扩建面板时默认选中预告的进攻方位，仍可直接切换地块。</summary>
+        internal void OpenExpansionPanel()
         {
-            TurretPanelOpen = false;
+            if (UtilityWindowOpen || !initialized || Overlay != PrototypeOverlay.Upgrade) return;
+            BasePanel = PrototypeBasePanel.Expansion;
+            SelectedExpansionSite = Mathf.Max(0, World.NextWaveSector);
+            feedback = "";
+            RefreshOverlay();
+        }
+
+        internal void SelectExpansionSite(int sector)
+        {
+            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Upgrade || BasePanel != PrototypeBasePanel.Expansion ||
+                sector < 0 || sector >= World.ExpansionSites.Count) return;
+            SelectedExpansionSite = sector;
+            feedback = "";
+            RefreshOverlay();
+        }
+
+        /// <summary>将选中地块和建筑类型交给规则层扣费，成功后立即刷新模型。</summary>
+        internal void PurchaseExpansion(ExpansionKind kind)
+        {
+            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Upgrade || BasePanel != PrototypeBasePanel.Expansion) return;
+            bool built = session.BuildExpansion(SelectedExpansionSite, kind);
+            feedback = Game.Loc.T(built ? "ExpansionBuilt" : "ExpansionUnavailable");
+            feedbackUntil = Time.realtimeSinceStartup + 2;
+            if (built) SyncView();
+            RefreshOverlay();
+        }
+
+        private void ResetBasePanel()
+        {
+            BasePanel = PrototypeBasePanel.Upgrades;
             SelectedTurretSlot = -1;
+            SelectedExpansionSite = 0;
         }
 
         /// <summary>仅在基础会话就绪时显示窗口，退出后不重新生成 UI。</summary>
@@ -462,6 +556,8 @@ namespace OutpostLoop
             resourceOrderMark.gameObject.SetActive(World.ResourceOrder >= 0);
             if (World.ResourceOrder >= 0) resourceOrderMark.position = At(World.Nodes[World.ResourceOrder].Position, .04f);
             for(int i=0;i<resources.Count;i++)resources[i].gameObject.SetActive(World.Nodes[i].Remaining>0);
+            for (int i = 0; i < expansionModels.Count; i++)
+                expansionModels[i].Show(World.ExpansionSites[i], World.Run.Elapsed);
             for(int i=0;i<enemies.Count;i++)
             {
                 bool active=i<World.Enemies.Count;enemies[i].gameObject.SetActive(active);
@@ -506,9 +602,10 @@ namespace OutpostLoop
                 ? Game.Loc.T("StrategyNextWave", Game.Loc.T(PrototypeOverlayView.SectorNames[next]),
                     Mathf.Max(0, Mathf.CeilToInt(World.NextWaveTime - s.Elapsed)))
                 : Game.Loc.T("StrategyFinalWave"));
+            // 对话框的设置入口占用右上角，小地图仅在指挥状态显示和接收点选。
+            if (Overlay != PrototypeOverlay.None || UtilityWindowOpen) return;
             DrawMap();
-            if (Event.current.type == EventType.Repaint && Overlay == PrototypeOverlay.None && !UtilityWindowOpen &&
-                EventSystem.current?.IsPointerOverGameObject() != true)
+            if (Event.current.type == EventType.Repaint && EventSystem.current?.IsPointerOverGameObject() != true)
                 DrawResourceHint(Input.mousePosition);
         }
 
@@ -571,6 +668,14 @@ namespace OutpostLoop
                     i == World.ResourceOrder ? 9 : 4);
             }
             foreach(var enemy in World.Enemies)Dot(enemy.Position,Color.red,5);
+            foreach (var site in World.ExpansionSites)
+                Dot(site.Position, site.Kind switch
+                {
+                    ExpansionKind.Extractor => new Color(.2f, 1, .65f),
+                    ExpansionKind.Barracks => new Color(.32f, .58f, 1),
+                    ExpansionKind.Barricade => new Color(.85f, .38f, .22f),
+                    _ => Color.gray
+                }, site.Kind == ExpansionKind.Empty ? 4 : 8);
             Dot(Vector2.zero, Color.white, 9);
             Dot(World.SquadPosition, new Color(.32f, .58f, 1), 7);
             Dot(World.WorkerPosition, Color.yellow, 7);
