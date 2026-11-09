@@ -78,7 +78,7 @@
   "HudHealth": "Base {0}   Defeated {1}",
   "HudStock": "Stock: Scrap {0}  Energy {1}",
   "HudCargo": "Worker cargo {0} / {1}",
-  "HudControls": "Click a resource in the world or on the map to dispatch your worker\nDeploy the squad · B Upgrade · ESC Pause",
+  "HudControls": "Click a resource to dispatch · Scroll to zoom\nDeploy the squad · B Upgrade · ESC Pause",
   "HudMap": "Area map",
   "ResourceMarkerScrap": "Scrap",
   "ResourceMarkerEnergy": "Energy",

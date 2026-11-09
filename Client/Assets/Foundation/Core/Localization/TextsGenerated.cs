@@ -28,7 +28,7 @@ namespace Game
         /// </summary>
         public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);
         /// <summary>
-        /// 点击场景或小地图资源点，工人自动往返
+        /// 点击场景或小地图资源点派工 · 滚轮缩放
         /// 四向按钮调防 · B 升级 · ESC 暂停
         /// </summary>
         public static string Hudcontrols => Loc.T("HudControls");

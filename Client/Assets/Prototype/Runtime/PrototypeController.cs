@@ -16,6 +16,11 @@ namespace OutpostLoop
         private Transform worldRoot, worker, squad, resourceOrderMark;
         private LineRenderer squadShot;
         private Camera gameCamera;
+        // 镜头始终对准基地，开局突出布防区域，滚轮可拉远到整张地图。
+        private const float DefaultMapView = .6f;
+        private const float ClosestMapView = .45f;
+        private const float ZoomPerNotch = .1f;
+        private float mapView = DefaultMapView;
         // 指挥视图和小地图共用同一套屏幕命中区域。
         private static readonly Rect StatusRect = new Rect(16, 16, 330, 193);
         private static readonly Rect MapRect = new Rect(1050, 18, 210, 235);
@@ -126,7 +131,7 @@ namespace OutpostLoop
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
             cameraObject.AddComponent<AudioListener>();
             gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true;
-            gameCamera.transform.SetPositionAndRotation(new Vector3(0, 64, -29.84f), Quaternion.Euler(65, 0, 0));
+            gameCamera.transform.SetPositionAndRotation(new Vector3(0, 32, -14.92f), Quaternion.Euler(65, 0, 0));
             gameCamera.backgroundColor=groundColor; gameCamera.clearFlags=CameraClearFlags.SolidColor;
             gameCamera.nearClipPlane=0.1f; gameCamera.farClipPlane=160;
             var lightObject=new GameObject("PreviewSun"); lightObject.transform.SetParent(transform);
@@ -160,6 +165,7 @@ namespace OutpostLoop
             ResetTurretPanel();
             WantScrapPack = WantEnergyPack = false;
             SupplyError = null;
+            mapView = DefaultMapView;
             World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
             var ground=Mat(groundColor);var stone=Mat(new Color(0.37f,0.40f,0.40f));
@@ -246,10 +252,19 @@ namespace OutpostLoop
             if(!initialized)return;
             if (UtilityWindowOpen) return;
             if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
-            if (Input.GetMouseButtonDown(0) && EventSystem.current?.IsPointerOverGameObject() != true)
-                OrderResourceAt(Input.mousePosition);
+            if (Overlay == PrototypeOverlay.None && EventSystem.current?.IsPointerOverGameObject() != true)
+            {
+                if (Input.GetMouseButtonDown(0)) OrderResourceAt(Input.mousePosition);
+                ChangeMapZoom(Input.mouseScrollDelta.y);
+            }
             SyncView();
             RefreshOverlay();
+        }
+
+        /// <summary>向前滚动拉近，向后滚动可看到地图全貌。</summary>
+        private void ChangeMapZoom(float wheelDelta)
+        {
+            mapView = Mathf.Clamp(mapView - wheelDelta * ZoomPerNotch, ClosestMapView, 1f);
         }
 
         /// <summary>主视图或小地图点选同一资源，空白处不改变工人任务。</summary>
@@ -452,7 +467,7 @@ namespace OutpostLoop
                 bool active=i<World.Enemies.Count;enemies[i].gameObject.SetActive(active);
                 if(active){var p=World.Enemies[i].Position;enemies[i].position=new Vector3(p.x,0.8f,p.y);}
             }
-            gameCamera.orthographicSize = (World.Run.Config.MapRadius + 2) / Mathf.Min(1, gameCamera.aspect);
+            gameCamera.orthographicSize = (World.Run.Config.MapRadius + 2) * mapView / Mathf.Min(1, gameCamera.aspect);
             for (int i = 0; i < turretModels.Count; i++)
             {
                 var state = World.Turrets[i];
