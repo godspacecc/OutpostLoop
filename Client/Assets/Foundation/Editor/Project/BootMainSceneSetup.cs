@@ -68,12 +68,12 @@ namespace OutpostLoop.Editor
             scaler.referenceResolution = new Vector2(1280, 720);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
-            var panel = Child(canvas.gameObject, "BootSignalPanel");
+            var panel = Child(canvas.gameObject, "SignalPanel");
             panel.AddComponent<Image>().color = new Color32(15, 25, 21, 255);
             var view = panel.AddComponent<HotUpdateView>();
             var layout = Centered(panel, "Layout", 1280, 720);
             Text(layout, "Wordmark", 64, 31, 400, 32, 14, BootInk, TextAnchor.MiddleLeft, "◇  OUTPOST LOOP");
-            Text(layout, "BootCaption", 1060, 31, 156, 32, 14, BootMuted, TextAnchor.MiddleRight, "BOOT");
+            Text(layout, "Caption", 1060, 31, 156, 32, 14, BootMuted, TextAnchor.MiddleRight, "BOOT");
             Box(layout, "FooterRule", 64, 662, 1152, 1, BootLine);
             Set(view, "_versionText", Text(layout, "Version", 64, 668, 1152, 32, 14, BootMuted,
                 TextAnchor.MiddleLeft, "资源版本：检测中"));

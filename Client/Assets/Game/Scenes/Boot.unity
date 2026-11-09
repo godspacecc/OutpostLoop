@@ -1947,7 +1947,7 @@ GameObject:
   - component: {fileID: 1013127705}
   - component: {fileID: 1013127704}
   m_Layer: 0
-  m_Name: BootEventSystem
+  m_Name: EventSystem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2736,7 +2736,7 @@ GameObject:
   - component: {fileID: 1286650250}
   - component: {fileID: 1286650249}
   m_Layer: 0
-  m_Name: BootCaption
+  m_Name: Caption
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3812,7 +3812,7 @@ GameObject:
   - component: {fileID: 1933000255}
   - component: {fileID: 1933000257}
   m_Layer: 0
-  m_Name: BootSignalPanel
+  m_Name: SignalPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
