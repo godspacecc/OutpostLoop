@@ -2,6 +2,8 @@
 
 独立的限时单局轻量即时战略防守原型。Unity **2022.3.55f1c1**，工程目录 `Client`。
 
+[游戏总纲](Docs/游戏总纲.md) · [开发规程](Docs/开发规程.md) · [执行总清单](Docs/执行总清单.md)
+
 ## 启动
 1. Unity Hub 添加本仓库的 `Client` 目录。
 2. 打开 `Assets/Game/Scenes/Boot.unity`。
