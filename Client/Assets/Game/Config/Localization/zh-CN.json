@@ -39,6 +39,7 @@
   "UpdateResourceSize": "待下载资源：{0} 个文件，{1:F1} MiB",
   "UpdateApplication": "Android 安装包：{0} → {1}，{2:F1} MiB",
   "ui.start.update.restart_manual": "请手动重新启动应用。",
+  "HudPause": "暂停",
   "PreviewText0": "已暂停",
   "PreviewText1": "本局计时与战斗已暂停。",
   "PreviewText2": "继续 [ESC]",

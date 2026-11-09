@@ -53,26 +53,30 @@ namespace OutpostLoop
         }
     }
 
-    /// <summary>基地附近显示的升级入口；它本身不阻断玩法。</summary>
-    public sealed class PrototypeUpgradeButtonCtrl : BaseUICtrl
+    /// <summary>局内触屏入口；暂停随局内 HUD 显示，升级仅在基地附近显示。</summary>
+    public sealed class PrototypeHudCtrl : BaseUICtrl
     {
         private PrototypeController owner;
+        // 升级按钮独立显隐，暂停按钮可在任意局内位置使用。
+        private GameObject upgradeButton;
         protected override string Path() => null;
         public override UILayer Layer() => UILayer.HUD;
         public override bool BlocksGame => false;
-        protected override BaseUI CreateView() => PrototypeOverlayView.Create("PrototypeUpgradeEntry");
+        protected override BaseUI CreateView() => PrototypeOverlayView.Create("PrototypeHud");
         protected override void OnInit() { }
         protected override void OnShow() { }
         protected override void OnHide() { }
-        protected override void OnUnload() => owner = null;
+        protected override void OnUnload() { owner = null; upgradeButton = null; }
 
         internal void Bind(PrototypeController controller, Font font)
         {
             if (BaseUI == null || owner == controller) return;
             owner = controller;
-            ((PrototypeOverlayView)BaseUI).BuildUpgradeEntry(font, controller.ToggleUpgrade);
+            upgradeButton = ((PrototypeOverlayView)BaseUI).BuildHudEntries(font, controller);
             BaseUI.GetComponent<SafeAreaFitter>().ApplyNow();
         }
+
+        internal void SetUpgradeVisible(bool visible) => upgradeButton.SetActive(visible);
 
         internal void Detach(PrototypeController controller)
         {
@@ -162,10 +166,13 @@ namespace OutpostLoop
                 new Vector2(.5f,.5f), controller.ActOnModal);
         }
 
-        internal void BuildUpgradeEntry(Font font, UnityEngine.Events.UnityAction onClick)
+        /// <summary>在安全区右下侧预留暂停触点，基地升级入口使用原位置。</summary>
+        internal GameObject BuildHudEntries(Font font, PrototypeController controller)
         {
-            Button(transform, font, "OpenUpgrade", Loc.T("PreviewText14"), new Vector2(450,72),
-                new Vector2(-255,72), new Vector2(1,0), onClick);
+            Button(transform, font, "OpenPause", Loc.T("HudPause"), new Vector2(152,88),
+                new Vector2(-106,172), new Vector2(1,0), controller.PauseFromHud);
+            return Button(transform, font, "OpenUpgrade", Loc.T("PreviewText14"), new Vector2(450,72),
+                new Vector2(-255,72), new Vector2(1,0), controller.ToggleUpgrade).transform.parent.gameObject;
         }
 
         internal void Present(PrototypeController controller)

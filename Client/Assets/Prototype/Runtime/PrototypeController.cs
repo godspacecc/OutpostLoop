@@ -34,7 +34,7 @@ namespace OutpostLoop
         private float feedbackUntil;
         // 主场景窗口随基础会话清理；临时截图工具仍可仅初始化世界。
         private PrototypeModalCtrl modal;
-        private PrototypeUpgradeButtonCtrl upgradeEntry;
+        private PrototypeHudCtrl hud;
         // 权威规则由架构系统持有，视图只转发输入及读取快照。
         private PrototypeSystem session;
         private string startupError;
@@ -78,7 +78,7 @@ namespace OutpostLoop
         {
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Hide();
-            upgradeEntry?.Hide();
+            hud?.Hide();
             if(session!=null){session.SubmitInput(Vector2.zero,false);session.SetPaused(true);}
         }
 
@@ -96,8 +96,7 @@ namespace OutpostLoop
                 ActionId = Game.HotKeyActionIds.TogglePause,
                 Context = Game.HotKeyContext.Gameplay,
                 Priority = 10,
-                CanExecute = () => this != null && isActiveAndEnabled && initialized && started &&
-                    World.Run.Outcome == 0 && !UtilityWindowOpen,
+                CanExecute = CanTogglePause,
                 Execute = TogglePause
             });
 
@@ -244,14 +243,28 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        /// <summary>暂停热键与界面操作共用同一个入口，重绑后由热键系统调用。</summary>
+        /// <summary>设置和日志窗口打开时，暂停热键与局内按钮均不响应。</summary>
+        private bool CanTogglePause() => this != null && isActiveAndEnabled && initialized && started &&
+            World.Run.Outcome == 0 && !UtilityWindowOpen;
+
         private bool UtilityWindowOpen => Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() == true ||
             Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true;
 
+        /// <summary>局内按钮只负责进入暂停，继续操作由暂停菜单处理。</summary>
+        internal void PauseFromHud()
+        {
+            if (CanTogglePause() && Overlay == PrototypeOverlay.None) TogglePause();
+        }
+
+        /// <summary>触屏入口和暂停热键复用现有会话操作。</summary>
         private void TogglePause()
         {
             if (shop || World.Run.Paused) ActOnModal();
-            else session.SetPaused(true);
+            else
+            {
+                session.SetPaused(true);
+                RefreshOverlay();
+            }
         }
 
         internal PrototypeOverlay Overlay => !started ? PrototypeOverlay.Start :
@@ -386,12 +399,13 @@ namespace OutpostLoop
             }
             else modal?.Hide();
 
-            if (mode == PrototypeOverlay.None && World.IsAtBase)
+            if (mode == PrototypeOverlay.None)
             {
-                if (upgradeEntry?.IsShow() != true) upgradeEntry = Game.UIHelper.ShowUI<PrototypeUpgradeButtonCtrl>();
-                upgradeEntry.Bind(this, font);
+                if (hud?.IsShow() != true) hud = Game.UIHelper.ShowUI<PrototypeHudCtrl>();
+                hud.Bind(this, font);
+                hud.SetUpgradeVisible(World.IsAtBase);
             }
-            else upgradeEntry?.Hide();
+            else hud?.Hide();
         }
 
         /// <summary>表现仅映射已结算状态；敌人采用固定池，不按波次无限创建。</summary>
@@ -482,7 +496,7 @@ namespace OutpostLoop
         {
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Detach(this);
-            upgradeEntry?.Detach(this);
+            hud?.Detach(this);
             foreach(var material in materials)Release(material);
             if(font!=null)Release(font);
         }

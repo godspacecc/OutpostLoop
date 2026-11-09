@@ -79,12 +79,25 @@ namespace OutpostLoop.Tests
             var run = controller.World.Run;
             Assert.IsTrue(run.Paused);
             Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            Assert.IsNull(GameObject.Find("OpenPause"), "开局前应隐藏局内暂停入口");
             var artwork = GameObject.Find("BaseArtwork")?.GetComponent<RawImage>();
             Assert.IsNotNull(artwork?.texture, "从 Boot 进入 Main 后，开始页应显示场景引用的基地概念图");
             Click("PrimaryAction");
             Assert.IsFalse(run.Paused);
             Assert.IsFalse(Game.UIHelper.HasUIOpen);
             Assert.IsFalse(artwork.gameObject.activeInHierarchy);
+            Assert.IsFalse(controller.World.IsAtBase);
+            Assert.IsNull(GameObject.Find("OpenUpgrade"));
+            Click("OpenPause");
+            Assert.IsTrue(run.Paused, "离开基地时也应能通过 HUD 暂停");
+            Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            Assert.IsNull(GameObject.Find("OpenPause"));
+            var pausedElapsed = run.Elapsed;
+            for (int frame = 0; frame < 5; frame++) yield return null;
+            Assert.AreEqual(pausedElapsed, run.Elapsed, "触屏暂停应冻结本局倒计时");
+            Click("PrimaryAction");
+            Assert.IsFalse(run.Paused);
+            Assert.IsNotNull(GameObject.Find("OpenPause"), "继续后应恢复局内暂停入口");
 
             // 通过领域事务准备一笔库存，只验证界面接线；移动采集由原有玩法测试覆盖。
             controller.World.Step(.1f, Vector2.up, false);
@@ -95,6 +108,7 @@ namespace OutpostLoop.Tests
             yield return null;
             Click("OpenUpgrade");
             Assert.IsTrue(run.Paused);
+            Assert.IsNull(GameObject.Find("OpenPause"), "升级窗口应隐藏暂停入口");
             Click("Purchase1");
             Assert.AreEqual(1, run.Levels[1]);
             Assert.AreEqual(0, run.Scrap);
@@ -130,14 +144,11 @@ namespace OutpostLoop.Tests
             Click("PrimaryAction");
             Click("PrimaryAction");
 
-            Game.Game.Interface.GetSystem<PrototypeSystem>().SetPaused(true);
-            yield return null;
-            Assert.IsTrue(Game.UIHelper.HasUIOpen);
-            Click("PrimaryAction");
             Assert.IsFalse(run.Paused);
             run.Damage(run.Health);
             yield return null;
             Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            Assert.IsNull(GameObject.Find("OpenPause"), "结算时应隐藏暂停入口");
             Assert.AreEqual(0, wallet.Coins, "失败不给补给币");
             var oldWorld = controller.World;
             Click("PrimaryAction");
