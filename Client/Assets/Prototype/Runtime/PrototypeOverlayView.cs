@@ -53,12 +53,14 @@ namespace OutpostLoop
         }
     }
 
-    /// <summary>局内触屏入口；暂停随局内 HUD 显示，升级仅在基地附近显示。</summary>
+    /// <summary>指挥 HUD 提供升级、暂停和四向调防入口。</summary>
     public sealed class PrototypeHudCtrl : BaseUICtrl
     {
         private PrototypeController owner;
-        // 升级按钮独立显隐，暂停按钮可在任意局内位置使用。
-        private GameObject upgradeButton;
+        // 调防按钮反映当前命令，避免重复下达同一驻防指令。
+        private Text[] squadLabels;
+        private int displayedSector;
+        private string displayedLanguage;
         protected override string Path() => null;
         public override UILayer Layer() => UILayer.HUD;
         public override bool BlocksGame => false;
@@ -66,17 +68,31 @@ namespace OutpostLoop
         protected override void OnInit() { }
         protected override void OnShow() { }
         protected override void OnHide() { }
-        protected override void OnUnload() { owner = null; upgradeButton = null; }
+        protected override void OnUnload() { owner = null; squadLabels = null; }
 
         internal void Bind(PrototypeController controller, Font font)
         {
             if (BaseUI == null || owner == controller) return;
             owner = controller;
-            upgradeButton = ((PrototypeOverlayView)BaseUI).BuildHudEntries(font, controller);
+            squadLabels = ((PrototypeOverlayView)BaseUI).BuildHudEntries(font, controller);
+            displayedLanguage = null;
             BaseUI.GetComponent<SafeAreaFitter>().ApplyNow();
         }
 
-        internal void SetUpgradeVisible(bool visible) => upgradeButton.SetActive(visible);
+        internal void Refresh(int sector)
+        {
+            string language = Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value;
+            if (displayedSector == sector && displayedLanguage == language) return;
+            displayedSector = sector;
+            displayedLanguage = language;
+            for (int i = 0; i < squadLabels.Length; i++)
+            {
+                var label = squadLabels[i];
+                string command = Loc.T("StrategyDeploy", Loc.T(PrototypeOverlayView.SectorNames[i]));
+                if (label.text != command) label.text = command;
+                label.GetComponentInParent<Button>().interactable = i != sector;
+            }
+        }
 
         internal void Detach(PrototypeController controller)
         {
@@ -92,7 +108,7 @@ namespace OutpostLoop
         private Text heading, details, actionLabel, feedback, startBriefing, turretEntry, turretHint, turretStock;
         private GameObject purchaseRows, turretRows;
         private readonly Text[] turretLabels = new Text[4];
-        private static readonly string[] TurretDirections = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
+        internal static readonly string[] SectorNames = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
         private GameObject startScreen;
@@ -166,13 +182,29 @@ namespace OutpostLoop
                 new Vector2(.5f,.5f), controller.ActOnModal);
         }
 
-        /// <summary>在安全区右下侧预留暂停触点，基地升级入口使用原位置。</summary>
-        internal GameObject BuildHudEntries(Font font, PrototypeController controller)
+        /// <summary>在安全区内摆放指挥按钮，防线按钮按下后立即派队。</summary>
+        internal Text[] BuildHudEntries(Font font, PrototypeController controller)
         {
             Button(transform, font, "OpenPause", Loc.T("HudPause"), new Vector2(152,88),
                 new Vector2(-106,172), new Vector2(1,0), controller.PauseFromHud);
-            return Button(transform, font, "OpenUpgrade", Loc.T("PreviewText14"), new Vector2(450,72),
-                new Vector2(-255,72), new Vector2(1,0), controller.ToggleUpgrade).transform.parent.gameObject;
+            Button(transform, font, "OpenUpgrade", Loc.T("PreviewText14"), new Vector2(300,64),
+                new Vector2(-180,62), new Vector2(1,0), controller.ToggleUpgrade);
+            var guideSize = new Vector2(652, 80);
+            var guide = Rect("CommandGuide", transform, Vector2.zero, guideSize, new Vector2(348, 62));
+            guide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
+            var guideText = Label(guide, font, "Controls", guideSize, Vector2.zero, 24).gameObject.AddComponent<LocalizedText>();
+            guideText.Key = "HudControls";
+            guideText.Refresh();
+            var commands = new Text[SectorNames.Length];
+            for (int i = 0; i < commands.Length; i++)
+            {
+                int sector = i;
+                var label = Button(transform, font, "DeploySquad" + i, "",
+                    new Vector2(154, 54), new Vector2(99 + 166 * i, 145), Vector2.zero, () => controller.DeploySquad(sector));
+                label.fontSize = 22;
+                commands[i] = label;
+            }
+            return commands;
         }
 
         internal void Present(PrototypeController controller)
@@ -269,7 +301,7 @@ namespace OutpostLoop
                 var key = world.Turrets[i].Occupied
                     ? (controller.SelectedTurretSlot == i ? "TurretSelected" : "TurretOccupied")
                     : (moving ? "TurretMoveHere" : "TurretBuildHere");
-                SetText(turretLabels[i], Loc.T(key, Loc.T(TurretDirections[i]), world.TurretScrapCost, world.TurretEnergyCost));
+                SetText(turretLabels[i], Loc.T(key, Loc.T(SectorNames[i]), world.TurretScrapCost, world.TurretEnergyCost));
             }
         }
 

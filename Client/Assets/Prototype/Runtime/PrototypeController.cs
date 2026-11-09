@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using QFramework;
 
 namespace OutpostLoop
@@ -12,8 +13,14 @@ namespace OutpostLoop
     {
         // 本局领域状态、临时表现根和预分配敌人池。
         public WorldState World { get; private set; }
-        private Transform worldRoot, player, baseRoof;
+        private Transform worldRoot, worker, squad, resourceOrderMark;
+        private LineRenderer squadShot;
         private Camera gameCamera;
+        // 指挥视图和小地图共用同一套屏幕命中区域。
+        private static readonly Rect StatusRect = new Rect(16, 16, 330, 193);
+        private static readonly Rect MapRect = new Rect(1050, 18, 210, 235);
+        private static readonly Vector2 MapCenter = new Vector2(1155, 140);
+        private static float HudScale => Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
         private readonly List<LineRenderer> turretShots = new List<LineRenderer>();
         private readonly List<Transform> turretModels = new List<Transform>();
         private readonly List<Transform> resources = new List<Transform>();
@@ -72,14 +79,14 @@ namespace OutpostLoop
             }
             Boot.BootHost.ReportFailure(new Dictionary<string,string>{{"reason",startupError ?? "Prototype initialization failed"}});
         }
-        // 失活时停止接受输入并暂停，避免隐藏视图仍带着上一帧输入推进。
+        // 失活时暂停本局，避免隐藏视图仍推进采运和防守。
         private void OnEnable(){if(initialized)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
         private void OnDisable()
         {
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Hide();
             hud?.Hide();
-            if(session!=null){session.SubmitInput(Vector2.zero,false);session.SetPaused(true);}
+            session?.SetPaused(true);
         }
 
         /// <summary>创建全新临时几何体预览；可供编辑器截图入口调用。</summary>
@@ -118,7 +125,8 @@ namespace OutpostLoop
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
             cameraObject.AddComponent<AudioListener>();
-            gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true; gameCamera.orthographicSize=17;
+            gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true;
+            gameCamera.transform.SetPositionAndRotation(new Vector3(0, 64, -29.84f), Quaternion.Euler(65, 0, 0));
             gameCamera.backgroundColor=groundColor; gameCamera.clearFlags=CameraClearFlags.SolidColor;
             gameCamera.nearClipPlane=0.1f; gameCamera.farClipPlane=160;
             var lightObject=new GameObject("PreviewSun"); lightObject.transform.SetParent(transform);
@@ -135,7 +143,7 @@ namespace OutpostLoop
             {
                 initialized=false;startupError=e.Message;
                 Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
-                session.SubmitInput(Vector2.zero,false);session.SetPaused(true);
+                session.SetPaused(true);
                 Game.Log.Error("独立原型启动失败："+e);
             }
         }
@@ -160,7 +168,7 @@ namespace OutpostLoop
             Shape("Ground",worldRoot,PrimitiveType.Cube,new Vector3(0,-0.3f,0),new Vector3(96,0.5f,96),ground);
             Shape("HomePad",worldRoot,PrimitiveType.Cylinder,new Vector3(0,0,0),new Vector3(9,0.1f,9),dark);
             Shape("Shelter",worldRoot,PrimitiveType.Cube,new Vector3(0,1.15f,0),new Vector3(3.6f,2.3f,3),stone);
-            baseRoof=Shape("Roof",worldRoot,PrimitiveType.Cube,new Vector3(0,2.5f,0),new Vector3(4,0.5f,3.5f),dark);
+            Shape("Roof",worldRoot,PrimitiveType.Cube,new Vector3(0,2.5f,0),new Vector3(4,0.5f,3.5f),dark);
             Shape("Door",worldRoot,PrimitiveType.Cube,new Vector3(0,0.8f,-1.55f),new Vector3(0.9f,1.6f,0.1f),amber);
             for (int i = 0; i < World.Turrets.Count; i++)
             {
@@ -181,11 +189,20 @@ namespace OutpostLoop
                 turretModels.Add(turret);
                 turretShots.Add(shot);
             }
-            player=new GameObject("Collector").transform; player.SetParent(worldRoot);
-            Shape("Coat",player,PrimitiveType.Capsule,new Vector3(0,0.8f,0),new Vector3(0.65f,0.7f,0.65f),amber);
-            Shape("Hood",player,PrimitiveType.Cube,new Vector3(0,1.6f,0),new Vector3(0.7f,0.65f,0.6f),amber);
-            Shape("Face",player,PrimitiveType.Cube,new Vector3(0,1.6f,-0.32f),new Vector3(0.45f,0.35f,0.08f),dark);
-            Shape("Pack",player,PrimitiveType.Cube,new Vector3(0,0.9f,0.4f),new Vector3(0.7f,0.8f,0.35f),cyan);
+            worker = Shape("Worker", worldRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(1.1f, .9f, 1.1f), amber);
+            squad = new GameObject("DefenseSquad").transform;
+            squad.SetParent(worldRoot, false);
+            var blue = Mat(new Color(.32f, .58f, 1));
+            for (int i = -1; i <= 1; i++)
+                Shape("Guard", squad, PrimitiveType.Capsule, new Vector3(i * .95f, 0, Mathf.Abs(i) * -.75f),
+                    new Vector3(.75f, .8f, .75f), blue);
+            squadShot = squad.gameObject.AddComponent<LineRenderer>();
+            squadShot.sharedMaterial = blue;
+            squadShot.positionCount = 2;
+            squadShot.startWidth = .13f;
+            squadShot.endWidth = .05f;
+            resourceOrderMark = Shape("ResourceOrder", worldRoot, PrimitiveType.Cylinder, Vector3.zero,
+                new Vector3(2.6f, .08f, 2.6f), amber);
             foreach(var node in World.Nodes)
             {
                 var item=Shape(node.Energy?"Energy":"Scrap",worldRoot,node.Energy?PrimitiveType.Cube:PrimitiveType.Cylinder,
@@ -227,20 +244,27 @@ namespace OutpostLoop
         private void PollInputAndPresent()
         {
             if(!initialized)return;
-            if (UtilityWindowOpen)
-            {
-                session.SubmitInput(Vector2.zero, false);
-                return;
-            }
+            if (UtilityWindowOpen) return;
             if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
-            if(started&&!World.Run.Paused&&World.Run.Outcome==0)
-            {
-                var move=new Vector2(Input.GetAxisRaw("Horizontal"),Input.GetAxisRaw("Vertical"));
-                session.SubmitInput(move,Input.GetKey(KeyCode.E));
-                if(move.sqrMagnitude>0.01f)player.rotation=Quaternion.LookRotation(new Vector3(-move.x,0,-move.y));
-            }
+            if (Input.GetMouseButtonDown(0) && EventSystem.current?.IsPointerOverGameObject() != true)
+                OrderResourceAt(Input.mousePosition);
             SyncView();
             RefreshOverlay();
+        }
+
+        /// <summary>主视图或小地图点选同一资源，空白处不改变工人任务。</summary>
+        public bool OrderResourceAt(Vector2 screenPoint)
+        {
+            if (!initialized || Overlay != PrototypeOverlay.None || UtilityWindowOpen) return false;
+            int node = PickResource(screenPoint);
+            return node >= 0 && session.AssignResource(node);
+        }
+
+        /// <summary>局内四向按钮各提交一条驻防命令。</summary>
+        internal void DeploySquad(int sector)
+        {
+            if (initialized && Overlay == PrototypeOverlay.None && !UtilityWindowOpen)
+                session.DeploySquad(sector);
         }
 
         /// <summary>设置和日志窗口打开时，暂停热键与局内按钮均不响应。</summary>
@@ -277,7 +301,7 @@ namespace OutpostLoop
         internal void ToggleUpgrade()
         {
             if (UtilityWindowOpen) return;
-            if (!initialized || !started || World.Run.Outcome != 0 || !World.IsAtBase) return;
+            if (!initialized || (Overlay != PrototypeOverlay.None && Overlay != PrototypeOverlay.Upgrade)) return;
             shop = !shop;
             ResetTurretPanel();
             feedback = "";
@@ -403,7 +427,7 @@ namespace OutpostLoop
             {
                 if (hud?.IsShow() != true) hud = Game.UIHelper.ShowUI<PrototypeHudCtrl>();
                 hud.Bind(this, font);
-                hud.SetUpgradeVisible(World.IsAtBase);
+                hud.Refresh(World.SquadSector);
             }
             else hud?.Hide();
         }
@@ -411,15 +435,24 @@ namespace OutpostLoop
         /// <summary>表现仅映射已结算状态；敌人采用固定池，不按波次无限创建。</summary>
         public void SyncView()
         {
-            player.position=new Vector3(World.Player.x,0,World.Player.y);
+            worker.position = At(World.WorkerPosition, .9f);
+            // 待命时三人站在基地南侧，收到命令后按领域位置移动。
+            squad.position = At(World.SquadPosition, .8f);
+            squadShot.enabled = World.Run.Elapsed - World.SquadShotTime < .12f;
+            if (squadShot.enabled)
+            {
+                squadShot.SetPosition(0, squad.position);
+                squadShot.SetPosition(1, At(World.SquadShotTarget, .8f));
+            }
+            resourceOrderMark.gameObject.SetActive(World.ResourceOrder >= 0);
+            if (World.ResourceOrder >= 0) resourceOrderMark.position = At(World.Nodes[World.ResourceOrder].Position, .04f);
             for(int i=0;i<resources.Count;i++)resources[i].gameObject.SetActive(World.Nodes[i].Remaining>0);
             for(int i=0;i<enemies.Count;i++)
             {
                 bool active=i<World.Enemies.Count;enemies[i].gameObject.SetActive(active);
                 if(active){var p=World.Enemies[i].Position;enemies[i].position=new Vector3(p.x,0.8f,p.y);}
             }
-            gameCamera.transform.position=player.position+new Vector3(0,32,-14.92f);
-            gameCamera.transform.rotation=Quaternion.Euler(65,0,0);
+            gameCamera.orthographicSize = (World.Run.Config.MapRadius + 2) / Mathf.Min(1, gameCamera.aspect);
             for (int i = 0; i < turretModels.Count; i++)
             {
                 var state = World.Turrets[i];
@@ -437,43 +470,73 @@ namespace OutpostLoop
             }
         }
 
+        private static Vector3 At(Vector2 point, float height) => new Vector3(point.x, height, point.y);
+
         private void OnGUI()
         {
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
             if (!started) return;
-            float scale=Mathf.Min(Screen.width/1280f,Screen.height/720f);
+            float scale=HudScale;
             GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
             GUI.skin.font=font;GUI.skin.label.fontSize=18;GUI.skin.button.fontSize=19;GUI.skin.box.fontSize=18;
             var s=World.Run;
-            if (Event.current.type == EventType.Repaint && Overlay == PrototypeOverlay.None && !UtilityWindowOpen)
-                DrawGatherHint(scale);
-            GUI.Box(new Rect(16,16,330,168),"");
+            GUI.Box(StatusRect,"");
             GUI.Label(new Rect(30,26,305,30),Game.Loc.T("HudTitle"));
             GUI.Label(new Rect(30,61,300,28),Game.Loc.T("HudTime", Mathf.CeilToInt(s.Config.Duration-s.Elapsed), World.Wave, s.Config.WaveTimes.Count));
             GUI.Label(new Rect(30,92,300,28),Game.Loc.T("HudHealth", s.Health, World.Kills));
             GUI.Label(new Rect(30,122,300,28),Game.Loc.T("HudStock", s.Scrap, s.Energy));
             GUI.Label(new Rect(30,151,300,28),Game.Loc.T("HudCargo", s.CargoScrap+s.CargoEnergy, s.Capacity));
-            GUI.Box(new Rect(16,640,850,62),Game.Loc.T("HudControls"));
+            int next = World.NextWaveSector;
+            GUI.Label(new Rect(30,180,300,28), next >= 0
+                ? Game.Loc.T("StrategyNextWave", Game.Loc.T(PrototypeOverlayView.SectorNames[next]),
+                    Mathf.Max(0, Mathf.CeilToInt(World.NextWaveTime - s.Elapsed)))
+                : Game.Loc.T("StrategyFinalWave"));
             DrawMap();
+            if (Event.current.type == EventType.Repaint && Overlay == PrototypeOverlay.None && !UtilityWindowOpen &&
+                EventSystem.current?.IsPointerOverGameObject() != true)
+                DrawResourceHint(Input.mousePosition);
         }
 
-        /// <summary>只为采集范围内的当前目标显示名称、余量及操作。</summary>
-        private void DrawGatherHint(float scale)
+        /// <summary>以可见资源的投影和小地图点为命中中心，重叠时选距离最近的一项。</summary>
+        private int PickResource(Vector2 screenPoint)
         {
-            var target = World.FindGatherTarget();
-            if (target == null) return;
-            var point = gameCamera.WorldToScreenPoint(new Vector3(target.Position.x, 1.65f, target.Position.y));
-            if (point.z <= 0 || point.x < 0 || point.x > Screen.width || point.y < 0 || point.y > Screen.height) return;
+            float scale = HudScale;
+            var cursor = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / scale;
+            if (StatusRect.Contains(cursor)) return -1;
+            bool onMap = MapRect.Contains(cursor);
+            float closest = onMap ? 9 * 9 : 16 * 16;
+            int target = -1;
+            for (int i = 0; i < World.Nodes.Count; i++)
+            {
+                if (World.Nodes[i].Remaining <= 0) continue;
+                Vector2 center = onMap ? MapPoint(World.Nodes[i].Position) : ResourceScreenPoint(i);
+                float distance = (center - cursor).sqrMagnitude;
+                if (distance >= closest) continue;
+                closest = distance;
+                target = i;
+            }
+            return target;
+        }
 
-            var run = World.Run;
-            bool full = run.CargoScrap + run.CargoEnergy >= run.Capacity;
+        private Vector2 ResourceScreenPoint(int index)
+        {
+            var point = gameCamera.WorldToScreenPoint(resources[index].position);
+            return new Vector2(point.x, Screen.height - point.y) / HudScale;
+        }
+
+        /// <summary>指向资源时显示余量，区分可派遣和当前任务。</summary>
+        private void DrawResourceHint(Vector2 screenPoint)
+        {
+            int index = PickResource(screenPoint);
+            if (index < 0) return;
+            var target = World.Nodes[index];
             string name = Game.Loc.T(target.Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap");
             string title = Game.Loc.T("ResourceMarkerRemaining", name, target.Remaining);
-            string hint = Game.Loc.T(full ? "ResourceMarkerFull" : "ResourceMarkerGather");
+            string hint = Game.Loc.T(index == World.ResourceOrder ? "StrategyResourceAssigned" : "ResourceMarkerGather");
             const float width = 250, height = 54;
-            float x = Mathf.Clamp(point.x / scale - width * .5f, 0, Screen.width / scale - width);
-            float y = Mathf.Max(0, (Screen.height - point.y) / scale - height);
-
+            var cursor = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
+            float x = Mathf.Clamp(cursor.x - width * .5f, 0, Screen.width / HudScale - width);
+            float y = Mathf.Max(0, cursor.y - height - 12);
             var oldColor = GUI.contentColor;
             var oldTint = GUI.backgroundColor;
             GUI.backgroundColor = new Color(.20f, .29f, .28f, 1);
@@ -485,13 +548,27 @@ namespace OutpostLoop
 
         private void DrawMap()
         {
-            var old=GUI.color;GUI.Box(new Rect(1050,18,210,235),Game.Loc.T("HudMap"));
-            foreach(var node in World.Nodes)if(node.Remaining>0)Dot(node.Position,node.Energy?Color.cyan:new Color(0.8f,0.5f,0.2f),4);
+            var old=GUI.color;GUI.Box(MapRect,Game.Loc.T("HudMap"));
+            for (int i = 0; i < World.Nodes.Count; i++)
+            {
+                var node = World.Nodes[i];
+                if (node.Remaining > 0) Dot(node.Position, node.Energy ? Color.cyan : new Color(.8f, .5f, .2f),
+                    i == World.ResourceOrder ? 9 : 4);
+            }
             foreach(var enemy in World.Enemies)Dot(enemy.Position,Color.red,5);
-            Dot(Vector2.zero,Color.white,9);Dot(World.Player,Color.yellow,7);GUI.color=old;
+            Dot(Vector2.zero, Color.white, 9);
+            Dot(World.SquadPosition, new Color(.32f, .58f, 1), 7);
+            Dot(World.WorkerPosition, Color.yellow, 7);
+            GUI.color=old;
         }
+        private static Vector2 MapPoint(Vector2 point) => MapCenter + new Vector2(point.x, -point.y) * 2;
         private void Dot(Vector2 p,Color color,float size)
-        {GUI.color=color;GUI.DrawTexture(new Rect(1155+p.x*2-size/2,140-p.y*2-size/2,size,size),Texture2D.whiteTexture);GUI.color=Color.white;}
+        {
+            var center = MapPoint(p);
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(center.x - size / 2, center.y - size / 2, size, size), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
         private void OnDestroy()
         {
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);

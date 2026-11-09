@@ -86,8 +86,18 @@ namespace OutpostLoop.Tests
             Assert.IsFalse(run.Paused);
             Assert.IsFalse(Game.UIHelper.HasUIOpen);
             Assert.IsFalse(artwork.gameObject.activeInHierarchy);
-            Assert.IsFalse(controller.World.IsAtBase);
-            Assert.IsNull(GameObject.Find("OpenUpgrade"));
+            Assert.IsNotNull(GameObject.Find("OpenUpgrade"), "指挥视图可直接打开升级");
+            var camera = controller.GetComponentInChildren<Camera>();
+            var scrapNode = controller.World.Nodes[1];
+            var worldPoint = new Vector3(scrapNode.Position.x, .6f, scrapNode.Position.y);
+            Assert.IsTrue(controller.OrderResourceAt(camera.WorldToScreenPoint(worldPoint)), "主视图资源投影应可点选");
+            Assert.AreEqual(1, controller.World.ResourceOrder);
+            Click("DeploySquad2");
+            Assert.AreEqual(2, controller.World.SquadSector);
+            for (int i = 0; i < 400 && run.Scrap == 0; i++) controller.World.Step(.1f);
+            yield return null;
+            Assert.GreaterOrEqual(run.Scrap, run.ScrapCost(1), "库存来自实际工人自动返程");
+            Assert.Greater(controller.World.SquadPosition.y, 0);
             Click("OpenPause");
             Assert.IsTrue(run.Paused, "离开基地时也应能通过 HUD 暂停");
             Assert.IsTrue(Game.UIHelper.HasUIOpen);
@@ -99,19 +109,15 @@ namespace OutpostLoop.Tests
             Assert.IsFalse(run.Paused);
             Assert.IsNotNull(GameObject.Find("OpenPause"), "继续后应恢复局内暂停入口");
 
-            // 通过领域事务准备一笔库存，只验证界面接线；移动采集由原有玩法测试覆盖。
-            controller.World.Step(.1f, Vector2.up, false);
-            Assert.Less(controller.World.Player.magnitude, 5f, "从出生点向基地走一步才能打开升级");
             int cost = run.ScrapCost(1);
-            for (int i = 0; i < cost; i++) Assert.IsTrue(run.Gather(false));
-            run.Deposit();
+            int beforeUpgrade = run.Scrap;
             yield return null;
             Click("OpenUpgrade");
             Assert.IsTrue(run.Paused);
             Assert.IsNull(GameObject.Find("OpenPause"), "升级窗口应隐藏暂停入口");
             Click("Purchase1");
             Assert.AreEqual(1, run.Levels[1]);
-            Assert.AreEqual(0, run.Scrap);
+            Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
             Click("Purchase1");
             Assert.AreEqual(1, run.Levels[1], "资源不足时按钮不能改变升级等级");
             Click("OpenTurrets");
@@ -121,13 +127,13 @@ namespace OutpostLoop.Tests
             Assert.IsNotNull(GameObject.Find("Turret2"), "迁入后目标炮位应出现炮塔");
             Click("TurretSlot3");
             Assert.IsNull(GameObject.Find("Turret3"), "库存不足时不能建造");
-            Assert.AreEqual(0, run.Scrap);
+            Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
             Click("PrimaryAction");
             Click("PrimaryAction");
             Assert.IsFalse(run.Paused);
 
-            int scrap = run.Config.ScrapCostBase * 2;
-            int energy = run.Config.EnergyCostPerLevel;
+            int scrap = run.Config.ScrapCostBase * 2 - run.Scrap;
+            int energy = run.Config.EnergyCostPerLevel - run.Energy;
             for (int i = 0; i < scrap + energy; i++)
             {
                 if (run.CargoScrap + run.CargoEnergy == run.Capacity) run.Deposit();

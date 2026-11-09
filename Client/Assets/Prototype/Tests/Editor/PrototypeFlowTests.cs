@@ -10,31 +10,36 @@ namespace OutpostLoop.Tests
 
         [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
 
-        [Test] public void TwoSeedsCanWinByGatheringAndReturningHome()
+        [Test] public void TwoSeedsCanWinByAssigningWorkersAndSquad()
         {
             foreach(int seed in new[]{732,733})
             {
-                var w=new WorldState(seed); int trips=0;
+                var w=new WorldState(seed); int purchases=0;
                 for(int step=0;step<7201&&w.Run.Outcome==0;step++)
                 {
-                    var s=w.Run;int route=s.Levels[1]<3?1:s.Levels[2]<3?2:0;
-                    bool ready=s.Scrap+s.CargoScrap>=s.ScrapCost(route)&&s.Energy+s.CargoEnergy>=s.EnergyCost(route);
-                    bool full=s.CargoScrap+s.CargoEnergy>=s.Capacity;
-                    bool done=s.Levels[0]==3&&s.Levels[1]==3&&s.Levels[2]==3;
-                    Vector2 goal=Vector2.zero;
-                    if(!full&&!ready&&!done)
+                    var s = w.Run;
+                    int route = s.Levels[0] == 0 ? 0 : s.Levels[1] < 3 ? 1 : s.Levels[2] < 3 ? 2 : 0;
+                    if (s.Upgrade(route)) purchases++;
+                    if (w.ResourceOrder < 0 && !w.WorkerReturning && s.Levels[route] < 3)
                     {
-                        bool needEnergy=s.Energy+s.CargoEnergy<s.EnergyCost(route);
-                        ResourceNode best=null;
-                        foreach(var n in w.Nodes)if(n.Remaining>0&&n.Energy==needEnergy&&(best==null||Vector2.Distance(w.Player,n.Position)<Vector2.Distance(w.Player,best.Position)))best=n;
-                        if(best!=null)goal=best.Position;
+                        bool needEnergy = s.Energy < s.EnergyCost(route);
+                        int nearest = -1;
+                        float distance = float.PositiveInfinity;
+                        for (int i = 0; i < w.Nodes.Count; i++)
+                        {
+                            var node = w.Nodes[i];
+                            if (node.Remaining <= 0 || node.Energy != needEnergy || node.Position.sqrMagnitude >= distance) continue;
+                            distance = node.Position.sqrMagnitude;
+                            nearest = i;
+                        }
+                        if (nearest >= 0) Assert.IsTrue(w.AssignResource(nearest));
                     }
-                    if(w.Player.magnitude<3.5f&&s.Upgrade(route))trips++;
-                    var direction=goal-w.Player;
-                    w.Step(0.1f,direction.magnitude>0.2f?direction:Vector2.zero,true);
+                    if (w.NextWaveSector >= 0 && w.NextWaveTime - s.Elapsed <= 8 && w.SquadSector != w.NextWaveSector)
+                        Assert.IsTrue(w.DeploySquad(w.NextWaveSector));
+                    w.Step(.1f);
                 }
-                Debug.Log("BALANCE seed="+seed+" outcome="+w.Run.Outcome+" time="+w.Run.Elapsed+" hp="+w.Run.Health+" purchases="+trips+" kills="+w.Kills);
-                Assert.AreEqual(1,w.Run.Outcome,"seed="+seed);Assert.GreaterOrEqual(trips,3);
+                Debug.Log("BALANCE seed="+seed+" outcome="+w.Run.Outcome+" time="+w.Run.Elapsed+" hp="+w.Run.Health+" purchases="+purchases+" kills="+w.Kills);
+                Assert.AreEqual(1,w.Run.Outcome,"seed="+seed);Assert.GreaterOrEqual(purchases,3);
             }
         }
         [Test] public void ControllerRestartReplacesWorldAndKeepsBoundedPool()
@@ -43,10 +48,11 @@ namespace OutpostLoop.Tests
             try
             {
                 var c=root.AddComponent<PrototypeController>();c.Initialize();c.Restart(true);
-                var prior=c.World;prior.Run.Gather(false);prior.Run.Deposit();prior.Run.Damage(100);
+                var prior=c.World;prior.AssignResource(0);prior.DeploySquad(2);prior.Run.Damage(100);
                 c.Restart(true);
                 Assert.AreNotSame(prior,c.World);Assert.AreEqual(0,c.World.Run.Outcome);Assert.IsFalse(c.World.Run.Paused);
                 Assert.AreEqual(0,c.World.Run.Scrap);Assert.AreEqual(48,root.GetComponentsInChildren<Transform>(true).Length>48?CountEnemies(root):0);
+                Assert.AreEqual(-1,c.World.ResourceOrder);Assert.AreEqual(-1,c.World.SquadSector);
                 Assert.AreEqual(1,root.GetComponentsInChildren<Camera>(true).Length);
             }
             finally{Object.DestroyImmediate(root);}

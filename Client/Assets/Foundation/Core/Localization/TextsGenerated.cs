@@ -24,12 +24,12 @@ namespace Game
         /// </summary>
         public static string Commonretry => Loc.T("CommonRetry");
         /// <summary>
-        /// 背包 {0} / {1}
+        /// 工人载货 {0} / {1}
         /// </summary>
         public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);
         /// <summary>
-        /// WASD 移动 · 靠近资源按住 E 采集 · 回基地自动卸货
-        /// 基地附近 B 升级 · ESC 暂停 · 守住最终进攻即获胜
+        /// 点击场景或小地图资源点，工人自动往返
+        /// 四向按钮调防 · B 升级 · ESC 暂停
         /// </summary>
         public static string Hudcontrols => Loc.T("HudControls");
         /// <summary>
@@ -40,6 +40,10 @@ namespace Game
         /// 区域地图
         /// </summary>
         public static string Hudmap => Loc.T("HudMap");
+        /// <summary>
+        /// 暂停
+        /// </summary>
+        public static string Hudpause => Loc.T("HudPause");
         /// <summary>
         /// 库存：废料 {0}  能源 {1}
         /// </summary>
@@ -53,7 +57,7 @@ namespace Game
         /// </summary>
         public static string Hudtitle => Loc.T("HudTitle");
         /// <summary>
-        /// 回收废料与能源，强化基地防线。
+        /// 派工人回收废料与能源，调守军强化防线。
         /// 守住 {0:0.#} 分钟内的最后一波进攻。
         /// </summary>
         public static string Previewbrief(object arg0) => Loc.T("PreviewBrief", arg0);
@@ -87,7 +91,7 @@ namespace Game
         /// </summary>
         public static string Previewtext12 => Loc.T("PreviewText12");
         /// <summary>
-        /// WASD 移动    E 采集    B 升级    ESC 暂停
+        /// 点击资源派工    四向按钮调防    B 升级    ESC 暂停
         /// </summary>
         public static string Previewtext13 => Loc.T("PreviewText13");
         /// <summary>
@@ -123,7 +127,7 @@ namespace Game
         /// </summary>
         public static string Previewtext3 => Loc.T("PreviewText3");
         /// <summary>
-        /// 返回探索 [B]
+        /// 返回指挥 [B]
         /// </summary>
         public static string Previewtext4 => Loc.T("PreviewText4");
         /// <summary>
@@ -151,11 +155,7 @@ namespace Game
         /// </summary>
         public static string Resourcemarkerenergy => Loc.T("ResourceMarkerEnergy");
         /// <summary>
-        /// 背包已满 · 返回基地卸货
-        /// </summary>
-        public static string Resourcemarkerfull => Loc.T("ResourceMarkerFull");
-        /// <summary>
-        /// 按住 E 采集
+        /// 点击派工
         /// </summary>
         public static string Resourcemarkergather => Loc.T("ResourceMarkerGather");
         /// <summary>
@@ -254,6 +254,22 @@ namespace Game
         /// 发现更新，重启后由启动流程更新。
         /// </summary>
         public static string Settingsupdateavailable => Loc.T("SettingsUpdateAvailable");
+        /// <summary>
+        /// 调防 · {0}
+        /// </summary>
+        public static string Strategydeploy(object arg0) => Loc.T("StrategyDeploy", arg0);
+        /// <summary>
+        /// 最终波已出发
+        /// </summary>
+        public static string Strategyfinalwave => Loc.T("StrategyFinalWave");
+        /// <summary>
+        /// 下波来向：{0} · {1} 秒
+        /// </summary>
+        public static string Strategynextwave(object arg0, object arg1) => Loc.T("StrategyNextWave", arg0, arg1);
+        /// <summary>
+        /// 当前采集任务
+        /// </summary>
+        public static string Strategyresourceassigned => Loc.T("StrategyResourceAssigned");
         /// <summary>
         /// 开局补给 · 余额 {0} 币 · 已选 {1} 币
         /// </summary>

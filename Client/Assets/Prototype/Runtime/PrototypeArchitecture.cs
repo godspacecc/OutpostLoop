@@ -20,12 +20,10 @@ namespace OutpostLoop
     }
     /// <summary>每次新局开始后发布，不携带Unity对象。</summary>
     public struct PrototypeRunStarted { public int Seed; }
-    /// <summary>统一生命周期推进规则；界面只提交输入和购买意图。</summary>
+    /// <summary>统一生命周期推进规则；界面只提交调度和购买意图。</summary>
     public sealed class PrototypeSystem : AbstractSystem
     {
-        // 输入快照与领域模型，退出架构时解除帧订阅。
-        private Vector2 movement;
-        private bool gathering;
+        // 退出架构时解除帧订阅，调度命令直接交给本局校验。
         private PrototypeModel model;
         private bool awaitingStart;
         private bool rewardAttempted;
@@ -36,17 +34,19 @@ namespace OutpostLoop
         public WorldState Begin(int seed,bool running)
         {
             var next=new WorldState(seed);next.Run.Paused=!running;
-            model.World=next;movement=Vector2.zero;gathering=false;
+            model.World=next;
             awaitingStart = !running;
             rewardAttempted = false;
             VictoryRewardRecorded = false;
             this.GetSystem<Game.AudioSystem>()?.SetPaused(!running);
             this.SendEvent(new PrototypeRunStarted{Seed=seed});return next;
         }
-        public void SubmitInput(Vector2 direction,bool collect){movement=direction;gathering=collect;}
+        public bool AssignResource(int node) => model.World?.AssignResource(node) == true;
+        public bool DeploySquad(int sector) => model.World?.DeploySquad(sector) == true;
+
         private void OnTick()
         {
-            model.World?.Step(Time.deltaTime,movement,gathering);
+            model.World?.Step(Time.deltaTime);
             if (model.World?.Run.Outcome > 0 && !rewardAttempted) TryRecordVictory();
         }
 
@@ -82,7 +82,7 @@ namespace OutpostLoop
         }
         public bool Purchase(int route)
         {
-            if(model.World==null||!model.World.IsAtBase)return false;
+            if(model.World==null)return false;
             var run=model.World.Run;bool paused=run.Paused;
             try{run.Paused=false;return run.Upgrade(route);}finally{run.Paused=paused;}
         }
