@@ -6,34 +6,37 @@ namespace OutpostLoop
     internal sealed partial class PrototypeOverlayView
     {
         // 开局与局内窗口只呈现领域状态，实际扣费、任务和保存由系统处理。
-        private Text profileSummary, legacyBalance, training, industrialEntry, trainingFeedback;
-        private Text cancelReturn, researchStatus, shelterOption;
+        private Text profileSummary, legacyBalance, training, scoutTraining, trainingFeedback;
+        private Text cancelReturn, researchStatus, shelterOption, dismantleBarricade;
+        private readonly Text[] mapEntries = new Text[3];
         private GameObject researchRows;
-        private readonly Text[] techActions = new Text[3];
+        private readonly Text[] techActions = new Text[ExpeditionState.TechTree.Length];
 
         private void BuildDeparture(Font font, PrototypeController controller, Color ink, Color mint, Color muted, Color line)
         {
-            StartText(font, "ExpeditionTitle", "探索出发", 96, 165, 650, 76, 59, ink, FontStyle.Bold);
-            StartText(font, "ExpeditionSubtitle", "活着回归，将资金和科技带回档案", 96, 245, 650, 44, 26, muted);
-            Fill("ProfileRule", 96, 305, 650, 2, line);
-            profileSummary = Label(StartRect("ExpeditionProfile", 96, 318, 650, 72), font, "Label",
-                new Vector2(650, 72), Vector2.zero, 25);
+            StartText(font, "ExpeditionTitle", "探索出发", 96, 149, 650, 76, 59, ink, FontStyle.Bold);
+            StartText(font, "ExpeditionSubtitle", "活着回归，将资金和科技带回档案", 96, 222, 650, 44, 26, muted);
+            Fill("ProfileRule", 96, 272, 650, 2, line);
+            profileSummary = Label(StartRect("ExpeditionProfile", 96, 282, 650, 85), font, "Label",
+                new Vector2(650, 85), Vector2.zero, 23);
             profileSummary.alignment = TextAnchor.MiddleLeft;
 
-            BuildMapEntry(font, controller, ExpeditionMap.Wilderness, 418, mint, muted);
-            industrialEntry = BuildMapEntry(font, controller, ExpeditionMap.Industrial, 571, mint, muted);
+            for (int index = 0; index < mapEntries.Length; index++)
+                mapEntries[index] = BuildMapEntry(font, controller, (ExpeditionMap)index, 400 + index * 122, mint, muted);
 
-            training = Button(startStage, font, "TrainCommander", "", new Vector2(650, 54), new Vector2(421, -747),
+            training = Button(startStage, font, "TrainCommander", "", new Vector2(316, 62), new Vector2(254, -789),
                 new Vector2(0, 1), controller.TrainCommander);
-            training.fontSize = 24;
-            trainingFeedback = Label(StartRect("TrainingFeedback", 96, 777, 650, 38), font, "Label",
+            scoutTraining = Button(startStage, font, "TrainScout", "", new Vector2(316, 62), new Vector2(588, -789),
+                new Vector2(0, 1), controller.TrainScout);
+            training.fontSize = scoutTraining.fontSize = 21;
+            trainingFeedback = Label(StartRect("TrainingFeedback", 96, 825, 650, 38), font, "Label",
                 new Vector2(650, 38), Vector2.zero, 22);
 
-            Fill("LegacyRule", 96, 824, 650, 2, line);
+            Fill("LegacyRule", 96, 874, 650, 2, line);
             var legacy = Button(startStage, font, "PrimaryAction", Game.Loc.T("PreviewText12"), new Vector2(260, 60),
-                new Vector2(226, -879), new Vector2(0, 1), controller.ActOnModal);
+                new Vector2(226, -925), new Vector2(0, 1), controller.ActOnModal);
             legacy.fontSize = 25;
-            legacyBalance = Label(StartRect("StartingBalance", 380, 844, 366, 70), font, "Label",
+            legacyBalance = Label(StartRect("StartingBalance", 380, 890, 366, 70), font, "Label",
                 new Vector2(366, 70), Vector2.zero, 21);
             legacyBalance.alignment = TextAnchor.MiddleLeft;
         }
@@ -41,13 +44,15 @@ namespace OutpostLoop
         private Text BuildMapEntry(Font font, PrototypeController controller, ExpeditionMap map, float y, Color mint, Color muted)
         {
             var rules = ExpeditionMapRules.For(map);
-            var label = Button(startStage, font, "Depart" + map, $"{rules.Name} · {rules.Era}  →", new Vector2(650, 58),
+            var label = Button(startStage, font, "Depart" + map, $"{rules.Name} · {rules.Era}  →", new Vector2(650, 48),
                 new Vector2(421, -y), new Vector2(0, 1), () => controller.Depart(map));
-            label.fontSize = 29;
-            StartText(font, map + "Basic", $"基础 · 存活 {rules.Days} 天（{rules.SurvivalSeconds / 60} 分钟）  +{rules.BasicFunds} 资金",
-                96, y + 36, 650, 35, 25, mint);
+            label.fontSize = 25;
+            StartText(font, map + "Basic", $"基础 · {rules.BasicObjective}  +{rules.BasicFunds} 资金",
+                96, y + 25, 650, 32, 23, mint);
             StartText(font, map + "Survey", $"终极 · {rules.Objective}  +{rules.SurveyFunds} 资金",
-                96, y + 74, 650, 35, 25, muted);
+                96, y + 56, 650, 32, 23, muted);
+            StartText(font, map + "Enemy", $"敌袭每 {rules.EnemyInterval} 秒 · 上限 {rules.EnemyCap}",
+                508, y + 56, 238, 32, 19, muted, alignment: TextAnchor.MiddleRight);
             return label;
         }
 
@@ -55,12 +60,20 @@ namespace OutpostLoop
         {
             var profile = controller.ExpeditionProfile;
             SetText(profileSummary, $"局外资金 {profile.Funds}  ·  指挥员生命 {profile.MaxHealth}\n已带回科技 · {ExpeditionState.DescribeTech(profile.Tech)}");
-            bool unlocked = profile.CanEnter(ExpeditionMap.Industrial);
-            SetText(industrialEntry, unlocked ? "旧工业区 · 工事时代  →" : "旧工业区 · 工事时代  /  需野外测绘");
-            SetAffordable(industrialEntry, unlocked);
+            for (int index = 0; index < mapEntries.Length; index++)
+            {
+                var map = (ExpeditionMap)index;
+                var rules = ExpeditionMapRules.For(map);
+                bool unlocked = profile.CanEnter(map);
+                SetText(mapEntries[index], $"{rules.Name} · {rules.Era}  {(unlocked ? "→" : "/  " + rules.EntryRequirement)}");
+                SetAffordable(mapEntries[index], unlocked);
+            }
             SetText(training, profile.Trained ? "体能训练 · 已完成" :
-                $"体能训练 · {ExpeditionProfile.TrainingCost} 资金 · 下次出发生命 +20");
+                $"体能训练 · {ExpeditionProfile.TrainingCost} 资金\n下次出发生命 +20");
             SetAffordable(training, profile.CanTrain);
+            SetText(scoutTraining, profile.ScoutTrained ? "侦察训练 · 已完成" :
+                $"侦察训练 · {ExpeditionProfile.ScoutTrainingCost} 资金\n下次出发视野 +2 米");
+            SetAffordable(scoutTraining, profile.CanTrainScout);
             SetText(trainingFeedback, controller.ActionFeedback);
             SetText(legacyBalance, Game.Loc.T("StartingFundsTier", controller.World.Run.Funds) + "\n" + TierProgress(controller));
         }
@@ -68,14 +81,27 @@ namespace OutpostLoop
         private void BuildExpeditionModal(Transform panel, Font font, PrototypeController controller)
         {
             researchRows = Rect("ResearchRows", panel, new Vector2(.5f, .5f), new Vector2(680, 286), new Vector2(0, 14)).gameObject;
+            Label(researchRows.transform, font, "FortificationBranch", new Vector2(310, 34), new Vector2(-170, 139), 24).text = "工事";
+            Label(researchRows.transform, font, "HaulingBranch", new Vector2(310, 34), new Vector2(170, 139), 24).text = "采运";
             foreach (var tech in ExpeditionState.TechTree)
             {
                 int index = (int)tech;
-                techActions[index] = Button(researchRows.transform, font, "Research" + tech, "", new Vector2(660, 64),
-                    new Vector2(0, 103 - index * 72), new Vector2(.5f, .5f), () => controller.Research(tech));
-                techActions[index].fontSize = 22;
+                var position = tech switch
+                {
+                    ExpeditionTech.Fortifications => new Vector2(-170, 91),
+                    ExpeditionTech.Reinforcement => new Vector2(-170, 27),
+                    ExpeditionTech.Bracing => new Vector2(-170, -37),
+                    ExpeditionTech.Handcart => new Vector2(170, 91),
+                    ExpeditionTech.Pulley => new Vector2(170, 27),
+                    _ => new Vector2(0, -101)
+                };
+                techActions[index] = Button(researchRows.transform, font, "Research" + tech, "",
+                    new Vector2(tech == ExpeditionTech.Survey ? 660 : 322, 58), position, new Vector2(.5f, .5f), () => controller.Research(tech));
+                techActions[index].fontSize = 18;
             }
-            researchStatus = Label(researchRows.transform, font, "ResearchStatus", new Vector2(660, 48), new Vector2(0, -106), 22);
+            Label(researchRows.transform, font, "WorkshopRequirement", new Vector2(322, 58), new Vector2(170, -37), 18).text =
+                "旧工坊 · 带回野外测绘\n山口烽台 · 开闸回归";
+            researchStatus = Label(researchRows.transform, font, "ResearchStatus", new Vector2(660, 37), new Vector2(0, -151), 21);
             cancelReturn = Button(panel, font, "CancelReturn", "取消 · 继续探索", new Vector2(390, 48), new Vector2(0, -113),
                 new Vector2(.5f, .5f), controller.CancelReturn);
         }
@@ -121,7 +147,7 @@ namespace OutpostLoop
                     bool pending = expedition.Reward > 0 && !controller.VictoryRewardRecorded;
                     SetText(heading, expedition.End switch
                     {
-                        ExpeditionEnd.Surveyed => "完成勘察 · 自动回归",
+                        ExpeditionEnd.Surveyed => "终极任务完成 · 自动回归",
                         ExpeditionEnd.Returned => "探索回归",
                         ExpeditionEnd.Abandoned => "已放弃探索",
                         _ => "指挥员阵亡"
@@ -138,15 +164,23 @@ namespace OutpostLoop
         {
             var world = controller.World;
             var spec = world.BuildingSpec(kind);
-            bool turret = kind == ExpansionKind.Turret;
             var rect = (RectTransform)option.transform.parent;
-            rect.anchoredPosition = new Vector2(0, turret ? 66 : 110);
-            bool unlocked = !turret || world.Expedition.Has(ExpeditionTech.Fortifications);
-            string name = turret ? "简易炮塔" : "庇护所";
-            string label = $"{name} · {spec.Cost} 物资 / {spec.BuildSeconds} 秒";
-            if (!unlocked) label += " · 需要简易工事";
+            float y = kind switch { ExpansionKind.Extractor => 66, ExpansionKind.Barricade => 22, ExpansionKind.Turret => -22, _ => 110 };
+            rect.anchoredPosition = new Vector2(0, y);
+            string requirement = world.BuildingRequirement(kind);
+            bool unlocked = requirement.Length == 0;
+            string label = $"{ExpeditionBuildingName(kind)} · {spec.Cost} 物资 / {spec.BuildSeconds} 秒";
+            if (!unlocked) label += " · " + requirement;
             SetText(option, controller.PlacementKind == kind ? "已选 · " + label : label);
             SetAffordable(option, unlocked && world.Run.CanAfford(spec.Cost));
         }
+
+        private static string ExpeditionBuildingName(ExpansionKind kind) => kind switch
+        {
+            ExpansionKind.Extractor => "采运棚",
+            ExpansionKind.Barricade => "木桩拒马",
+            ExpansionKind.Turret => "绊索弩台",
+            _ => "庇护所"
+        };
     }
 }

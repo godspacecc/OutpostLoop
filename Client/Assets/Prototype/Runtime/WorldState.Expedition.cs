@@ -30,47 +30,24 @@ namespace OutpostLoop
         public static WorldState Depart(int seed, ExpeditionMap map, ExpeditionProfile profile, PrototypeConfig config = null)
         {
             if (profile?.CanEnter(map) != true) return null;
-            return new WorldState(seed, config, 0, new ExpeditionState(map, profile.Tech, profile.MaxHealth));
+            return new WorldState(seed, config, 0, new ExpeditionState(map, profile.Tech, profile.MaxHealth, profile.CommanderSight));
         }
 
         private void InitializeExpedition(System.Random random)
         {
             expeditionRandom = random;
-            int radius = Mathf.Max(1, Mathf.Min(7, Mathf.FloorToInt(Rules.MapRadius / 5)));
-            var spawn = new Vector2Int(random.Next(-radius, radius + 1), random.Next(-radius, radius + 1));
-            CommanderPosition = BattleGrid.Center(spawn);
             Run.DeployCommander(Expedition.MaxHealth);
-            int horizontal = random.Next(2) == 0 ? -1 : 1;
-            int vertical = random.Next(2) == 0 ? -1 : 1;
-            foreach (var offset in OreOffsets)
-                Nodes.Add(new ResourceNode { Position = BattleGrid.Center(spawn + offset), Remaining = 30 });
-            Expedition.CluePosition = BattleGrid.Center(spawn + new Vector2Int(5 * horizontal, 6 * vertical));
-            Expedition.SurveyPosition = BattleGrid.Center(spawn + new Vector2Int(-8 * horizontal, -7 * vertical));
+            GenerateExpeditionMap(random);
         }
 
-        public ExpansionSpec BuildingSpec(ExpansionKind kind) => Expedition != null && kind == ExpansionKind.Turret
-            ? new ExpansionSpec(30, Expedition.Has(ExpeditionTech.Reinforcement) ? 120 : 90, 6, 1, 1)
-            : ExpansionSite.SpecFor(kind);
-
-        private PlacementIssue PreviewExpeditionPlacement(ExpansionKind kind, RectInt footprint, int moving, ExpansionSpec spec)
+        public ExpansionSpec BuildingSpec(ExpansionKind kind) => Expedition == null ? ExpansionSite.SpecFor(kind) : kind switch
         {
-            if (moving >= 0 || (kind != ExpansionKind.Shelter && kind != ExpansionKind.Turret)) return PlacementIssue.Inactive;
-            if (kind == ExpansionKind.Turret && !Expedition.Has(ExpeditionTech.Fortifications)) return PlacementIssue.MissingResearch;
-            int count = 0;
-            foreach (var site in Buildings)
-            {
-                if (site.Kind == ExpansionKind.Empty) continue;
-                if (site.Kind == kind) count++;
-                if (site.Footprint.Overlaps(footprint)) return PlacementIssue.Occupied;
-            }
-            if (count >= (kind == ExpansionKind.Shelter ? 1 : 2)) return PlacementIssue.Limit;
-            if (!InBuildArea(footprint, CommanderPosition)) return PlacementIssue.Outside;
-            if (!Vision.Covers(footprint)) return PlacementIssue.NotVisible;
-            if (UnitOccupies(footprint) || MineralOccupies(footprint) ||
-                footprint.Contains(BattleGrid.Cell(Expedition.CluePosition)) ||
-                footprint.Contains(BattleGrid.Cell(Expedition.SurveyPosition))) return PlacementIssue.Occupied;
-            return Run.CanAfford(spec.Cost) ? PlacementIssue.None : PlacementIssue.InsufficientStock;
-        }
+            ExpansionKind.Turret => new ExpansionSpec(30, Expedition.Has(ExpeditionTech.Reinforcement) ? 120 : 90, 6, 1, 1),
+            ExpansionKind.Extractor => new ExpansionSpec(25, 80, 5, 2, 2),
+            ExpansionKind.Barricade => new ExpansionSpec(10, Expedition.Has(ExpeditionTech.Bracing) ? 120 : 80, 2, 2, 1),
+            _ => ExpansionSite.SpecFor(kind)
+        };
+
 
         public bool NearShelter
         {
@@ -86,13 +63,17 @@ namespace OutpostLoop
         /// <summary>空字符串表示节点可下单。暂停界面由调用者控制，战场位置仍须满足条件。</summary>
         public string ResearchBlock(ExpeditionTech tech)
         {
-            if (Expedition == null || (uint)tech > (uint)ExpeditionTech.Reinforcement) return "无效节点";
+            if (Expedition == null || (uint)tech > (uint)ExpeditionTech.Bracing) return "无效节点";
             if (Expedition.Has(tech)) return "已完成";
             if (Expedition.Researching.HasValue) return "已有研究进行中";
             if (!NearShelter) return "需在完工庇护所 3 米内";
             if (tech == ExpeditionTech.Survey && (!Expedition.Has(ExpeditionTech.Fortifications) ||
                 Expedition.Map != ExpeditionMap.Wilderness || !Expedition.FoundClue)) return ExpeditionState.Requirement(tech);
             if (tech == ExpeditionTech.Reinforcement && (!Expedition.Has(ExpeditionTech.Survey) ||
+                Expedition.Map != ExpeditionMap.Industrial || !Expedition.FoundClue)) return ExpeditionState.Requirement(tech);
+            if (tech == ExpeditionTech.Pulley && (!Expedition.Has(ExpeditionTech.Handcart) ||
+                !Expedition.Has(ExpeditionTech.Survey))) return ExpeditionState.Requirement(tech);
+            if (tech == ExpeditionTech.Bracing && (!Expedition.Has(ExpeditionTech.Fortifications) ||
                 Expedition.Map != ExpeditionMap.Industrial || !Expedition.FoundClue)) return ExpeditionState.Requirement(tech);
             return Run.CanAfford(ExpeditionState.TechCost(tech)) ? "" : "物资不足";
         }
@@ -121,7 +102,11 @@ namespace OutpostLoop
         {
             gatheringNode = null;
             miningWork = 0;
-            if (Expedition != null) Expedition.SurveyProgress = 0;
+            if (Expedition != null)
+            {
+                Expedition.SurveyProgress = 0;
+                Expedition.GateProgress = 0;
+            }
         }
 
         private bool CanReach(Vector2 position) => (CommanderPosition - position).sqrMagnitude <= 4 && Vision.IsVisible(position);
@@ -145,9 +130,9 @@ namespace OutpostLoop
             get
             {
                 if (Expedition == null) return "";
+                string mission = MissionInteractionHint();
+                if (mission.Length > 0) return mission;
                 if (!Expedition.FoundClue && CanReach(Expedition.CluePosition)) return "E 获取研究线索";
-                if (CanReach(Expedition.SurveyPosition)) return Expedition.BasicComplete
-                    ? $"按住 E 勘察 {Expedition.SurveyProgress:0.0}/3 秒" : "勘察需先完成基础任务";
                 var ore = NearbyOre();
                 return ore == null ? "" : $"按住 E 采集 · 剩余 {ore.Remaining}";
             }
@@ -155,16 +140,12 @@ namespace OutpostLoop
 
         private void StepInteraction(float dt)
         {
-            if (!interactHeld) return;
-            if (Expedition.BasicComplete && CanReach(Expedition.SurveyPosition))
+            if (interactionPressed)
             {
-                gatheringNode = null;
-                miningWork = 0;
-                Expedition.SurveyProgress += dt;
-                if (Expedition.SurveyProgress + .00001f >= 3) FinishExpedition(ExpeditionEnd.Surveyed);
-                return;
+                interactionPressed = false;
+                StepMissionPress();
             }
-            Expedition.SurveyProgress = 0;
+            if (!interactHeld || StepMissionHold(dt)) return;
             if (!Expedition.FoundClue && CanReach(Expedition.CluePosition)) Expedition.FoundClue = true;
             var ore = NearbyOre();
             if (ore != gatheringNode) { gatheringNode = ore; miningWork = 0; }
@@ -202,6 +183,10 @@ namespace OutpostLoop
             Expedition.CompletedTech = Expedition.StartingTech;
             Expedition.BasicComplete = false;
             Expedition.FoundClue = false;
+            Expedition.HasAxle = Expedition.HasRope = Expedition.BeaconLit = false;
+            Expedition.BeaconCare = 0;
+            Expedition.BeaconWaves = Expedition.BeaconQueued = 0;
+            beaconRaids.Clear();
             foreach (var site in Buildings) site.Damage(int.MaxValue);
             Enemies.Clear();
         }
@@ -256,10 +241,16 @@ namespace OutpostLoop
         private void StepExpeditionEnemies(float time)
         {
             var map = Expedition.Rules;
+            SpawnBeaconRaiders();
             if (time < (expeditionWave + 1) * map.EnemyInterval) return;
             expeditionWave++;
             float angle = (float)expeditionRandom.NextDouble() * 2 * Mathf.PI;
-            for (int i = 0; i < (map.HasFastEnemy ? 3 : 2) && Enemies.Count < map.EnemyCap; i++, angle += .09f)
+            int threat = Expedition.ThreatLevel(time);
+            int fast = map.FastEnemies + (threat >= 1 ? 1 : 0);
+            int total = map.StandardEnemies + fast + (threat >= 2 ? 1 : 0);
+            // 余位不足时先跳过普通敌人，保留升级后的快速与攻坚压力。
+            int first = Mathf.Max(0, total - (map.EnemyCap - Enemies.Count));
+            for (int i = first; i < total && Enemies.Count < map.EnemyCap; i++, angle += .09f)
             {
                 var point = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (Rules.MapRadius - 4);
                 var cell = BattleGrid.Cell(point);
@@ -271,12 +262,9 @@ namespace OutpostLoop
                     cell = BattleGrid.Cell(point);
                 }
                 if (!navigation.Walkable(cell)) continue;
-                bool fast = i == 2;
-                Enemies.Add(new EnemyState(fast ? EnemyKind.Fast : EnemyKind.Standard, expeditionWave, expeditionWave)
-                {
-                    Position = BattleGrid.Center(cell),
-                    Health = fast ? 12 : Rules.EnemyHealthBase
-                });
+                var kind = i < map.StandardEnemies ? EnemyKind.Standard
+                    : i < map.StandardEnemies + fast ? EnemyKind.Fast : EnemyKind.Siege;
+                AddExpeditionEnemy(kind, BattleGrid.Center(cell), expeditionWave, expeditionWave, false);
             }
         }
 
@@ -296,7 +284,7 @@ namespace OutpostLoop
                 if (Run.Outcome < 0) { FinishExpedition(ExpeditionEnd.Died); return; }
             }
             Run.Tick(dt, false);
-            Expedition.BasicComplete = Run.Elapsed >= Expedition.Rules.SurvivalSeconds;
+            StepMission(dt);
             if (Expedition.Researching.HasValue)
             {
                 Expedition.ResearchLeft -= dt;

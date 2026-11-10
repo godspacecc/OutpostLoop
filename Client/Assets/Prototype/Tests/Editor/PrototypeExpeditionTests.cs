@@ -14,7 +14,207 @@ namespace OutpostLoop.Tests
         [TearDown] public void Close() => Game.FoundationRuntime.Shutdown();
 
         internal static string ProfileDirectory() => Path.GetFullPath(Path.Combine(Application.dataPath,
-            "../../Backup/Artifacts/ExpeditionV09-20261110/Profile-" + Guid.NewGuid().ToString("N")));
+            "../../Backup/Artifacts/ExpeditionTacticsV010/Profile-" + Guid.NewGuid().ToString("N")));
+
+        [Test]
+        public void HandcartAndFortificationsBothReturnOnTwoSeeds()
+        {
+            var report = new System.Collections.Generic.List<string>();
+            foreach (int seed in new[] { 41, 731 })
+            foreach (bool hauling in new[] { true, false })
+            {
+                var profile = new ExpeditionProfile(ProfileDirectory());
+                var world = WorldState.Depart(seed, ExpeditionMap.Wilderness, profile);
+                PrepareShelter(world);
+                Mine(world, 1, 2);
+                var shelter = world.Buildings.First(site => site.Kind == ExpansionKind.Shelter);
+                MoveNear(world, shelter);
+                var tech = hauling ? ExpeditionTech.Handcart : ExpeditionTech.Fortifications;
+                int firstBranchStock = world.Run.Funds;
+                Assert.IsTrue(world.StartResearch(tech));
+                Assert.AreEqual(firstBranchStock - 20, world.Run.Funds);
+                Advance(world, 10);
+                if (hauling)
+                {
+                    var target = FindPlacement(world, ExpansionKind.Extractor, world.CommanderPosition + Vector2.one * 4);
+                    Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Extractor, target));
+                    var site = world.Buildings[world.FindBuilding(target)];
+                    int reserve = world.Nodes[site.NodeIndex].Remaining;
+                    int stock = world.Run.Funds;
+                    Advance(world, 5);
+                    world.Run.Paused = true;
+                    Advance(world, 2);
+                    Assert.AreEqual(stock, world.Run.Funds);
+                    world.Run.Paused = false;
+                    Advance(world, 2);
+                    Assert.AreEqual(stock + 4, world.Run.Funds);
+                    Assert.AreEqual(reserve - 4, world.Nodes[site.NodeIndex].Remaining);
+                }
+                else
+                {
+                    BuildNear(world, ExpansionKind.Turret, world.CommanderPosition + Vector2.one * 4);
+                    var cell = FindPlacement(world, ExpansionKind.Barricade, world.CommanderPosition - Vector2.one * 4);
+                    Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, cell, true));
+                    int index = world.FindBuilding(cell);
+                    Assert.AreEqual(new Vector2Int(1, 2), world.Buildings[index].Footprint.size);
+                    int stock = world.Run.Funds;
+                    Assert.IsTrue(world.DismantleExpeditionBarricade(index));
+                    Assert.AreEqual(-1, world.FindBuilding(cell));
+                    Assert.AreEqual(stock, world.Run.Funds);
+                    BuildNear(world, ExpansionKind.Barricade, BattleGrid.Center(cell));
+                }
+                while (world.Run.Elapsed < 76 && world.Run.Outcome == 0) world.Step(.1f);
+                int firstWaveStock = world.Run.Funds;
+                int placed = hauling ? 2 : 3;
+                int firstWaveLosses = placed - world.Buildings.Count(site => site.Kind != ExpansionKind.Empty);
+                Survive(world);
+                Assert.IsTrue(world.ReturnFromExpedition());
+                Assert.IsTrue(profile.RecordReturn(world));
+                Assert.AreEqual(25, profile.Funds);
+                report.Add($"种子 {seed}，路线 {tech}，分支首次投入 20，首波后物资 {firstWaveStock}，" +
+                    $"首波建筑损失 {firstWaveLosses}，回归前总损失 {placed - world.Buildings.Count(site => site.Kind != ExpansionKind.Empty)}，" +
+                    $"回归生命 {world.Run.Health}，入账 {profile.Funds}");
+            }
+            var directory = Path.GetDirectoryName(ProfileDirectory());
+            File.WriteAllLines(Path.Combine(directory, "路线对照-" + Guid.NewGuid().ToString("N") + ".txt"), report);
+        }
+
+        [Test]
+        public void OldProfileOpensWorkshopAndWinchUnlocksBeaconOnlyAfterReturn()
+        {
+            string directory = ProfileDirectory();
+            var profile = WriteProfile(directory, false);
+            Assert.AreEqual(100, profile.Funds);
+            Assert.AreEqual(3, profile.Tech);
+            Assert.IsTrue(profile.Trained);
+            Assert.IsFalse(profile.CanEnter(ExpeditionMap.Beacon));
+            var world = WorldState.Depart(41, ExpeditionMap.Industrial, profile);
+            var expedition = world.Expedition;
+            MoveTo(world, expedition.ObjectivePosition);
+            Assert.IsTrue(world.MoveCommander(expedition.SurveyPosition));
+            Advance(world, 6);
+            Assert.That(Vector2.Distance(world.CommanderPosition, expedition.SurveyPosition), Is.GreaterThan(2));
+            MoveTo(world, expedition.WorkshopRope);
+            world.PressInteraction();
+            Advance(world, .1f);
+            MoveTo(world, expedition.ObjectivePosition);
+            Interact(world, 4);
+            Assert.IsFalse(expedition.BasicComplete);
+            Assert.IsTrue(expedition.HasRope);
+            MoveTo(world, expedition.WorkshopAxle);
+            world.PressInteraction();
+            Advance(world, .1f);
+            MoveTo(world, expedition.ObjectivePosition);
+            world.HoldInteraction(true);
+            Advance(world, 2);
+            world.Run.Paused = true;
+            Advance(world, 2);
+            Assert.That(expedition.GateProgress, Is.EqualTo(2).Within(.01));
+            world.Run.Paused = false;
+            world.HoldInteraction(false);
+            Assert.AreEqual(0, expedition.GateProgress);
+            Interact(world, 4);
+            Assert.IsTrue(expedition.BasicComplete);
+            Assert.IsNull(world.ClosedWorkshopGate);
+            Assert.IsFalse(profile.CanEnter(ExpeditionMap.Beacon));
+            MoveTo(world, expedition.SurveyPosition);
+            Interact(world, 4.9f);
+            Assert.AreEqual(ExpeditionEnd.None, expedition.End);
+            Interact(world, 5);
+            Assert.AreEqual(ExpeditionEnd.Surveyed, expedition.End);
+            Assert.IsTrue(profile.RecordReturn(world));
+            Assert.IsTrue(profile.TrainScout());
+            Assert.IsFalse(profile.TrainScout());
+            var restored = new ExpeditionProfile(directory);
+            Assert.AreEqual(175, restored.Funds);
+            var beacon = WorldState.Depart(731, ExpeditionMap.Beacon, restored);
+            Assert.AreEqual(18, beacon.Expedition.CommanderSight);
+            Assert.AreEqual(120, beacon.Run.Health);
+        }
+
+        [Test]
+        public void BeaconDefenseSurvivesThreeRaidsAndReturnsWithFlagReward()
+        {
+            var profile = WriteProfile(ProfileDirectory(), true);
+            var world = WorldState.Depart(731, ExpeditionMap.Beacon, profile);
+            CompleteBeacon(world);
+            Assert.IsTrue(profile.RecordReturn(world));
+            Assert.AreEqual(320, profile.Funds);
+
+            var full = WorldState.Depart(41, ExpeditionMap.Beacon, profile);
+            MoveTo(full, full.Expedition.ObjectivePosition);
+            for (int index = 0; index < full.Expedition.Rules.EnemyCap; index++)
+                full.Enemies.Add(new EnemyState { Health = 100, Position = full.Expedition.SurveyPosition });
+            full.PressInteraction();
+            Advance(full, .1f);
+            Assert.AreEqual(3, full.Expedition.BeaconQueued);
+            full.Enemies.RemoveAt(0);
+            full.PressInteraction();
+            Advance(full, .1f);
+            Assert.AreEqual(1, full.Expedition.BeaconWaves);
+            Assert.AreEqual(2, full.Expedition.BeaconQueued);
+            Assert.AreEqual(1, full.Enemies.Count(enemy => enemy.IsBeaconRaider));
+        }
+
+        internal static void CompleteBeacon(WorldState world)
+        {
+            var expedition = world.Expedition;
+            Mine(world, 0, 1, 2, 3);
+            MoveTo(world, expedition.ObjectivePosition);
+            float back = Mathf.Sign(expedition.ObjectivePosition.y);
+            BuildNear(world, ExpansionKind.Turret, expedition.ObjectivePosition + new Vector2(-4, -4 * back));
+            BuildNear(world, ExpansionKind.Turret, expedition.ObjectivePosition + new Vector2(4, -4 * back));
+            BuildNear(world, ExpansionKind.Barricade, expedition.ObjectivePosition + new Vector2(-4, -7 * back));
+            BuildNear(world, ExpansionKind.Barricade, expedition.ObjectivePosition + new Vector2(4, -7 * back));
+            Advance(world, 6);
+            world.PressInteraction();
+            Advance(world, .1f);
+            Assert.AreEqual(1, expedition.BeaconWaves);
+            Assert.AreEqual(3, world.Enemies.Count(enemy => enemy.IsBeaconRaider));
+            MoveTo(world, expedition.ObjectivePosition + new Vector2(0, 10 * back));
+            float care = expedition.BeaconCare;
+            Advance(world, 2);
+            Assert.AreEqual(care, expedition.BeaconCare);
+            MoveTo(world, expedition.ObjectivePosition);
+            var loop = new[] { new Vector2(-4, 4 * back), new Vector2(4, 4 * back), new Vector2(4, 0), new Vector2(-4, 0) };
+            for (int leg = 0; leg < 100 && !expedition.BasicComplete && world.Run.Outcome == 0; leg++)
+            {
+                world.MoveCommander(expedition.ObjectivePosition + loop[leg % loop.Length]);
+                Advance(world, 1.7f);
+            }
+            Assert.IsTrue(expedition.BasicComplete, $"照料 {expedition.BeaconCare}，生命 {world.Run.Health}，来敌 {world.Enemies.Count}");
+            Assert.AreEqual(3, expedition.BeaconWaves);
+            Assert.IsFalse(world.Enemies.Any(enemy => enemy.IsBeaconRaider));
+            MoveTo(world, expedition.SurveyPosition);
+            Interact(world, 6);
+            Assert.AreEqual(ExpeditionEnd.Surveyed, expedition.End);
+        }
+
+        [Test]
+        public void EnemyPressureIncreasesAfterBasicMission()
+        {
+            var world = WorldState.Depart(41, ExpeditionMap.Wilderness, new ExpeditionProfile(ProfileDirectory()));
+            Survive(world);
+            var loop = new[] { new Vector2(24, 24), new Vector2(-24, 24), new Vector2(-24, -24), new Vector2(24, -24) };
+            for (int leg = 0; world.Run.Elapsed < 379 && world.Run.Outcome == 0; leg++)
+            {
+                world.MoveCommander(loop[leg % loop.Length]);
+                Advance(world, 9);
+            }
+            Assert.Greater(world.Run.Health, 0);
+            Assert.AreEqual(2, world.Expedition.ThreatLevel(world.Run.Elapsed));
+            Assert.IsTrue(world.Enemies.Any(enemy => enemy.Kind == EnemyKind.Fast && enemy.Wave == 4));
+            Assert.IsTrue(world.Enemies.Any(enemy => enemy.Kind == EnemyKind.Siege && enemy.Wave == 5));
+        }
+
+        private static ExpeditionProfile WriteProfile(string directory, bool workshopReturned)
+        {
+            Directory.CreateDirectory(directory);
+            string flag = workshopReturned ? ",\"workshopReturned\":true" : "";
+            File.WriteAllText(Path.Combine(directory, "expedition-profile.json"),
+                "{\"format\":1,\"data\":{\"funds\":100,\"tech\":3,\"trained\":true,\"returns\":[\"legacy\"]" + flag + "}}");
+            return new ExpeditionProfile(directory);
+        }
 
         [Test]
         public void CommanderAndPursuerMoveDiagonallyAcrossOpenGround()
@@ -222,12 +422,13 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(25, profile.Funds);
             var industrial = WorldState.Depart(41, ExpeditionMap.Industrial, profile);
             Assert.AreEqual(120, industrial.Run.Health);
-            Assert.AreEqual(480, industrial.Expedition.Rules.SurvivalSeconds);
+            Assert.IsFalse(industrial.Expedition.BasicComplete);
             var shelter = PrepareShelter(industrial);
             Mine(industrial, 1, 2);
             MoveTo(industrial, industrial.Expedition.CluePosition);
             Interact(industrial, .1f);
             MoveNear(industrial, shelter);
+            BuildNear(industrial, ExpansionKind.Turret, shelter.Position + Vector2.right * 4);
             Assert.IsTrue(industrial.StartResearch(ExpeditionTech.Reinforcement));
             float left = industrial.Expedition.ResearchLeft;
             industrial.Run.Paused = true;
@@ -237,9 +438,19 @@ namespace OutpostLoop.Tests
             Advance(industrial, 20);
             Assert.IsTrue(industrial.Expedition.Has(ExpeditionTech.Reinforcement));
             Assert.AreEqual(120, industrial.BuildingSpec(ExpansionKind.Turret).Health);
-            Advance(industrial, Mathf.Max(0, 60.1f - industrial.Run.Elapsed));
-            Assert.IsTrue(industrial.Enemies.Any(enemy => enemy.Kind == EnemyKind.Fast));
-            Survive(industrial);
+            Mine(industrial, 3, 4, 5, 6);
+            MoveNear(industrial, shelter);
+            BuildNear(industrial, ExpansionKind.Turret, shelter.Position - Vector2.right * 4);
+            Assert.IsTrue(industrial.StartResearch(ExpeditionTech.Handcart));
+            Advance(industrial, 10);
+            Assert.IsTrue(industrial.StartResearch(ExpeditionTech.Pulley));
+            Advance(industrial, 15);
+            Assert.IsTrue(industrial.StartResearch(ExpeditionTech.Bracing));
+            Advance(industrial, 15);
+            Assert.IsTrue(industrial.Expedition.Has(ExpeditionTech.Pulley));
+            Assert.AreEqual(120, industrial.BuildingSpec(ExpansionKind.Barricade).Health);
+            Assert.GreaterOrEqual(industrial.Wave, 1);
+            OpenWorkshop(industrial);
             Assert.IsTrue(industrial.ReturnFromExpedition());
             Assert.IsTrue(profile.RecordReturn(industrial));
             var next = WorldState.Depart(731, ExpeditionMap.Industrial, new ExpeditionProfile(directory));
@@ -247,11 +458,31 @@ namespace OutpostLoop.Tests
             int turret = BuildNear(next, ExpansionKind.Turret, next.CommanderPosition + Vector2.one * 3);
             Advance(next, 6);
             Assert.AreEqual(120, next.Buildings[turret].Health);
+            Assert.IsTrue(new ExpeditionProfile(directory).CanEnter(ExpeditionMap.Beacon));
+        }
+
+        internal static void OpenWorkshop(WorldState world)
+        {
+            MoveTo(world, world.Expedition.WorkshopAxle);
+            world.PressInteraction();
+            Advance(world, .1f);
+            MoveTo(world, world.Expedition.WorkshopRope);
+            world.PressInteraction();
+            Advance(world, .1f);
+            MoveTo(world, world.Expedition.ObjectivePosition);
+            Interact(world, 4);
+            Assert.IsTrue(world.Expedition.BasicComplete);
         }
 
         private static WorldState SurveyResearch(ExpeditionProfile profile)
         {
             var world = WorldState.Depart(731, ExpeditionMap.Wilderness, profile);
+            ResearchSurvey(world);
+            return world;
+        }
+
+        internal static void ResearchSurvey(WorldState world)
+        {
             var shelter = PrepareShelter(world);
             Mine(world, 1, 2);
             MoveTo(world, world.Expedition.CluePosition);
@@ -266,7 +497,6 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(world.StartResearch(ExpeditionTech.Survey));
             Advance(world, 15);
             Assert.IsTrue(world.Expedition.Has(ExpeditionTech.Survey));
-            return world;
         }
 
         private static ExpansionSite PrepareShelter(WorldState world)

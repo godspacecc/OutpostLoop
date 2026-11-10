@@ -5,7 +5,7 @@ namespace OutpostLoop
     public enum ExpansionKind { Empty, Extractor, Barracks, Barricade, Turret, Headquarters, Shelter }
 
     /// <summary>预览与提交共用同一组拒绝原因。</summary>
-    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar, NotVisible, MissingResearch }
+    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar, NotVisible, MissingResearch, BlocksAccess }
 
     /// <summary>建造侧栏与扣费规则共用的设施参数。</summary>
     public readonly struct ExpansionSpec
@@ -83,10 +83,11 @@ namespace OutpostLoop
         }
 
         /// <summary>科技在炮塔完工前生效，同时保留工地此前受到的损伤。</summary>
-        internal void ReinforceTurret()
+        internal void ReinforceConstruction(int newHealth)
         {
-            Health += (120 - spec.Health) / 2;
-            spec = new ExpansionSpec(spec.Cost, 120, spec.BuildSeconds, spec.Size.x, spec.Size.y);
+            if (newHealth <= spec.Health) return;
+            Health += (newHealth - spec.Health) / 2;
+            spec = new ExpansionSpec(spec.Cost, newHealth, spec.BuildSeconds, spec.Size.x, spec.Size.y);
         }
 
         internal void BeginProduction() => ProductionLeft = ProductionDuration;

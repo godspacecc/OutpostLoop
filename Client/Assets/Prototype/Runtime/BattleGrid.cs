@@ -42,9 +42,13 @@ namespace OutpostLoop
             blocked = new bool[side * side];
         }
 
-        internal void Rebuild(IReadOnlyList<ExpansionSite> sites, RectInt? headquarters)
+        internal void Rebuild(IReadOnlyList<ExpansionSite> sites, RectInt? headquarters,
+            IReadOnlyList<RectInt> terrain = null, RectInt? gate = null)
         {
             Array.Clear(blocked, 0, blocked.Length);
+            if (terrain != null)
+                foreach (var obstacle in terrain) Block(obstacle);
+            if (gate.HasValue) Block(gate.Value);
             if (headquarters.HasValue) Block(headquarters.Value);
             foreach (var site in sites)
                 if (site.Kind != ExpansionKind.Empty) Block(site.Footprint);
@@ -115,7 +119,7 @@ namespace OutpostLoop
         }
 
         /// <summary>用所有可达交互格作为起点，返回四邻域最短距离。</summary>
-        internal int[] Field(RectInt target, float reach)
+        internal int[] Field(RectInt target, float reach, RectInt? additionalBlock = null)
         {
             var distances = new int[blocked.Length];
             Array.Fill(distances, -1);
@@ -124,7 +128,8 @@ namespace OutpostLoop
             var candidates = new RectInt(target.min - Vector2Int.one * margin, target.size + Vector2Int.one * (margin * 2));
             foreach (var cell in candidates.allPositionsWithin)
             {
-                if (!Walkable(cell) || BattleGrid.DistanceTo(target, BattleGrid.Center(cell)) > reach) continue;
+                if (!Walkable(cell) || additionalBlock?.Contains(cell) == true ||
+                    BattleGrid.DistanceTo(target, BattleGrid.Center(cell)) > reach) continue;
                 distances[Index(cell)] = 0;
                 queue.Enqueue(cell);
             }
@@ -134,7 +139,7 @@ namespace OutpostLoop
                 foreach (var direction in Directions)
                 {
                     var next = cell + direction;
-                    if (!Walkable(next) || distances[Index(next)] >= 0) continue;
+                    if (!Walkable(next) || additionalBlock?.Contains(next) == true || distances[Index(next)] >= 0) continue;
                     distances[Index(next)] = distances[Index(cell)] + 1;
                     queue.Enqueue(next);
                 }

@@ -62,7 +62,7 @@ namespace OutpostLoop
         private int[] coreAttackRoute;
         // 选址阶段没有阻挡通行的建筑，指挥员直接走向地面目标。
         private Vector2? commanderTarget;
-        private readonly int[][] buildingRoutes = new int[ExpansionLimit + TurretLimit][];
+        private readonly int[][] buildingRoutes;
         private Vector2Int? miningPreviewCell;
         private bool miningPreviewValid;
         private readonly List<SightSource> sightSources = new List<SightSource>();
@@ -79,7 +79,8 @@ namespace OutpostLoop
             Seed = seed;
             Run = new RunState(config, startingFunds);
             Expedition = expedition;
-            var buildings = new ExpansionSite[ExpansionLimit + TurretLimit];
+            var buildings = new ExpansionSite[expedition == null ? ExpansionLimit + TurretLimit : 10];
+            buildingRoutes = new int[buildings.Length][];
             for (int i = 0; i < buildings.Length; i++) buildings[i] = new ExpansionSite();
             Buildings = Array.AsReadOnly(buildings);
             navigation = new BattleNavigation(Rules.MapRadius);
@@ -119,7 +120,7 @@ namespace OutpostLoop
             sightSources.Clear();
             if (Expedition != null)
             {
-                sightSources.Add(new SightSource(CommanderPosition, 16));
+                sightSources.Add(new SightSource(CommanderPosition, Expedition.CommanderSight));
                 foreach (var site in Buildings)
                 {
                     if (site.IsUnderConstruction) continue;
@@ -175,7 +176,7 @@ namespace OutpostLoop
         /// <summary>启用后接收相对真实基地和占地重算的路线。</summary>
         private void RefreshNavigation()
         {
-            navigation.Rebuild(Buildings, Headquarters);
+            navigation.Rebuild(Buildings, Headquarters, expeditionTerrain, ClosedWorkshopGate);
             if (Headquarters.HasValue) coreAttackRoute = navigation.Field(Headquarters.Value, Rules.AttackRadius);
             Array.Clear(buildingRoutes, 0, buildingRoutes.Length);
         }
@@ -199,6 +200,12 @@ namespace OutpostLoop
 
         private int FreeSlot(ExpansionKind kind)
         {
+            if (Expedition != null)
+            {
+                for (int i = 0; i < Buildings.Count; i++)
+                    if (Buildings[i].Kind == ExpansionKind.Empty) return i;
+                return -1;
+            }
             int start = kind == ExpansionKind.Turret ? ExpansionLimit : 0;
             int end = kind == ExpansionKind.Turret ? Buildings.Count : ExpansionLimit;
             for (int i = start; i < end; i++)
@@ -253,7 +260,7 @@ namespace OutpostLoop
             footprint = new RectInt(kind == ExpansionKind.Headquarters ? cell - Vector2Int.one : cell, size);
             node = -1;
             if (!Active || spec.Health == 0) return PlacementIssue.Inactive;
-            if (Expedition != null) return PreviewExpeditionPlacement(kind, footprint, moving, spec);
+            if (Expedition != null) return PreviewExpeditionPlacement(kind, footprint, moving, spec, out node);
             if (kind == ExpansionKind.Shelter) return PlacementIssue.Inactive;
             if (kind == ExpansionKind.Headquarters) return PreviewHeadquarters(cell, footprint);
             if (!Headquarters.HasValue) return PlacementIssue.Inactive;
@@ -372,7 +379,7 @@ namespace OutpostLoop
         /// <summary>生产建筑完工后一次付费，完成或等待出入口期间禁止重复订单。</summary>
         public bool Produce(int index)
         {
-            if (!Active || index < 0 || index >= Buildings.Count || !Buildings[index].CanProduce ||
+            if (!Active || Expedition != null || index < 0 || index >= Buildings.Count || !Buildings[index].CanProduce ||
                 !Run.TrySpend(ExpansionSite.PersonnelCost)) return false;
             Buildings[index].BeginProduction();
             return true;
@@ -482,9 +489,8 @@ namespace OutpostLoop
             {
                 if (site.IsUnderConstruction)
                 {
-                    if (Expedition != null && site.Kind == ExpansionKind.Turret && site.HealthLimit < 60 &&
-                        site.ConstructionLeft <= dt + .00001f && Expedition.Has(ExpeditionTech.Reinforcement))
-                        site.ReinforceTurret();
+                    if (Expedition != null && site.ConstructionLeft <= dt + .00001f)
+                        site.ReinforceConstruction(BuildingSpec(site.Kind).Health);
                     site.AdvanceConstruction(dt);
                     continue;
                 }
@@ -493,6 +499,7 @@ namespace OutpostLoop
                 switch (site.Kind)
                 {
                     case ExpansionKind.Extractor:
+                        if (Expedition != null) { StepExpeditionHauling(site, dt); break; }
                         if (site.NodeIndex < 0 || KnownOreRemaining(site.NodeIndex) <= 0)
                             site.NodeIndex = FindResourceFor(site.Position);
                         StepGatherer(site, dt);
@@ -542,6 +549,19 @@ namespace OutpostLoop
                 if (distance > closest || (target >= 0 && distance == closest)) continue;
                 closest = distance;
                 target = i;
+            }
+            // 烽台与撤离压力中的攻坚敌人先打能够触及的拒马和弩台。
+            if (Expedition != null && enemy.Kind == EnemyKind.Siege && target >= 0 &&
+                Buildings[target].Kind != ExpansionKind.Barricade && Buildings[target].Kind != ExpansionKind.Turret)
+            {
+                for (int i = 0; i < Buildings.Count; i++)
+                {
+                    var site = Buildings[i];
+                    if ((site.Kind != ExpansionKind.Barricade && site.Kind != ExpansionKind.Turret) ||
+                        BattleGrid.DistanceTo(site.Footprint, enemy.Position) > Rules.AttackRadius) continue;
+                    target = i;
+                    break;
+                }
             }
             if (target < 0 && (Expedition == null
                 ? BattleGrid.DistanceTo(Headquarters.Value, enemy.Position) <= Rules.AttackRadius

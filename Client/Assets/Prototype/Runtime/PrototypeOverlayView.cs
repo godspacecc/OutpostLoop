@@ -62,6 +62,8 @@ namespace OutpostLoop
         private int displayedSector;
         private bool displayedBase, displayedSquad;
         private Button upgradeButton, researchButton, returnButton;
+        private Text returnPreview;
+        private GameObject expeditionGuide;
         private LocalizedText commandGuide;
         private string displayedLanguage;
         protected override string Path() => null;
@@ -81,6 +83,8 @@ namespace OutpostLoop
             upgradeButton = BaseUI.transform.Find("OpenUpgrade").GetComponent<Button>();
             researchButton = BaseUI.transform.Find("OpenResearch").GetComponent<Button>();
             returnButton = BaseUI.transform.Find("OpenReturn").GetComponent<Button>();
+            returnPreview = BaseUI.transform.Find("ReturnPreview").GetComponent<Text>();
+            expeditionGuide = BaseUI.transform.Find("ExpeditionGuide").gameObject;
             commandGuide = BaseUI.transform.Find("CommandGuide/Controls").GetComponent<LocalizedText>();
             displayedLanguage = null;
             BaseUI.GetComponent<SafeAreaFitter>().ApplyNow();
@@ -94,8 +98,15 @@ namespace OutpostLoop
             returnButton.gameObject.SetActive(exploring);
             researchButton.interactable = exploring && owner.World.NearShelter;
             returnButton.interactable = owner.World.Expedition?.BasicComplete == true;
+            returnPreview.gameObject.SetActive(returnButton.interactable);
+            if (returnButton.interactable)
+            {
+                var expedition = owner.World.Expedition;
+                string preview = $"{expedition.Rules.BasicFunds} 资金 · {ExpeditionState.DescribeTech(expedition.NewTech)}";
+                if (returnPreview.text != preview) returnPreview.text = preview;
+            }
             BaseUI.transform.Find("CommandGuide").gameObject.SetActive(!exploring);
-            BaseUI.transform.Find("ExpeditionGuide").gameObject.SetActive(exploring);
+            expeditionGuide.SetActive(exploring && !owner.ExpeditionIntroDismissed);
             string guide = owner.TouchScoutingAvailable && UnityEngine.InputSystem.Touchscreen.current != null
                 ? "TouchScoutGuide" : "HudControls";
             if (commandGuide.Key != guide)
@@ -274,7 +285,10 @@ namespace OutpostLoop
                 new Vector2(0, -143), new Vector2(.5f, .5f), controller.BeginTurretMove);
             cancelPlacementButton = Button(panel, font, "CancelPlacement", "", new Vector2(468, 38),
                 new Vector2(0, -143), new Vector2(.5f, .5f), controller.CancelPlacementFromHud);
+            dismantleBarricade = Button(panel, font, "DismantleBarricade", "", new Vector2(468, 38),
+                new Vector2(0, -143), new Vector2(.5f, .5f), controller.DismantleBarricade);
             producePersonnel.fontSize = moveTurret.fontSize = cancelPlacementButton.fontSize = 18;
+            dismantleBarricade.fontSize = 18;
             constructionFeedback = Label(panel, font, "ConstructionFeedback", new Vector2(478, 32), new Vector2(0, -186), 19);
         }
 
@@ -291,6 +305,15 @@ namespace OutpostLoop
                 new Vector2(-247,62), new Vector2(1,0), controller.ToggleResearch);
             Button(transform, font, "OpenReturn", "回归", new Vector2(128,64),
                 new Vector2(-101,62), new Vector2(1,0), controller.ConfirmReturn);
+            var returnNote = Rect("ReturnPreview", transform, new Vector2(1, 0), new Vector2(460, 34), new Vector2(-264, 110));
+            var returnText = returnNote.gameObject.AddComponent<Text>();
+            returnText.font = font;
+            returnText.fontSize = 18;
+            returnText.resizeTextForBestFit = true;
+            returnText.resizeTextMinSize = 13;
+            returnText.resizeTextMaxSize = 18;
+            returnText.alignment = TextAnchor.MiddleRight;
+            returnText.raycastTarget = false;
             var guideSize = new Vector2(652, 94);
             var guide = Rect("CommandGuide", transform, Vector2.zero, guideSize, new Vector2(348, 60));
             guide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
@@ -299,8 +322,10 @@ namespace OutpostLoop
             guideText.Refresh();
             var expeditionGuide = Rect("ExpeditionGuide", transform, Vector2.zero, guideSize, new Vector2(348, 60));
             expeditionGuide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
-            Label(expeditionGuide, font, "Controls", guideSize, Vector2.zero, 22).text =
-                "右键移动 · E 交互 · V 建造 · T 研究\n滚轮缩放 · 中键旋转 · 方向键平移 · H 回焦点";
+            Label(expeditionGuide, font, "Controls", new Vector2(546, 90), new Vector2(-34, 0), 20).text =
+                "右键移动 · 靠近资源按 E 采集 · V 建造 · T 研究\n基础任务完成后可回归 · H 回焦点";
+            Button(expeditionGuide, font, "DismissExpeditionIntro", "关闭", new Vector2(78, 42), new Vector2(272, 0),
+                new Vector2(.5f, .5f), controller.DismissExpeditionIntro).fontSize = 18;
             var commands = new Text[SectorNames.Length];
             for (int i = 0; i < commands.Length; i++)
             {
@@ -401,10 +426,11 @@ namespace OutpostLoop
                 var kind = ExpansionOptions[i];
                 var option = constructionOptions[i];
                 bool isBase = kind == ExpansionKind.Headquarters;
-                option.transform.parent.gameObject.SetActive(exploring ? kind == ExpansionKind.Turret : isBase != world.Headquarters.HasValue);
+                bool expeditionOption = kind == ExpansionKind.Turret || kind == ExpansionKind.Extractor || kind == ExpansionKind.Barricade;
+                option.transform.parent.gameObject.SetActive(exploring ? expeditionOption : isBase != world.Headquarters.HasValue);
                 if (exploring)
                 {
-                    if (kind == ExpansionKind.Turret) PresentExpeditionBuilding(controller, option, kind);
+                    if (expeditionOption) PresentExpeditionBuilding(controller, option, kind);
                     continue;
                 }
                 ((RectTransform)option.transform.parent).anchoredPosition = new Vector2(0, 110 - Mathf.Max(0, i - 1) * 44);
@@ -418,10 +444,13 @@ namespace OutpostLoop
 
             var site = controller.SelectedBuilding < 0 ? null : world.Buildings[controller.SelectedBuilding];
             bool selectedSite = !controller.HasPlacement && site != null && site.Kind != ExpansionKind.Empty;
-            bool canProduce = selectedSite && site.CanProduce;
+            bool canProduce = !exploring && selectedSite && site.CanProduce;
             bool canMove = !exploring && selectedSite && site.Kind == ExpansionKind.Turret && !site.IsUnderConstruction;
             producePersonnel.transform.parent.gameObject.SetActive(canProduce);
             moveTurret.transform.parent.gameObject.SetActive(canMove);
+            bool canDismantle = exploring && selectedSite && site.Kind == ExpansionKind.Barricade;
+            dismantleBarricade.transform.parent.gameObject.SetActive(canDismantle);
+            if (canDismantle) SetText(dismantleBarricade, controller.ConfirmingDismantle ? "确认拆除 · 无返还" : "拆除木桩拒马");
             if (canProduce)
             {
                 SetText(producePersonnel, Loc.T(site.Kind == ExpansionKind.Extractor ? "ProduceGatherer" : "ProduceGuard",
@@ -461,7 +490,8 @@ namespace OutpostLoop
                     ExpansionKind.Shelter => "在 3 米内按 T 打开研究",
                     _ => Loc.T("TurretOperational")
                 };
-            SetText(constructionDetail, Loc.T("ExpansionStatus", BuildingName(site.Kind), site.Health, site.HealthLimit, status));
+            SetText(constructionDetail, Loc.T("ExpansionStatus",
+                exploring ? ExpeditionBuildingName(site.Kind) : BuildingName(site.Kind), site.Health, site.HealthLimit, status));
         }
 
 

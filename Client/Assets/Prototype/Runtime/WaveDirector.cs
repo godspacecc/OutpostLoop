@@ -13,6 +13,7 @@ namespace OutpostLoop
         public float Health;
         public EnemyKind Kind { get; }
         public int Wave { get; }
+        public bool IsBeaconRaider { get; internal set; }
         // 用于合并同一路的首次发现，同时让侧路独立报告。
         internal int ArrivalGroup { get; }
         public float LastAttackTime { get; internal set; } = float.NegativeInfinity;

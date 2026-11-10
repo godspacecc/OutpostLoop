@@ -41,7 +41,7 @@ namespace OutpostLoop
         private float pinchDistance;
         private bool suppressBattleTap, ignoreTouchUntilRelease;
         // 指挥视图和小地图共用同一套屏幕命中区域。
-        private static readonly Rect StatusRect = new Rect(16, 16, 330, 165);
+        private Rect StatusRect => new Rect(16, 16, 330, World?.Expedition != null ? 194 : 165);
         private static readonly Rect MapRect = new Rect(1050, 18, 210, 235);
         private static readonly Vector2 MapCenter = new Vector2(1155, 140);
         private static float HudScale => Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
@@ -222,13 +222,14 @@ namespace OutpostLoop
             ResetBattleCamera();
             UpdateBattleCamera();
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
-            var ground=Mat(World.Expedition?.Map == ExpeditionMap.Industrial ? new Color(.29f, .28f, .24f) : groundColor);
+            var ground=Mat(World.Expedition?.Map == ExpeditionMap.Industrial ? new Color(.29f, .28f, .24f)
+                : World.Expedition?.Map == ExpeditionMap.Beacon ? new Color(.24f, .28f, .31f) : groundColor);
             var stone=Mat(new Color(0.37f,0.40f,0.40f));
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
             var cyan=Mat(new Color(0.15f,0.88f,0.84f));var rust=Mat(new Color(0.52f,0.24f,0.17f));
             Shape("Ground",worldRoot,PrimitiveType.Cube,new Vector3(0,-0.3f,0),new Vector3(96,0.5f,96),ground);
             fog = new BattleFogPreview(worldRoot, World.Vision);
-            visibleOre = cyan;
+            visibleOre = World.Expedition == null ? cyan : Mat(new Color(.46f, .62f, .30f));
             rememberedOre = Mat(new Color(.34f, .45f, .43f));
             headquarters = new GameObject("Headquarters").transform;
             headquarters.SetParent(worldRoot, false);
@@ -238,7 +239,7 @@ namespace OutpostLoop
             Shape("Door", headquarters, PrimitiveType.Cube, new Vector3(0, .8f, -1.55f), new Vector3(.9f, 1.6f, .1f), amber);
             commander = Shape("Commander", worldRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(1.1f, .9f, 1.1f), amber);
             var blue = Mat(new Color(.32f, .58f, 1));
-            CreateExpeditionMarkers(blue, amber);
+            CreateExpeditionMarkers(blue, amber, stone, rust);
             CreateExpansionModels(stone, cyan, blue, rust, amber);
             validPlacement = Mat(new Color(.23f, .91f, .35f));
             invalidPlacement = Mat(new Color(.94f, .26f, .20f));
@@ -253,11 +254,11 @@ namespace OutpostLoop
             enemyMaterials = new[] { rust, amber, Mat(new Color(.62f, .17f, .31f)) };
             foreach(var node in World.Nodes)
             {
-                var item = Shape("Mineral", worldRoot, PrimitiveType.Cylinder, At(node.Position, .6f),
-                    new Vector3(1.6f, .6f, 1.6f), cyan);
+                var item = Shape("Mineral", worldRoot, World.Expedition == null ? PrimitiveType.Cylinder : PrimitiveType.Cube,
+                    At(node.Position, .6f), new Vector3(1.6f, .6f, 1.6f), visibleOre);
                 resources.Add(item.GetComponent<Renderer>());
             }
-            for(int i=0;i<World.Run.Config.MaxEnemies;i++)
+            for(int i=0;i<(World.Expedition?.Rules.EnemyCap ?? World.Run.Config.MaxEnemies);i++)
             {
                 var enemy=Shape("PooledEnemy",worldRoot,PrimitiveType.Capsule,Vector3.zero,new Vector3(0.65f,0.8f,0.65f),rust);
                 enemy.gameObject.SetActive(false);enemies.Add(enemy);
@@ -279,14 +280,18 @@ namespace OutpostLoop
                 var root = new GameObject("Building" + i).transform;
                 root.SetParent(worldRoot, false);
                 var foundation = Shape("Worksite", root, PrimitiveType.Cube, new Vector3(0, .24f, 0), Vector3.one, worksite);
-                var station = Shape("Extractor", root, PrimitiveType.Cylinder, new Vector3(0, 1.1f, 0), new Vector3(2.25f, 1, 2.25f), extractor);
+                bool exploring = World.Expedition != null;
+                var station = Shape("Extractor", root, exploring ? PrimitiveType.Cube : PrimitiveType.Cylinder, new Vector3(0, 1.1f, 0),
+                    exploring ? new Vector3(3.2f, 1.9f, 2.8f) : new Vector3(2.25f, 1, 2.25f), exploring ? barricade : extractor);
                 var quarters = Shape("Barracks", root, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(2.8f, 2.2f, 1.8f), barracks);
                 var wall = Shape("Barricade", root, PrimitiveType.Cube, new Vector3(0, .95f, 0), Vector3.one, barricade);
                 var turret = new GameObject("Turret").transform;
                 turret.SetParent(root, false);
                 Shape("Mount", turret, PrimitiveType.Cylinder, new Vector3(0, .4f, 0), new Vector3(1.5f, .4f, 1.5f), pad);
-                Shape("Head", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(.8f, .6f, .8f), pad);
+                Shape("Head", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(.8f, .6f, .8f), exploring ? barricade : pad);
                 Shape("Barrel", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, .7f), new Vector3(.2f, .2f, 1), worksite);
+                if (exploring)
+                    Shape("Bow", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, .65f), new Vector3(1.68f, .15f, .18f), barricade);
                 var guard = new GameObject("Garrison").transform;
                 guard.SetParent(root, false);
                 for (int member = -1; member <= 1; member++)
@@ -300,8 +305,8 @@ namespace OutpostLoop
                 shot.endWidth = .05f;
                 var shelter = new GameObject("FieldShelter").transform;
                 shelter.SetParent(root, false);
-                Shape("Cabin", shelter, PrimitiveType.Cube, new Vector3(0, .9f, 0), new Vector3(3.4f, 1.8f, 3.4f), pad);
-                Shape("Roof", shelter, PrimitiveType.Cube, new Vector3(0, 1.92f, 0), new Vector3(3.8f, .24f, 3.8f), barricade);
+                Shape("Cabin", shelter, PrimitiveType.Cube, new Vector3(0, .9f, 0), new Vector3(3.4f, 1.8f, 3.4f), barricade);
+                Shape("Roof", shelter, PrimitiveType.Cube, new Vector3(0, 1.92f, 0), new Vector3(3.8f, .24f, 3.8f), worksite);
                 Shape("Door", shelter, PrimitiveType.Cube, new Vector3(0, .67f, -1.71f), new Vector3(.85f, 1.34f, .05f), worksite);
                 expansionModels.Add(new ExpansionPreview(root, foundation, station, quarters, wall, turret, guard, gatherer, shelter, shot));
             }
@@ -418,7 +423,11 @@ namespace OutpostLoop
             }
             bool overUI = EventSystem.current?.IsPointerOverGameObject() == true;
             bool playing = Overlay == PrototypeOverlay.None;
-            if (World.Expedition != null && !World.Run.Paused) World.HoldInteraction(playing && Input.GetKey(KeyCode.E));
+            if (World.Expedition != null && !World.Run.Paused)
+            {
+                if (playing && Input.GetKeyDown(KeyCode.E)) World.PressInteraction();
+                World.HoldInteraction(playing && Input.GetKey(KeyCode.E));
+            }
             var mousePosition = (Vector2)Input.mousePosition;
             bool touching = PollBattleTouch(playing, out var tap);
             if (playing) PollBattleCamera(overUI, touching);
@@ -743,8 +752,9 @@ namespace OutpostLoop
             var spec = World.BuildingSpec(kind);
             if (spec.Health == 0 || !World.Run.CanAfford(spec.Cost)) return;
             if (World.Expedition == null && World.Headquarters.HasValue == (kind == ExpansionKind.Headquarters)) return;
-            if (World.Expedition != null && kind != ExpansionKind.Shelter &&
-                (kind != ExpansionKind.Turret || !World.Expedition.Has(ExpeditionTech.Fortifications))) return;
+            if (World.Expedition != null && (kind == ExpansionKind.Headquarters || kind == ExpansionKind.Barracks ||
+                World.BuildingRequirement(kind).Length > 0)) return;
+            barricadeDismantle = -1;
             CancelPlacement();
             SelectedBuilding = -1;
             selectedSquad = -1;
@@ -797,6 +807,7 @@ namespace OutpostLoop
 
         internal void CloseConstruction()
         {
+            barricadeDismantle = -1;
             if (!ConstructionOpen && !HasPlacement) return;
             CancelPlacement();
             SelectedBuilding = -1;
@@ -862,6 +873,7 @@ namespace OutpostLoop
                 return true;
             }
             SelectedBuilding = index;
+            barricadeDismantle = -1;
             selectedSquad = World.Buildings[index].Kind == ExpansionKind.Barracks ? index : -1;
             ConstructionOpen = true;
             feedback = "";
@@ -898,7 +910,8 @@ namespace OutpostLoop
 
         internal string PlacementMessage(PlacementIssue issue)
         {
-            if (issue == PlacementIssue.MissingResearch) return "需要简易工事";
+            if (issue == PlacementIssue.MissingResearch) return World.BuildingRequirement(PlacementKind);
+            if (issue == PlacementIssue.BlocksAccess) return "会封住资源或任务的入口";
             if (PlacementKind == ExpansionKind.Headquarters && issue == PlacementIssue.Outside)
                 return Game.Loc.T("HeadquartersOutside");
             if (PlacementKind == ExpansionKind.Headquarters && issue == PlacementIssue.NoResource)
@@ -1033,7 +1046,7 @@ namespace OutpostLoop
             foreach (var site in World.Buildings)
             {
                 if (site.IsUnderConstruction)
-                    DrawWorksiteBar(site.Position, site.ConstructionLeft, ExpansionSite.SpecFor(site.Kind).BuildSeconds, scale);
+                    DrawWorksiteBar(site.Position, site.ConstructionLeft, World.BuildingSpec(site.Kind).BuildSeconds, scale);
                 else if (site.ProductionLeft > 0)
                     DrawWorksiteBar(site.Position, site.ProductionLeft, site.ProductionDuration, scale);
             }
@@ -1171,7 +1184,7 @@ namespace OutpostLoop
             {
                 if (!expedition.FoundClue && World.Vision.IsExplored(expedition.CluePosition))
                     Dot(expedition.CluePosition, new Color(.32f, .58f, 1), 7);
-                if (World.Vision.IsExplored(expedition.SurveyPosition)) Dot(expedition.SurveyPosition, new Color(1, .61f, .13f), 7);
+                DrawExpeditionMapMarkers(expedition);
             }
             GUI.color=old;
         }

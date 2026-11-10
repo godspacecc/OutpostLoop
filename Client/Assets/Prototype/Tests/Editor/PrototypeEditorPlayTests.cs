@@ -55,6 +55,7 @@ namespace OutpostLoop.Tests
             yield return null;
             Assert.AreEqual(elapsed, world.Run.Elapsed);
             Click("PrimaryAction");
+            PrototypeExpeditionTests.ResearchSurvey(world);
             PrototypeExpeditionTests.Survive(world);
             yield return null;
             Click("OpenReturn");
@@ -69,6 +70,28 @@ namespace OutpostLoop.Tests
             Click("PrimaryAction");
             Assert.IsTrue(GameObject.Find("DepartWilderness").GetComponent<Button>().interactable);
             Assert.AreEqual(25, profile.Funds);
+            Assert.IsTrue(GameObject.Find("DepartIndustrial").GetComponent<Button>().interactable);
+            Assert.IsFalse(GameObject.Find("DepartBeacon").GetComponent<Button>().interactable);
+            Click("DepartIndustrial");
+            var workshop = controller.World;
+            Assert.AreEqual(ExpeditionMap.Industrial, workshop.Expedition.Map);
+            PrototypeExpeditionTests.OpenWorkshop(workshop);
+            yield return null;
+            Click("OpenReturn");
+            Click("PrimaryAction");
+            Assert.AreEqual(75, profile.Funds);
+            Click("PrimaryAction");
+            Assert.IsTrue(GameObject.Find("DepartBeacon").GetComponent<Button>().interactable);
+            Click("DepartBeacon");
+            var beacon = controller.World;
+            Assert.AreEqual(ExpeditionMap.Beacon, beacon.Expedition.Map);
+            PrototypeExpeditionTests.CompleteBeacon(beacon);
+            yield return null;
+            Assert.AreEqual(295, profile.Funds);
+            Click("PrimaryAction");
+            Click("TrainScout");
+            Assert.IsTrue(profile.ScoutTrained);
+            Assert.AreEqual(220, profile.Funds);
             yield return new ExitPlayMode();
         }
         [UnityTest]
