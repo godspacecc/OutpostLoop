@@ -23,7 +23,8 @@ namespace OutpostLoop
         private readonly RouteWalker commanderWalker = new RouteWalker();
         private int[] commanderRoute, pursuitRoute;
         private int commanderRevision = -1, pursuitRevision = -1;
-        private Vector2Int commanderRouteCell, pursuitCell;
+        private Vector2 commanderDestination;
+        private Vector2Int pursuitCell;
 
         /// <summary>只从局外档案允许的地图出发，并复制档案中的强化和已带回科技。</summary>
         public static WorldState Depart(int seed, ExpeditionMap map, ExpeditionProfile profile, PrototypeConfig config = null)
@@ -205,25 +206,38 @@ namespace OutpostLoop
             Enemies.Clear();
         }
 
+        /// <summary>优先走向点击的原始坐标，受阻时才求共享网格上的绕行路线。</summary>
         private void StepCommander(float dt)
         {
             if (!commanderTarget.HasValue) return;
-            var target = commanderTarget.Value;
-            var cell = BattleGrid.Cell(target);
-            if (!navigation.Walkable(cell)) { commanderTarget = null; return; }
-            if (commanderRevision != navigation.Revision || commanderRouteCell != cell)
+            var point = CommanderPosition;
+            if (commanderRevision != navigation.Revision)
             {
                 commanderRevision = navigation.Revision;
-                commanderRouteCell = cell;
-                commanderRoute = navigation.Field(new RectInt(cell, Vector2Int.one), 0);
+                var requested = commanderTarget.Value;
+                commanderDestination = navigation.Walkable(BattleGrid.Cell(requested))
+                    ? requested : navigation.NearestReachable(point, requested);
+                commanderRoute = null;
+                commanderWalker.Next = null;
             }
-            var point = CommanderPosition;
-            if (BattleGrid.Cell(point) == cell)
+            float travel = Rules.MoveSpeed * dt;
+            if (navigation.CanTravelStraight(point, commanderDestination))
             {
-                point = Vector2.MoveTowards(point, target, Rules.MoveSpeed * dt);
-                if (point == target) commanderTarget = null;
+                point = Vector2.MoveTowards(point, commanderDestination, travel);
+                commanderWalker.Next = null;
+                if (point == commanderDestination) commanderTarget = null;
             }
-            else navigation.Follow(commanderRoute, ref point, commanderWalker, Rules.MoveSpeed * dt);
+            else
+            {
+                commanderRoute ??= navigation.Field(new RectInt(BattleGrid.Cell(commanderDestination), Vector2Int.one), 0);
+                if (navigation.Distance(commanderRoute, BattleGrid.Cell(point)) < 0)
+                {
+                    commanderDestination = navigation.NearestReachable(point, commanderDestination);
+                    commanderRoute = navigation.Field(new RectInt(BattleGrid.Cell(commanderDestination), Vector2Int.one), 0);
+                    commanderWalker.Next = null;
+                }
+                navigation.FollowSmoothed(commanderRoute, ref point, commanderWalker, travel);
+            }
             CommanderPosition = point;
         }
 

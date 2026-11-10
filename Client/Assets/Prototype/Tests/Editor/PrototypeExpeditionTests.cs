@@ -17,6 +17,55 @@ namespace OutpostLoop.Tests
             "../../Backup/Artifacts/ExpeditionV09-20261110/Profile-" + Guid.NewGuid().ToString("N")));
 
         [Test]
+        public void CommanderAndPursuerMoveDiagonallyAcrossOpenGround()
+        {
+            var world = WorldState.Depart(41, ExpeditionMap.Wilderness, new ExpeditionProfile(ProfileDirectory()));
+            var start = world.CommanderPosition;
+            var destination = start + new Vector2(11.4f, 7.3f);
+            var enemy = new EnemyState { Position = start - new Vector2(8, 5), Health = 16 };
+            var enemyStart = enemy.Position;
+            world.Enemies.Add(enemy);
+            Assert.IsTrue(world.MoveCommander(destination));
+            Advance(world, .5f);
+            Assert.That(Vector2.Distance(world.CommanderPosition, Vector2.MoveTowards(start, destination, world.Run.Config.MoveSpeed * .5f)),
+                Is.LessThan(.001f));
+            Assert.Greater(enemy.Position.x, enemyStart.x);
+            Assert.Greater(enemy.Position.y, enemyStart.y);
+            MoveTo(world, destination);
+            Assert.That(Vector2.Distance(world.CommanderPosition, destination), Is.LessThan(.001f));
+        }
+
+        [Test]
+        public void CommanderReroutesAroundNewShelterAndApproachesBlockedClicks()
+        {
+            var world = WorldState.Depart(731, ExpeditionMap.Wilderness, new ExpeditionProfile(ProfileDirectory()));
+            var start = world.CommanderPosition;
+            Mine(world, 0);
+            MoveTo(world, start);
+            var destination = start + new Vector2(11, 3);
+            Assert.IsTrue(world.MoveCommander(destination));
+            Advance(world, .2f);
+            var siteCell = BattleGrid.Cell(start) + new Vector2Int(2, 1);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Shelter, siteCell));
+            var shelter = world.Buildings[world.FindBuilding(siteCell)];
+            for (int i = 0; i < 60; i++)
+            {
+                world.Step(.1f);
+                Assert.IsFalse(shelter.Footprint.Contains(BattleGrid.Cell(world.CommanderPosition)), "施工后不能穿过新占地");
+            }
+            Assert.That(Vector2.Distance(world.CommanderPosition, destination), Is.LessThan(.001f));
+
+            Assert.IsTrue(world.MoveCommander(shelter.Position));
+            Advance(world, 4);
+            Assert.IsFalse(shelter.Footprint.Contains(BattleGrid.Cell(world.CommanderPosition)));
+            Assert.LessOrEqual(BattleGrid.DistanceTo(shelter.Footprint, world.CommanderPosition), 1.01f);
+
+            Assert.IsTrue(world.MoveCommander(new Vector2(100, 20)));
+            Advance(world, 20);
+            Assert.That(world.CommanderPosition.magnitude, Is.InRange(43f, world.Run.Config.MapRadius));
+        }
+
+        [Test]
         public void NewSeedsProvideReachableOreShelterAndClue()
         {
             var profile = new ExpeditionProfile(ProfileDirectory());

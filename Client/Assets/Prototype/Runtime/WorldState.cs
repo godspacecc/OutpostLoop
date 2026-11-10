@@ -186,6 +186,7 @@ namespace OutpostLoop
             if (!Active || Headquarters.HasValue || float.IsNaN(point.x) || float.IsNaN(point.y) ||
                 float.IsInfinity(point.x) || float.IsInfinity(point.y)) return false;
             commanderTarget = Vector2.ClampMagnitude(point, Rules.MapRadius);
+            commanderRevision = -1;
             return true;
         }
 
@@ -544,7 +545,8 @@ namespace OutpostLoop
             }
             if (target < 0 && (Expedition == null
                 ? BattleGrid.DistanceTo(Headquarters.Value, enemy.Position) <= Rules.AttackRadius
-                : (CommanderPosition - enemy.Position).sqrMagnitude <= 1.5f * 1.5f)) target = -1;
+                : (CommanderPosition - enemy.Position).sqrMagnitude <= 1.5f * 1.5f &&
+                    navigation.CanTravelStraight(enemy.Position, CommanderPosition))) target = -1;
             if (enemy.AttackSite != target)
             {
                 enemy.AttackSite = target;
@@ -573,6 +575,19 @@ namespace OutpostLoop
                 return;
             }
 
+            float speed = enemy.Kind switch
+            {
+                EnemyKind.Fast => 2.4f + .1f * enemy.Wave,
+                EnemyKind.Siege => 1f + .05f * enemy.Wave,
+                _ => Rules.EnemySpeed + enemy.Wave * Rules.EnemySpeedPerWave
+            };
+            if (Expedition != null && navigation.CanTravelStraight(enemy.Position, CommanderPosition))
+            {
+                enemy.Walker.Next = null;
+                enemy.Position = Vector2.MoveTowards(enemy.Position, CommanderPosition, speed * dt);
+                return;
+            }
+
             var field = Expedition == null ? coreAttackRoute : CommanderAttackField();
             var cell = BattleGrid.Cell(enemy.Position);
             if (navigation.Distance(field, cell) < 0)
@@ -588,13 +603,8 @@ namespace OutpostLoop
                     field = route;
                 }
             }
-            float speed = enemy.Kind switch
-            {
-                EnemyKind.Fast => 2.4f + .1f * enemy.Wave,
-                EnemyKind.Siege => 1f + .05f * enemy.Wave,
-                _ => Rules.EnemySpeed + enemy.Wave * Rules.EnemySpeedPerWave
-            };
-            navigation.Follow(field, ref enemy.Position, enemy.Walker, speed * dt, finishSegment: Expedition != null);
+            if (Expedition != null) navigation.FollowSmoothed(field, ref enemy.Position, enemy.Walker, speed * dt);
+            else navigation.Follow(field, ref enemy.Position, enemy.Walker, speed * dt);
         }
 
         /// <summary>单步有上限。终局同时检查活敌和待进场敌群。</summary>

@@ -63,6 +63,57 @@ namespace OutpostLoop
         internal bool Walkable(Vector2Int cell) => InBounds(cell) && !blocked[Index(cell)];
         internal int Distance(int[] field, Vector2Int cell) => InBounds(cell) ? field[Index(cell)] : -1;
 
+        /// <summary>沿线检查实际穿过的格子，同时禁止从两格相接的角上穿过占地。</summary>
+        internal bool CanTravelStraight(Vector2 start, Vector2 end)
+        {
+            var cell = BattleGrid.Cell(start);
+            var target = BattleGrid.Cell(end);
+            if (!Walkable(cell) || !Walkable(target)) return false;
+            var offset = end - start;
+            int stepX = target.x.CompareTo(cell.x), stepY = target.y.CompareTo(cell.y);
+            while (cell != target)
+            {
+                var center = BattleGrid.Center(cell);
+                float crossX = cell.x == target.x ? float.PositiveInfinity
+                    : (center.x + stepX * BattleGrid.CellSize * .5f - start.x) / offset.x;
+                float crossY = cell.y == target.y ? float.PositiveInfinity
+                    : (center.y + stepY * BattleGrid.CellSize * .5f - start.y) / offset.y;
+                if (Mathf.Abs(crossX - crossY) <= .00001f)
+                {
+                    if (!Walkable(cell + new Vector2Int(stepX, 0)) || !Walkable(cell + new Vector2Int(0, stepY)))
+                        return false;
+                    cell += new Vector2Int(stepX, stepY);
+                }
+                else if (crossX < crossY) cell.x += stepX;
+                else cell.y += stepY;
+                if (!Walkable(cell)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>点到建筑或圆形边界时，选最近且与单位连通的落脚点。</summary>
+        internal Vector2 NearestReachable(Vector2 start, Vector2 destination)
+        {
+            var field = Field(new RectInt(BattleGrid.Cell(start), Vector2Int.one), 0);
+            var best = start;
+            float closest = float.PositiveInfinity;
+            int shortest = int.MaxValue;
+            for (int y = -extent; y <= extent; y++)
+            for (int x = -extent; x <= extent; x++)
+            {
+                var cell = new Vector2Int(x, y);
+                int distance = Distance(field, cell);
+                if (distance < 0) continue;
+                var center = BattleGrid.Center(cell);
+                float error = (center - destination).sqrMagnitude;
+                if (error > closest || (error == closest && distance >= shortest)) continue;
+                closest = error;
+                shortest = distance;
+                best = center;
+            }
+            return best;
+        }
+
         /// <summary>用所有可达交互格作为起点，返回四邻域最短距离。</summary>
         internal int[] Field(RectInt target, float reach)
         {
@@ -92,15 +143,9 @@ namespace OutpostLoop
         }
 
         /// <summary>沿距离场逐格移动，走完格心再转向，避免斜穿建筑拐角。</summary>
-        internal bool Follow(int[] field, ref Vector2 position, RouteWalker walker, float travel, bool finishSegment = false)
+        internal bool Follow(int[] field, ref Vector2 position, RouteWalker walker, float travel)
         {
-            if (walker.Field != field)
-            {
-                // 追逐移动目标时先走完当前通行段，避免目标换格时一直退回格心。
-                if (!finishSegment || walker.Revision != Revision) walker.Next = null;
-                walker.Field = field;
-                walker.Revision = Revision;
-            }
+            if (walker.Field != field) { walker.Field = field; walker.Next = null; }
             var cell = BattleGrid.Cell(position);
             int distance = Distance(field, cell);
             if (distance < 0) return false;
@@ -128,6 +173,37 @@ namespace OutpostLoop
             position = Vector2.MoveTowards(position, walker.Next.Value, travel);
             if (position == walker.Next.Value) walker.Next = null;
             return false;
+        }
+
+        /// <summary>沿共享距离场向前看，跨过能直接通行的中间格，保留绕障所需转角。</summary>
+        internal void FollowSmoothed(int[] field, ref Vector2 position, RouteWalker walker, float travel)
+        {
+            if (walker.Revision != Revision) { walker.Next = null; walker.Revision = Revision; }
+            if (!walker.Next.HasValue)
+            {
+                var cell = BattleGrid.Cell(position);
+                int distance = Distance(field, cell);
+                if (distance < 0) return;
+                var waypoint = BattleGrid.Center(cell);
+                // 前视有限格数。移动中的追兵继续当前短段，再以最新目标重新选点。
+                for (int lookAhead = 0; lookAhead < 4 && distance > 0; lookAhead++)
+                {
+                    foreach (var direction in Directions)
+                    {
+                        var next = cell + direction;
+                        if (Distance(field, next) != distance - 1) continue;
+                        cell = next;
+                        break;
+                    }
+                    var candidate = BattleGrid.Center(cell);
+                    if (!CanTravelStraight(position, candidate)) break;
+                    waypoint = candidate;
+                    distance--;
+                }
+                walker.Next = waypoint;
+            }
+            position = Vector2.MoveTowards(position, walker.Next.Value, travel);
+            if (position == walker.Next.Value) walker.Next = null;
         }
     }
 
