@@ -9,7 +9,6 @@ namespace OutpostLoop
     {
         public const int CellSize = 2;
         public const int BuildRadius = 24;
-        public static readonly RectInt Base = new RectInt(-1, -1, 3, 3);
 
         public static Vector2Int Cell(Vector2 point) =>
             new Vector2Int(Mathf.FloorToInt(point.x / CellSize + .5f), Mathf.FloorToInt(point.y / CellSize + .5f));
@@ -43,10 +42,10 @@ namespace OutpostLoop
             blocked = new bool[side * side];
         }
 
-        internal void Rebuild(IReadOnlyList<ExpansionSite> sites)
+        internal void Rebuild(IReadOnlyList<ExpansionSite> sites, RectInt? headquarters)
         {
             Array.Clear(blocked, 0, blocked.Length);
-            Block(BattleGrid.Base);
+            if (headquarters.HasValue) Block(headquarters.Value);
             foreach (var site in sites)
                 if (site.Kind != ExpansionKind.Empty) Block(site.Footprint);
             Revision++;
@@ -59,7 +58,7 @@ namespace OutpostLoop
         }
 
         private int Index(Vector2Int cell) => (cell.y + extent) * side + cell.x + extent;
-        private bool InBounds(Vector2Int cell) => Mathf.Abs(cell.x) <= extent && Mathf.Abs(cell.y) <= extent &&
+        internal bool InBounds(Vector2Int cell) => Mathf.Abs(cell.x) <= extent && Mathf.Abs(cell.y) <= extent &&
             BattleGrid.Center(cell).sqrMagnitude <= radiusSquared;
         internal bool Walkable(Vector2Int cell) => InBounds(cell) && !blocked[Index(cell)];
         internal int Distance(int[] field, Vector2Int cell) => InBounds(cell) ? field[Index(cell)] : -1;

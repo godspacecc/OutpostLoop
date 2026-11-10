@@ -2,36 +2,32 @@ using UnityEngine;
 
 namespace OutpostLoop
 {
-    /// <summary>四向地块可建的临时设施类型。</summary>
-    public enum ExpansionKind { Empty, Extractor, Barracks, Barricade, Turret }
+    public enum ExpansionKind { Empty, Extractor, Barracks, Barricade, Turret, Headquarters }
 
-    /// <summary>用于预览及真正下单的共同校验结果。</summary>
-    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret }
+    /// <summary>预览与提交共用同一组拒绝原因。</summary>
+    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar }
 
-    /// <summary>扩建费用、耐久及生产周期的原型调参数据。</summary>
+    /// <summary>建造侧栏与扣费规则共用的设施参数。</summary>
     public readonly struct ExpansionSpec
     {
-        public readonly int Scrap, Energy, Health;
-        public readonly float BuildSeconds, Cycle;
+        public readonly int Cost, Health;
+        public readonly float BuildSeconds;
         public readonly Vector2Int Size;
 
-        public ExpansionSpec(int scrap, int energy, int health, float buildSeconds, int width, int height, float cycle = 0)
+        public ExpansionSpec(int cost, int health, float buildSeconds, int width, int height)
         {
-            Scrap = scrap;
-            Energy = energy;
+            Cost = cost;
             Health = health;
             BuildSeconds = buildSeconds;
             Size = new Vector2Int(width, height);
-            Cycle = cycle;
         }
     }
 
-    /// <summary>一个外围地块的本局状态。地块被摧毁后可重新使用。</summary>
+    /// <summary>工地、建成设施及其唯一一份人员订单。</summary>
     public sealed class ExpansionSite
     {
-        // 驻军是独立订单，费用不计入兵营的施工。
-        public const int TrainingScrap = 6, TrainingEnergy = 2;
-        public const float TrainingSeconds = 12;
+        public const int PersonnelCost = 150;
+        public const float GathererSeconds = 6, GuardSeconds = 12;
         public RectInt Footprint { get; private set; }
         public Vector2 Position => BattleGrid.Center(Footprint);
         public ExpansionKind Kind { get; private set; }
@@ -39,82 +35,94 @@ namespace OutpostLoop
         public float ConstructionLeft { get; private set; }
         public bool IsUnderConstruction => ConstructionLeft > 0;
         public int HealthLimit => IsUnderConstruction ? SpecFor(Kind).Health / 2 : SpecFor(Kind).Health;
-        // 采集站开工时锁定节点，完工后才开采。
-        public int NodeIndex { get; private set; } = -1;
-        // 兵营只有付费下单后才训练，训练结束后保留一支驻军。
-        public float TrainingLeft { get; private set; }
-        public bool HasGarrison { get; private set; }
-        public bool GarrisonWaiting { get; private set; }
-        public Vector2 GarrisonPosition { get; private set; }
-        public bool CanTrain => Kind == ExpansionKind.Barracks && !IsUnderConstruction && TrainingLeft <= 0 &&
-            !HasGarrison && !GarrisonWaiting;
+        public int NodeIndex { get; internal set; } = -1;
+        public float ProductionLeft { get; private set; }
+        public float ProductionDuration => Kind == ExpansionKind.Extractor ? GathererSeconds : GuardSeconds;
+        public bool PersonnelWaiting { get; private set; }
+        public SitePersonnel Personnel { get; private set; }
+        public bool CanProduce => (Kind == ExpansionKind.Extractor || Kind == ExpansionKind.Barracks) &&
+            !IsUnderConstruction && ProductionLeft <= 0 && Personnel == null && !PersonnelWaiting;
         internal float WorkClock { get; set; }
         public Vector2 LastShotTarget { get; internal set; }
         public float LastShotTime { get; internal set; } = float.NegativeInfinity;
 
-        /// <summary>建造界面和扣费事务读取同一组原型参数。</summary>
         public static ExpansionSpec SpecFor(ExpansionKind kind) => kind switch
         {
-            ExpansionKind.Extractor => new ExpansionSpec(8, 0, 42, 5f, 2, 2, 2.5f),
-            ExpansionKind.Barracks => new ExpansionSpec(14, 3, 72, 8f, 2, 2),
-            ExpansionKind.Barricade => new ExpansionSpec(10, 0, 150, 3f, 2, 1),
-            ExpansionKind.Turret => new ExpansionSpec(16, 3, 90, 6f, 1, 1),
+            ExpansionKind.Headquarters => new ExpansionSpec(0, 100, 0, 3, 3),
+            ExpansionKind.Extractor => new ExpansionSpec(350, 42, 5, 2, 2),
+            ExpansionKind.Barracks => new ExpansionSpec(250, 72, 8, 2, 2),
+            ExpansionKind.Barricade => new ExpansionSpec(100, 150, 3, 2, 1),
+            ExpansionKind.Turret => new ExpansionSpec(300, 90, 6, 1, 1),
             _ => default
         };
 
-        /// <summary>占地并建立半耐久的工地。</summary>
-        internal void Place(ExpansionKind kind, RectInt footprint, int node, bool finished = false)
+        internal void Place(ExpansionKind kind, RectInt footprint, int node)
         {
             var spec = SpecFor(kind);
             Kind = kind;
             Footprint = footprint;
-            Health = finished ? spec.Health : spec.Health / 2;
+            Health = spec.Health / 2;
             NodeIndex = node;
-            ConstructionLeft = finished ? 0 : spec.BuildSeconds;
+            ConstructionLeft = spec.BuildSeconds;
         }
 
-        /// <summary>迁移保留耐久与冷却，清除旧位置的瞬时射线。</summary>
+        /// <summary>迁移保留炮塔耐久和射击冷却。</summary>
         internal void Relocate(RectInt footprint)
         {
             Footprint = footprint;
             LastShotTime = float.NegativeInfinity;
         }
 
-        /// <summary>完工只补足剩余耐久，保留施工期间的损伤。</summary>
         internal void AdvanceConstruction(float seconds)
         {
-            ConstructionLeft = Mathf.Max(0, ConstructionLeft - seconds);
+            ConstructionLeft = ConstructionLeft <= seconds + .00001f ? 0 : ConstructionLeft - seconds;
             if (IsUnderConstruction) return;
             var spec = SpecFor(Kind);
             Health += spec.Health - spec.Health / 2;
         }
 
-        internal void BeginTraining() => TrainingLeft = TrainingSeconds;
+        internal void BeginProduction() => ProductionLeft = ProductionDuration;
 
-        /// <summary>训练结束后等待一个空闲的出入口。</summary>
-        internal void AdvanceTraining(float seconds)
+        internal void AdvanceProduction(float seconds)
         {
-            TrainingLeft = Mathf.Max(0, TrainingLeft - seconds);
-            if (TrainingLeft <= 0) GarrisonWaiting = true;
+            ProductionLeft = ProductionLeft <= seconds + .00001f ? 0 : ProductionLeft - seconds;
+            if (ProductionLeft <= 0) PersonnelWaiting = true;
         }
 
-        internal void DeployGarrison(Vector2 position)
+        internal void Deploy(Vector2 position)
         {
-            GarrisonPosition = position;
-            HasGarrison = true;
-            GarrisonWaiting = false;
+            Personnel = new SitePersonnel(position);
+            PersonnelWaiting = false;
         }
 
-        /// <summary>建筑耗尽耐久时，清除采集绑定和驻军冷却。</summary>
+        /// <summary>设施被毁后释放占地、采矿绑定及所属人员。</summary>
         internal void Damage(int damage)
         {
             Health = Mathf.Max(0, Health - damage);
             if (Health != 0) return;
             Kind = ExpansionKind.Empty;
             NodeIndex = -1;
-            ConstructionLeft = TrainingLeft = WorkClock = 0;
-            HasGarrison = GarrisonWaiting = false;
+            ConstructionLeft = ProductionLeft = WorkClock = 0;
+            PersonnelWaiting = false;
+            Personnel = null;
             LastShotTime = float.NegativeInfinity;
         }
+    }
+
+    /// <summary>采集员和守军共用行走状态，各自的命令与载货归所属设施。</summary>
+    public sealed class SitePersonnel
+    {
+        public Vector2 Position { get; internal set; }
+        public int Cargo { get; internal set; }
+        public int Sector { get; internal set; } = -1;
+        public bool Blocked { get; internal set; }
+        internal bool Returning;
+        internal float GatherClock;
+        internal readonly RouteWalker Walker = new RouteWalker();
+        // 随占地版本与目标变化刷新路线。
+        internal int Revision = -1, RouteTarget = int.MinValue;
+        internal int[] Route;
+
+        internal SitePersonnel(Vector2 position) => Position = position;
     }
 }

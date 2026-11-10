@@ -4,6 +4,18 @@ namespace Game
     public static class Texts
     {
         /// <summary>
+        /// 击退 {0} 名敌人
+        /// </summary>
+        public static string Battleresultkills(object arg0) => Loc.T("BattleResultKills", arg0);
+        /// <summary>
+        /// 主基地 · 免费部署
+        /// </summary>
+        public static string Buildheadquartersoption => Loc.T("BuildHeadquartersOption");
+        /// <summary>
+        /// 主基地
+        /// </summary>
+        public static string Buildingheadquarters => Loc.T("BuildingHeadquarters");
+        /// <summary>
         /// {0}侧的{1}已被摧毁
         /// </summary>
         public static string Buildinglost(object arg0, object arg1) => Loc.T("BuildingLost", arg0, arg1);
@@ -15,6 +27,14 @@ namespace Game
         /// 炮塔
         /// </summary>
         public static string Buildingturret => Loc.T("BuildingTurret");
+        /// <summary>
+        /// 先选址建立主基地，再生产采集员和守军。守住基地，击退六波敌人。
+        /// </summary>
+        public static string Commanderbrief => Loc.T("CommanderBrief");
+        /// <summary>
+        /// 右键移动指挥员  ·  V 建造  ·  H 回焦点  ·  Esc 暂停
+        /// </summary>
+        public static string Commandercontrols => Loc.T("CommanderControls");
         /// <summary>
         /// 返回
         /// </summary>
@@ -35,6 +55,14 @@ namespace Game
         /// 重试
         /// </summary>
         public static string Commonretry => Loc.T("CommonRetry");
+        /// <summary>
+        /// 确认重新开局
+        /// </summary>
+        public static string Confirmrestartaction => Loc.T("ConfirmRestartAction");
+        /// <summary>
+        /// 结束当前战局，回到开局准备。
+        /// </summary>
+        public static string Confirmrestartdetail => Loc.T("ConfirmRestartDetail");
         /// <summary>
         /// 关闭
         /// </summary>
@@ -138,10 +166,30 @@ namespace Game
         /// </summary>
         public static string Expansionunavailable => Loc.T("ExpansionUnavailable");
         /// <summary>
+        /// 建采集站 → 生产采集员 → 自动入账
+        /// </summary>
+        public static string Firstmineguide => Loc.T("FirstMineGuide");
+        /// <summary>
         /// 左键资源派工，V 打开建造。
         /// 看小地图来敌，用四向按钮调防。
         /// </summary>
         public static string Firstrungather => Loc.T("FirstRunGather");
+        /// <summary>
+        /// {0} 资金
+        /// </summary>
+        public static string Fundscost(object arg0) => Loc.T("FundsCost", arg0);
+        /// <summary>
+        /// 资金 {0}
+        /// </summary>
+        public static string Fundsstock(object arg0) => Loc.T("FundsStock", arg0);
+        /// <summary>
+        /// 已解锁最高资金档位
+        /// </summary>
+        public static string Fundstiermax => Loc.T("FundsTierMax");
+        /// <summary>
+        /// 胜场 {0}/{1} · 下一档 {2}
+        /// </summary>
+        public static string Fundstiernext(object arg0, object arg1, object arg2) => Loc.T("FundsTierNext", arg0, arg1, arg2);
         /// <summary>
         /// 出入口被堵，守军等待部署
         /// </summary>
@@ -159,13 +207,33 @@ namespace Game
         /// </summary>
         public static string Garrisontrainingstarted => Loc.T("GarrisonTrainingStarted");
         /// <summary>
+        /// 采集员载货 {0}/{1}
+        /// </summary>
+        public static string Gatherercargo(object arg0, object arg1) => Loc.T("GathererCargo", arg0, arg1);
+        /// <summary>
+        /// 主基地已启用
+        /// </summary>
+        public static string Headquartersbuilt => Loc.T("HeadquartersBuilt");
+        /// <summary>
+        /// 右键移动指挥员。
+        /// 按 V 选择主基地并落位。
+        /// </summary>
+        public static string Headquartersguide => Loc.T("HeadquartersGuide");
+        /// <summary>
+        /// 此处缺少可用的采集站位置
+        /// </summary>
+        public static string Headquartersnomine => Loc.T("HeadquartersNoMine");
+        /// <summary>
+        /// 基地须建在距地图中心 28 米内
+        /// </summary>
+        public static string Headquartersoutside => Loc.T("HeadquartersOutside");
+        /// <summary>
         /// 工人载货 {0} / {1}
         /// </summary>
         public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);
         /// <summary>
-        /// 点击资源点派工 · 四向按钮调防
-        /// 方向键平移 · 中键拖动旋转 · 滚轮缩放 · H 回基地
-        /// V 建造 · B 升级 · ESC 暂停
+        /// V 建造 · B 升级 · 选守军后四向调防
+        /// 方向键平移 · 中键旋转 · 滚轮缩放 · H 回焦点
         /// </summary>
         public static string Hudcontrols => Loc.T("HudControls");
         /// <summary>
@@ -193,9 +261,29 @@ namespace Game
         /// </summary>
         public static string Hudtitle => Loc.T("HudTitle");
         /// <summary>
+        /// 矿点已采尽
+        /// </summary>
+        public static string Minedepleted => Loc.T("MineDepleted");
+        /// <summary>
+        /// 矿点余量 {0}
+        /// </summary>
+        public static string Mineremaining(object arg0) => Loc.T("MineRemaining", arg0);
+        /// <summary>
+        /// 无可用矿点
+        /// </summary>
+        public static string Mineunavailable => Loc.T("MineUnavailable");
+        /// <summary>
         /// 迁移炮塔 · 免费
         /// </summary>
         public static string Moveselectedturret => Loc.T("MoveSelectedTurret");
+        /// <summary>
+        /// 出入口被堵，人员等待出场
+        /// </summary>
+        public static string Personnelexitblocked => Loc.T("PersonnelExitBlocked");
+        /// <summary>
+        /// 基地须建在指挥员 12 米内
+        /// </summary>
+        public static string Placementcommandertoofar => Loc.T("PlacementCommanderTooFar");
         /// <summary>
         /// 左键落位 · 右键或 Esc 取消
         /// </summary>
@@ -335,6 +423,22 @@ namespace Game
         /// </summary>
         public static string Previewtext9 => Loc.T("PreviewText9");
         /// <summary>
+        /// 生产采集员 · {0} 资金 · {1} 秒
+        /// </summary>
+        public static string Producegatherer(object arg0, object arg1) => Loc.T("ProduceGatherer", arg0, arg1);
+        /// <summary>
+        /// 训练守军 · {0} 资金 · {1} 秒
+        /// </summary>
+        public static string Produceguard(object arg0, object arg1) => Loc.T("ProduceGuard", arg0, arg1);
+        /// <summary>
+        /// 生产剩余 {0} 秒
+        /// </summary>
+        public static string Productionremaining(object arg0) => Loc.T("ProductionRemaining", arg0);
+        /// <summary>
+        /// 已开始生产
+        /// </summary>
+        public static string Productionstarted => Loc.T("ProductionStarted");
+        /// <summary>
         /// 能源
         /// </summary>
         public static string Resourcemarkerenergy => Loc.T("ResourceMarkerEnergy");
@@ -350,6 +454,10 @@ namespace Game
         /// 废料
         /// </summary>
         public static string Resourcemarkerscrap => Loc.T("ResourceMarkerScrap");
+        /// <summary>
+        /// 重新开局
+        /// </summary>
+        public static string Restartrun => Loc.T("RestartRun");
         /// <summary>
         /// 请按新按键，ESC 取消；冲突时可确认替换
         /// </summary>
@@ -442,6 +550,10 @@ namespace Game
         /// 机动小队路线受阻，正在等待
         /// </summary>
         public static string Squadblocked => Loc.T("SquadBlocked");
+        /// <summary>
+        /// 起始资金 {0}
+        /// </summary>
+        public static string Startingfundstier(object arg0) => Loc.T("StartingFundsTier", arg0);
         /// <summary>
         /// 调防 · {0}
         /// </summary>
@@ -601,9 +713,21 @@ namespace Game
         /// </summary>
         public static string Updateversionunknown => Loc.T("UpdateVersionUnknown");
         /// <summary>
+        /// 已击退最后一波
+        /// </summary>
+        public static string Victoryfinalwave => Loc.T("VictoryFinalWave");
+        /// <summary>
         /// 第 {0} 波敌人已入场
         /// </summary>
         public static string Wavearrived(object arg0) => Loc.T("WaveArrived", arg0);
+        /// <summary>
+        /// 已入场波次 {0}/{1}
+        /// </summary>
+        public static string Waveprogress(object arg0, object arg1) => Loc.T("WaveProgress", arg0, arg1);
+        /// <summary>
+        /// 胜场保存失败，可以重试结算
+        /// </summary>
+        public static string Winsavepending => Loc.T("WinSavePending");
         /// <summary>
         /// 工人路线受阻，等待通路恢复
         /// </summary>

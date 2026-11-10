@@ -14,8 +14,7 @@ namespace OutpostLoop
     {
         // 本局领域状态、临时表现根和预分配敌人池。
         public WorldState World { get; private set; }
-        private Transform worldRoot, worker, squad, resourceOrderMark;
-        private LineRenderer squadShot;
+        private Transform worldRoot, commander, headquarters;
         private Camera gameCamera;
         // 透视镜头绕地面焦点转动；拉到最远时重新收拢到基地中心以框住全图。
         private const float CameraPitch = 55f;
@@ -37,7 +36,7 @@ namespace OutpostLoop
         private static float HudScale => Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
         // 临时选址标记和敌种材质仅属于视图。
         private Transform placementGhost, bindingMark, buildRange;
-        private readonly Renderer[] placementTiles = new Renderer[4];
+        private readonly Renderer[] placementTiles = new Renderer[9];
         private Material validPlacement, invalidPlacement;
         private Material[] enemyMaterials;
         private readonly List<ExpansionPreview> expansionModels = new List<ExpansionPreview>();
@@ -45,10 +44,12 @@ namespace OutpostLoop
         private readonly List<Transform> enemies = new List<Transform>();
         private readonly List<Material> materials = new List<Material>();
         private bool started, shop;
-        internal bool WantScrapPack { get; private set; }
-        internal bool WantEnergyPack { get; private set; }
-        internal string SupplyError { get; private set; }
-        internal int SupplyCoins => session.SupplyCoins;
+        internal int Wins => session.Wins;
+        internal int StartingFunds => session.StartingFunds;
+        internal bool ConfirmingRestart { get; private set; }
+        private int selectedSquad = -1;
+        internal SitePersonnel SelectedSquad => selectedSquad < 0 || World.Buildings[selectedSquad].Kind != ExpansionKind.Barracks
+            ? null : World.Buildings[selectedSquad].Personnel;
         internal bool VictoryRewardRecorded => session.VictoryRewardRecorded;
         // 面板选中状态与本局建筑所有权分离。
         internal bool ConstructionOpen { get; private set; }
@@ -185,8 +186,8 @@ namespace OutpostLoop
             materials.Clear();resources.Clear();enemies.Clear();
             expansionModels.Clear();
             CloseConstruction();
-            WantScrapPack = WantEnergyPack = false;
-            SupplyError = null;
+            ConfirmingRestart = false;
+            selectedSquad = -1;
             World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
             ResetBattleCamera();
             UpdateBattleCamera();
@@ -195,24 +196,14 @@ namespace OutpostLoop
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
             var cyan=Mat(new Color(0.15f,0.88f,0.84f));var rust=Mat(new Color(0.52f,0.24f,0.17f));
             Shape("Ground",worldRoot,PrimitiveType.Cube,new Vector3(0,-0.3f,0),new Vector3(96,0.5f,96),ground);
-            Shape("HomePad",worldRoot,PrimitiveType.Cylinder,new Vector3(0,0,0),new Vector3(9,0.1f,9),dark);
-            Shape("Shelter",worldRoot,PrimitiveType.Cube,new Vector3(0,1.15f,0),new Vector3(3.6f,2.3f,3),stone);
-            Shape("Roof",worldRoot,PrimitiveType.Cube,new Vector3(0,2.5f,0),new Vector3(4,0.5f,3.5f),dark);
-            Shape("Door",worldRoot,PrimitiveType.Cube,new Vector3(0,0.8f,-1.55f),new Vector3(0.9f,1.6f,0.1f),amber);
-            worker = Shape("Worker", worldRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(1.1f, .9f, 1.1f), amber);
-            squad = new GameObject("DefenseSquad").transform;
-            squad.SetParent(worldRoot, false);
+            headquarters = new GameObject("Headquarters").transform;
+            headquarters.SetParent(worldRoot, false);
+            Shape("HomePad", headquarters, PrimitiveType.Cube, new Vector3(0, -.02f, 0), new Vector3(5.9f, .12f, 5.9f), dark);
+            Shape("Shelter", headquarters, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(3.6f, 2.3f, 3), stone);
+            Shape("Roof", headquarters, PrimitiveType.Cube, new Vector3(0, 2.5f, 0), new Vector3(4, .5f, 3.5f), dark);
+            Shape("Door", headquarters, PrimitiveType.Cube, new Vector3(0, .8f, -1.55f), new Vector3(.9f, 1.6f, .1f), amber);
+            commander = Shape("Commander", worldRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(1.1f, .9f, 1.1f), amber);
             var blue = Mat(new Color(.32f, .58f, 1));
-            for (int i = -1; i <= 1; i++)
-                Shape("Guard", squad, PrimitiveType.Capsule, new Vector3(i * .95f, 0, Mathf.Abs(i) * -.75f),
-                    new Vector3(.75f, .8f, .75f), blue);
-            squadShot = squad.gameObject.AddComponent<LineRenderer>();
-            squadShot.sharedMaterial = blue;
-            squadShot.positionCount = 2;
-            squadShot.startWidth = .13f;
-            squadShot.endWidth = .05f;
-            resourceOrderMark = Shape("ResourceOrder", worldRoot, PrimitiveType.Cylinder, Vector3.zero,
-                new Vector3(2.6f, .08f, 2.6f), amber);
             CreateExpansionModels(stone, cyan, blue, rust, amber);
             validPlacement = Mat(new Color(.23f, .91f, .35f));
             invalidPlacement = Mat(new Color(.94f, .26f, .20f));
@@ -227,9 +218,8 @@ namespace OutpostLoop
             enemyMaterials = new[] { rust, amber, Mat(new Color(.62f, .17f, .31f)) };
             foreach(var node in World.Nodes)
             {
-                var item=Shape(node.Energy?"Energy":"Scrap",worldRoot,node.Energy?PrimitiveType.Cube:PrimitiveType.Cylinder,
-                    new Vector3(node.Position.x,0.6f,node.Position.y),node.Energy?new Vector3(0.7f,1.2f,0.7f):new Vector3(1.6f,0.45f,1.6f),node.Energy?cyan:rust);
-                if(node.Energy)item.rotation=Quaternion.Euler(0,45,20);
+                var item = Shape("Mineral", worldRoot, PrimitiveType.Cylinder, At(node.Position, .6f),
+                    new Vector3(1.6f, .6f, 1.6f), cyan);
                 resources.Add(item);
             }
             for(int i=0;i<World.Run.Config.MaxEnemies;i++)
@@ -262,13 +252,18 @@ namespace OutpostLoop
                 Shape("Mount", turret, PrimitiveType.Cylinder, new Vector3(0, .4f, 0), new Vector3(1.5f, .4f, 1.5f), pad);
                 Shape("Head", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(.8f, .6f, .8f), pad);
                 Shape("Barrel", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, .7f), new Vector3(.2f, .2f, 1), worksite);
-                var guard = Shape("Garrison", root, PrimitiveType.Capsule, Vector3.zero, new Vector3(.85f, .8f, .85f), barracks);
+                var guard = new GameObject("Garrison").transform;
+                guard.SetParent(root, false);
+                for (int member = -1; member <= 1; member++)
+                    Shape("Guard", guard, PrimitiveType.Capsule, new Vector3(member * .55f, 0, Mathf.Abs(member) * -.45f),
+                        new Vector3(.55f, .7f, .55f), barracks);
+                var gatherer = Shape("Gatherer", root, PrimitiveType.Capsule, Vector3.zero, new Vector3(.85f, .7f, .85f), worksite);
                 var shot = root.gameObject.AddComponent<LineRenderer>();
                 shot.sharedMaterial = worksite;
                 shot.positionCount = 2;
                 shot.startWidth = .13f;
                 shot.endWidth = .05f;
-                expansionModels.Add(new ExpansionPreview(root, foundation, station, quarters, wall, turret, guard, shot));
+                expansionModels.Add(new ExpansionPreview(root, foundation, station, quarters, wall, turret, guard, gatherer, shot));
             }
         }
 
@@ -280,6 +275,7 @@ namespace OutpostLoop
             var line = ring.gameObject.AddComponent<LineRenderer>();
             line.sharedMaterial = material;
             line.loop = true;
+            line.useWorldSpace = false;
             line.positionCount = 96;
             line.startWidth = line.endWidth = .09f;
             for (int i = 0; i < line.positionCount; i++)
@@ -292,11 +288,11 @@ namespace OutpostLoop
 
         private sealed class ExpansionPreview
         {
-            private readonly Transform root, worksite, extractor, barracks, barricade, turret, garrison;
+            private readonly Transform root, worksite, extractor, barracks, barricade, turret, garrison, gatherer;
             private readonly LineRenderer shot;
 
             internal ExpansionPreview(Transform root, Transform worksite, Transform extractor, Transform barracks,
-                Transform barricade, Transform turret, Transform garrison, LineRenderer shot)
+                Transform barricade, Transform turret, Transform garrison, Transform gatherer, LineRenderer shot)
             {
                 this.root = root;
                 this.worksite = worksite;
@@ -305,6 +301,7 @@ namespace OutpostLoop
                 this.barricade = barricade;
                 this.turret = turret;
                 this.garrison = garrison;
+                this.gatherer = gatherer;
                 this.shot = shot;
             }
 
@@ -323,8 +320,14 @@ namespace OutpostLoop
                 barricade.gameObject.SetActive(!building && site.Kind == ExpansionKind.Barricade);
                 bool isTurret = !building && site.Kind == ExpansionKind.Turret;
                 turret.gameObject.SetActive(isTurret);
-                garrison.gameObject.SetActive(site.HasGarrison);
-                if (site.HasGarrison) garrison.position = At(site.GarrisonPosition, .8f);
+                bool hasPersonnel = site.Personnel != null;
+                garrison.gameObject.SetActive(hasPersonnel && site.Kind == ExpansionKind.Barracks);
+                gatherer.gameObject.SetActive(hasPersonnel && site.Kind == ExpansionKind.Extractor);
+                if (hasPersonnel)
+                {
+                    if (site.Kind == ExpansionKind.Barracks) garrison.position = At(site.Personnel.Position, .7f);
+                    else gatherer.position = At(site.Personnel.Position, .7f);
+                }
                 shot.enabled = time - site.LastShotTime < .12f;
                 if (!shot.enabled) return;
                 var direction = site.LastShotTarget - site.Position;
@@ -362,7 +365,8 @@ namespace OutpostLoop
             }
             if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
             if (Input.GetKeyDown(KeyCode.V)) ToggleConstruction();
-            if (HasPlacement)
+            bool wasPlacing = HasPlacement;
+            if (wasPlacing)
             {
                 if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) CancelPlacementFromInput();
                 else if (PlacementKind == ExpansionKind.Barricade && Input.GetKeyDown(KeyCode.R)) rotatedPlacement = !rotatedPlacement;
@@ -373,8 +377,11 @@ namespace OutpostLoop
             if (playing) PollBattleCamera(overUI);
             else orbitingCamera = false;
             UpdateBattleCamera();
-            if (playing && !overUI && !orbitingCamera && Input.GetMouseButtonDown(0))
-                ActOnBattlefield(mousePosition);
+            if (playing && !overUI && !orbitingCamera)
+            {
+                if (Input.GetMouseButtonDown(0)) ActOnBattlefield(mousePosition);
+                else if (!wasPlacing && Input.GetMouseButtonDown(1)) MoveCommanderAt(mousePosition);
+            }
             SyncView();
             UpdatePlacementPreview(mousePosition, overUI);
             RefreshOverlay();
@@ -420,7 +427,7 @@ namespace OutpostLoop
         /// <summary>开新局或按 H 时恢复基地中心、默认朝向和缩放。</summary>
         private void ResetBattleCamera()
         {
-            cameraFocus = Vector2.zero;
+            cameraFocus = World.BasePosition;
             cameraYaw = 0;
             mapView = DefaultMapView;
             orbitingCamera = false;
@@ -459,19 +466,16 @@ namespace OutpostLoop
             gameCamera.farClipPlane = distance + 2f * radius;
         }
 
-        /// <summary>主视图或小地图点选同一资源，空白处不改变工人任务。</summary>
-        public bool OrderResourceAt(Vector2 screenPoint)
+        /// <summary>基地尚未部署时，右键战场移动指挥员。</summary>
+        public bool MoveCommanderAt(Vector2 screenPoint)
         {
-            if (!initialized || Overlay != PrototypeOverlay.None || UtilityWindowOpen) return false;
-            int node = PickResource(screenPoint);
-            return node >= 0 && session.AssignResource(node);
+            return CanBuild && !HasPlacement && TryBattlefieldCell(screenPoint, out var cell) &&
+                session.MoveCommander(BattleGrid.Center(cell));
         }
 
-        /// <summary>局内四向按钮各提交一条驻防命令。</summary>
         internal void DeploySquad(int sector)
         {
-            if (initialized && Overlay == PrototypeOverlay.None && !UtilityWindowOpen)
-                session.DeploySquad(sector);
+            if (CanBuild && SelectedSquad != null) session.DeploySquad(selectedSquad, sector);
         }
 
         /// <summary>设置和日志窗口打开时，暂停热键与局内按钮均不响应。</summary>
@@ -509,7 +513,7 @@ namespace OutpostLoop
         internal void ToggleUpgrade()
         {
             if (UtilityWindowOpen) return;
-            if (!initialized || (Overlay != PrototypeOverlay.None && Overlay != PrototypeOverlay.Upgrade)) return;
+            if (!initialized || !World.Headquarters.HasValue || (Overlay != PrototypeOverlay.None && Overlay != PrototypeOverlay.Upgrade)) return;
             CloseConstruction();
             shop = !shop;
             feedback = "";
@@ -525,15 +529,12 @@ namespace OutpostLoop
             switch (Overlay)
             {
                 case PrototypeOverlay.Start:
-                    if (!session.StartWithSupplies(WantScrapPack, WantEnergyPack))
-                    {
-                        SupplyError = "SupplyPaymentFailed";
-                        break;
-                    }
+                    if (!session.StartRun()) break;
                     started = true;
                     break;
                 case PrototypeOverlay.Paused:
                 case PrototypeOverlay.Upgrade:
+                    ConfirmingRestart = false;
                     shop = false;
                     session.SetPaused(false);
                     break;
@@ -545,21 +546,12 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        /// <summary>只在开局准备页选择补给，选择时不扣币。</summary>
-        internal void ToggleSupply(bool energy)
+        /// <summary>同一个重开按钮二次确认，退出暂停即取消确认。</summary>
+        internal void RequestRestart()
         {
-            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Start) return;
-            bool selected = energy ? WantEnergyPack : WantScrapPack;
-            int committed = (WantScrapPack ? PrototypeWallet.SupplyPrice : 0) +
-                            (WantEnergyPack ? PrototypeWallet.SupplyPrice : 0);
-            if (!selected && SupplyCoins < committed + PrototypeWallet.SupplyPrice)
-                SupplyError = "SupplyInsufficient";
-            else
-            {
-                if (energy) WantEnergyPack = !selected;
-                else WantScrapPack = !selected;
-                SupplyError = null;
-            }
+            if (UtilityWindowOpen || Overlay != PrototypeOverlay.Paused) return;
+            if (ConfirmingRestart) Restart(false);
+            else ConfirmingRestart = true;
             RefreshOverlay();
         }
 
@@ -587,9 +579,11 @@ namespace OutpostLoop
         {
             if (!CanBuild || !ConstructionOpen) return;
             var spec = ExpansionSite.SpecFor(kind);
-            if (!World.Run.CanAfford(spec.Scrap, spec.Energy)) return;
+            if (spec.Health == 0 || !World.Run.CanAfford(spec.Cost) ||
+                World.Headquarters.HasValue == (kind == ExpansionKind.Headquarters)) return;
             CancelPlacement();
             SelectedBuilding = -1;
+            selectedSquad = -1;
             PlacementKind = kind;
             RefreshOverlay();
         }
@@ -638,7 +632,7 @@ namespace OutpostLoop
         {
             cell = default;
             var hudPoint = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
-            if (MapRect.Contains(hudPoint) || StatusRect.Contains(hudPoint)) return false;
+            if (!gameCamera.pixelRect.Contains(screenPoint) || MapRect.Contains(hudPoint) || StatusRect.Contains(hudPoint)) return false;
             var ray = gameCamera.ScreenPointToRay(screenPoint);
             if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float distance)) return false;
             var point = ray.GetPoint(distance);
@@ -646,14 +640,15 @@ namespace OutpostLoop
             return true;
         }
 
-        /// <summary>真实左键入口。选址时提交落位，平时点选建筑或派工。</summary>
+        /// <summary>真实左键入口。选址时提交落位，平时点选设施或守军。</summary>
         public bool ActOnBattlefield(Vector2 screenPoint)
         {
             if (!CanBuild) return false;
-            if (!TryBattlefieldCell(screenPoint, out var cell)) return !HasPlacement && OrderResourceAt(screenPoint);
+            if (!TryBattlefieldCell(screenPoint, out var cell)) return false;
             if (HasPlacement)
             {
                 bool moving = MovingTurret >= 0;
+                bool establishing = PlacementKind == ExpansionKind.Headquarters;
                 var issue = moving ? session.MoveTurret(MovingTurret, cell) : session.Build(PlacementKind, cell, rotatedPlacement);
                 if (issue != PlacementIssue.None)
                 {
@@ -662,14 +657,27 @@ namespace OutpostLoop
                 }
                 CancelPlacement();
                 SelectedBuilding = World.FindBuilding(cell);
-                ShowFeedback(Game.Loc.T(moving ? "TurretMoved" : "ConstructionStarted"));
+                selectedSquad = SelectedBuilding >= 0 && World.Buildings[SelectedBuilding].Kind == ExpansionKind.Barracks ? SelectedBuilding : -1;
+                if (establishing)
+                {
+                    ResetBattleCamera();
+                    UpdateBattleCamera();
+                }
+                ShowFeedback(Game.Loc.T(establishing ? "HeadquartersBuilt" : moving ? "TurretMoved" : "ConstructionStarted"));
                 SyncView();
                 RefreshOverlay();
                 return true;
             }
             int index = World.FindBuilding(cell);
-            if (index < 0) return OrderResourceAt(screenPoint);
+            if (index < 0) index = World.FindSquad(BattleGrid.Center(cell));
+            if (index < 0)
+            {
+                if (World.Headquarters?.Contains(cell) != true) return false;
+                ToggleUpgrade();
+                return true;
+            }
             SelectedBuilding = index;
+            selectedSquad = World.Buildings[index].Kind == ExpansionKind.Barracks ? index : -1;
             ConstructionOpen = true;
             feedback = "";
             RefreshOverlay();
@@ -678,7 +686,7 @@ namespace OutpostLoop
 
         private void UpdatePlacementPreview(Vector2 screenPoint, bool overUI)
         {
-            buildRange.gameObject.SetActive(HasPlacement);
+            buildRange.gameObject.SetActive(HasPlacement && World.Headquarters.HasValue);
             placementGhost.gameObject.SetActive(false);
             bindingMark.gameObject.SetActive(false);
             HoverIssue = null;
@@ -703,7 +711,14 @@ namespace OutpostLoop
             bindingMark.gameObject.SetActive(true);
         }
 
-        internal static string PlacementMessage(PlacementIssue issue) => Game.Loc.T("Placement" + issue);
+        internal string PlacementMessage(PlacementIssue issue)
+        {
+            if (PlacementKind == ExpansionKind.Headquarters && issue == PlacementIssue.Outside)
+                return Game.Loc.T("HeadquartersOutside");
+            if (PlacementKind == ExpansionKind.Headquarters && issue == PlacementIssue.NoResource)
+                return Game.Loc.T("HeadquartersNoMine");
+            return Game.Loc.T("Placement" + issue);
+        }
 
         private void ShowFeedback(string message)
         {
@@ -711,14 +726,11 @@ namespace OutpostLoop
             feedbackUntil = Time.realtimeSinceStartup + 2;
         }
 
-        /// <summary>只为选中的完工兵营提交独立的付费训练订单。</summary>
-        internal void OrderGarrison()
+        /// <summary>为选中的完工生产设施提交采集员或守军订单。</summary>
+        internal void OrderPersonnel()
         {
-            if (!CanBuild || HasPlacement || SelectedBuilding < 0 || !World.Buildings[SelectedBuilding].CanTrain) return;
-            if (session.TrainGarrison(SelectedBuilding)) ShowFeedback(Game.Loc.T("GarrisonTrainingStarted"));
-            else ShowFeedback(Game.Loc.T("GarrisonTrainingShortfall",
-                Mathf.Max(0, ExpansionSite.TrainingScrap - World.Run.Scrap),
-                Mathf.Max(0, ExpansionSite.TrainingEnergy - World.Run.Energy)));
+            if (!CanBuild || HasPlacement || SelectedBuilding < 0 || !World.Buildings[SelectedBuilding].CanProduce) return;
+            if (session.Produce(SelectedBuilding)) ShowFeedback(Game.Loc.T("ProductionStarted"));
             RefreshOverlay();
         }
 
@@ -740,7 +752,7 @@ namespace OutpostLoop
             {
                 if (hud?.IsShow() != true) hud = Game.UIHelper.ShowUI<PrototypeHudCtrl>();
                 hud.Bind(this, font);
-                hud.Refresh(World.SquadSector);
+                hud.Refresh(World.Headquarters.HasValue, SelectedSquad);
                 if (ConstructionOpen)
                 {
                     if (construction?.IsShow() != true) construction = Game.UIHelper.ShowUI<PrototypeConstructionCtrl>();
@@ -754,17 +766,12 @@ namespace OutpostLoop
         /// <summary>表现仅映射已结算状态；敌人采用固定池，不按波次无限创建。</summary>
         public void SyncView()
         {
-            worker.position = At(World.WorkerPosition, .9f);
-            // 待命时三人站在基地南侧，收到命令后按领域位置移动。
-            squad.position = At(World.SquadPosition, .8f);
-            squadShot.enabled = World.Run.Elapsed - World.SquadShotTime < .12f;
-            if (squadShot.enabled)
-            {
-                squadShot.SetPosition(0, squad.position);
-                squadShot.SetPosition(1, At(World.SquadShotTarget, .8f));
-            }
-            resourceOrderMark.gameObject.SetActive(World.ResourceOrder >= 0);
-            if (World.ResourceOrder >= 0) resourceOrderMark.position = At(World.Nodes[World.ResourceOrder].Position, .04f);
+            bool built = World.Headquarters.HasValue;
+            commander.gameObject.SetActive(!built);
+            commander.position = At(World.CommanderPosition, .9f);
+            headquarters.gameObject.SetActive(built);
+            headquarters.position = At(World.BasePosition, 0);
+            buildRange.position = At(World.BasePosition, 0);
             for(int i=0;i<resources.Count;i++)resources[i].gameObject.SetActive(World.Nodes[i].Remaining>0);
             for (int i = 0; i < expansionModels.Count; i++)
                 expansionModels[i].Show(World.Buildings[i], World.Run.Elapsed);
@@ -801,10 +808,13 @@ namespace OutpostLoop
             if (Event.current.type == EventType.Repaint && s.Outcome == 0) DrawWorksiteProgress(scale);
             GUI.Box(StatusRect,"");
             GUI.Label(new Rect(30,26,305,30),Game.Loc.T("HudTitle"));
-            GUI.Label(new Rect(30,61,300,28),Game.Loc.T("HudTime", Mathf.CeilToInt(s.Config.Duration-s.Elapsed), World.Wave, s.Config.WaveTimes.Count));
-            GUI.Label(new Rect(30,92,300,28),Game.Loc.T("HudHealth", s.Health, World.Kills));
-            GUI.Label(new Rect(30,122,300,28),Game.Loc.T("HudStock", s.Scrap, s.Energy));
-            GUI.Label(new Rect(30,151,300,28),Game.Loc.T("HudCargo", s.CargoScrap+s.CargoEnergy, s.Capacity));
+            GUI.Label(new Rect(30,61,300,28),Game.Loc.T("FundsStock", s.Funds));
+            if (World.Headquarters.HasValue)
+            {
+                GUI.Label(new Rect(30,92,300,28),Game.Loc.T("WaveProgress", World.Wave, s.Config.WaveTimes.Count));
+                GUI.Label(new Rect(30,122,300,28),Game.Loc.T("HudHealth", s.Health, World.Kills));
+            }
+            else GUI.Label(new Rect(30,92,300,62),Game.Loc.T("HeadquartersGuide"));
             // 对话框的设置入口占用右上角，小地图仅在指挥状态显示和接收点选。
             if (Overlay != PrototypeOverlay.None || UtilityWindowOpen) return;
             DrawMap();
@@ -821,8 +831,8 @@ namespace OutpostLoop
             {
                 if (site.IsUnderConstruction)
                     DrawWorksiteBar(site.Position, site.ConstructionLeft, ExpansionSite.SpecFor(site.Kind).BuildSeconds, scale);
-                else if (site.TrainingLeft > 0)
-                    DrawWorksiteBar(site.Position, site.TrainingLeft, ExpansionSite.TrainingSeconds, scale);
+                else if (site.ProductionLeft > 0)
+                    DrawWorksiteBar(site.Position, site.ProductionLeft, site.ProductionDuration, scale);
             }
             GUI.color = color;
         }
@@ -867,24 +877,22 @@ namespace OutpostLoop
             return new Vector2(point.x, Screen.height - point.y) / HudScale;
         }
 
-        /// <summary>指向资源时显示余量，区分可派遣和当前任务。</summary>
+        /// <summary>指向矿点时显示余量。</summary>
         private void DrawResourceHint(Vector2 screenPoint)
         {
             int index = PickResource(screenPoint);
             if (index < 0) return;
             var target = World.Nodes[index];
-            string name = Game.Loc.T(target.Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap");
-            string title = Game.Loc.T("ResourceMarkerRemaining", name, target.Remaining);
-            string hint = Game.Loc.T(index == World.ResourceOrder ? "StrategyResourceAssigned" : "ResourceMarkerGather");
-            const float width = 250, height = 54;
+            string title = Game.Loc.T("MineRemaining", target.Remaining);
+            const float width = 250, height = 30;
             var cursor = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
             float x = Mathf.Clamp(cursor.x - width * .5f, 0, Screen.width / HudScale - width);
             float y = Mathf.Max(0, cursor.y - height - 12);
             var oldColor = GUI.contentColor;
             var oldTint = GUI.backgroundColor;
             GUI.backgroundColor = new Color(.20f, .29f, .28f, 1);
-            GUI.contentColor = target.Energy ? new Color(.57f, 1, 1) : new Color(1, .82f, .52f);
-            GUI.Box(new Rect(x, y, width, height), title + "\n" + hint);
+            GUI.contentColor = new Color(.57f, 1, 1);
+            GUI.Box(new Rect(x, y, width, height), title);
             GUI.contentColor = oldColor;
             GUI.backgroundColor = oldTint;
         }
@@ -900,19 +908,28 @@ namespace OutpostLoop
             }
             if (time - World.LastDestroyedAt < 5)
             {
-                var position = World.LastDestroyedPosition;
+                var position = World.LastDestroyedPosition - World.BasePosition;
                 int side = Mathf.Abs(position.x) >= Mathf.Abs(position.y) ? (position.x < 0 ? 0 : 1) : (position.y > 0 ? 2 : 3);
                 GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T("BuildingLost", Game.Loc.T(PrototypeOverlayView.SectorNames[side]),
                     PrototypeOverlayView.BuildingName(World.LastDestroyedKind)));
                 y += 34;
             }
-            if (World.WorkerBlocked || World.SquadBlocked)
+            if (time - World.LastMineDepletedAt < 5)
             {
-                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T(World.WorkerBlocked ? "WorkerBlocked" : "SquadBlocked"));
+                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T("MineDepleted"));
                 y += 34;
             }
-            if (time < 60 && World.ResourceOrder < 0 && World.Run.Scrap == 0 && World.Run.Energy == 0)
-                GUI.Box(new Rect(16, y, 330, 54), Game.Loc.T("FirstRunGather"));
+            foreach (var site in World.Buildings)
+            {
+                if (!site.PersonnelWaiting && site.Personnel?.Blocked != true) continue;
+                string reason = site.PersonnelWaiting ? "PersonnelExitBlocked" :
+                    site.Kind == ExpansionKind.Extractor ? "WorkerBlocked" : "SquadBlocked";
+                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T(reason));
+                y += 34;
+                break;
+            }
+            if (World.Headquarters.HasValue && time < 35)
+                GUI.Box(new Rect(16, y, 330, 40), Game.Loc.T("FirstMineGuide"));
         }
 
         private void DrawMap()
@@ -921,8 +938,7 @@ namespace OutpostLoop
             for (int i = 0; i < World.Nodes.Count; i++)
             {
                 var node = World.Nodes[i];
-                if (node.Remaining > 0) Dot(node.Position, node.Energy ? Color.cyan : new Color(.8f, .5f, .2f),
-                    i == World.ResourceOrder ? 9 : 4);
+                if (node.Remaining > 0) Dot(node.Position, Color.cyan, 4);
             }
             foreach (var enemy in World.Enemies)
                 Dot(enemy.Position, enemy.Kind == EnemyKind.Fast ? new Color(1, .61f, .13f) : Color.red,
@@ -935,9 +951,10 @@ namespace OutpostLoop
                     ExpansionKind.Barricade => new Color(.85f, .38f, .22f),
                     _ => Color.gray
                 }, 8);
-            Dot(Vector2.zero, Color.white, 9);
-            Dot(World.SquadPosition, new Color(.32f, .58f, 1), 7);
-            Dot(World.WorkerPosition, Color.yellow, 7);
+            foreach (var site in World.Buildings)
+                if (site.Personnel != null)
+                    Dot(site.Personnel.Position, site.Kind == ExpansionKind.Extractor ? Color.yellow : new Color(.32f, .58f, 1), 6);
+            Dot(World.BasePosition, World.Headquarters.HasValue ? Color.white : Color.yellow, 9);
             GUI.color=old;
         }
         private static Vector2 MapPoint(Vector2 point) => MapCenter + new Vector2(point.x, -point.y) * 2;

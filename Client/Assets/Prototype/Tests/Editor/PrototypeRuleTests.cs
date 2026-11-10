@@ -1,62 +1,70 @@
+using System;
+using System.IO;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using UnityEngine;
+using static OutpostLoop.Tests.PrototypeWorldTests;
 
 namespace OutpostLoop.Tests
 {
-    /// <summary>仅八项纯规则测试；不运行其它类或完整测试套件。</summary>
     public class PrototypeRuleTests
     {
-        [TearDown] public void CloseFoundation() { Game.FoundationRuntime.Shutdown(); }
+        [SetUp] public void Prepare() => Game.FoundationRuntime.Initialize();
+        [TearDown] public void Close() => Game.FoundationRuntime.Shutdown();
 
-        [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
+        [Test]
+        public void UpgradeConsumesFundsOnlyWhenAvailable()
+        {
+            var world = WithBase(12, funds: 600);
+            var run = world.Run;
+            Assert.IsTrue(run.Upgrade(1));
+            Assert.AreEqual(400, run.Funds);
+            Assert.IsTrue(run.Upgrade(1));
+            Assert.AreEqual(0, run.Funds);
+            Assert.IsFalse(run.Upgrade(1));
+            Assert.AreEqual(2, run.Levels[1]);
+            Assert.IsFalse(run.Upgrade(-1));
+        }
 
-        [Test] public void CargoIsBoundedAndDepositConservesResources()
+        [Test]
+        public void PauseAndDefeatGateOrdersAndElapsed()
         {
-            var s = new RunState();
-            for (int i = 0; i < 12; i++) Assert.IsTrue(s.Gather(i % 2 == 0));
-            Assert.IsFalse(s.Gather(false)); s.Deposit();
-            Assert.AreEqual(6, s.Scrap); Assert.AreEqual(6, s.Energy);
-            Assert.AreEqual(0, s.CargoScrap + s.CargoEnergy);
-            s.Deposit(); Assert.AreEqual(6, s.Scrap);
+            var world = WithBase(12);
+            world.Run.Paused = true;
+            world.Run.Damage(20);
+            world.Step(1);
+            Assert.AreEqual(100, world.Run.Health);
+            Assert.AreEqual(0, world.Run.Elapsed);
+            world.Run.Paused = false;
+            world.Run.Damage(100);
+            Assert.AreEqual(-1, world.Run.Outcome);
+            Assert.IsFalse(world.Run.Upgrade(1));
+            Assert.IsFalse(world.Produce(0));
+            world.Step(1);
+            Assert.AreEqual(0, world.Run.Elapsed);
         }
-        [Test] public void UnaffordableUpgradeDoesNotMutate()
+
+        [Test]
+        public void LegacyWalletKeepsCoinsAndUnlocksStartingFundsOncePerVictory()
         {
-            var s = new RunState(); Assert.IsFalse(s.Upgrade(1));
-            Assert.AreEqual(0, s.Levels[1]); Assert.AreEqual(0, s.Scrap);
-            Assert.IsFalse(s.Upgrade(-1)); Assert.IsFalse(s.Upgrade(3));
-        }
-        [Test] public void PaidUpgradeConsumesOnceAndStopsAtCap()
-        {
-            var s = new RunState();
-            for (int n = 0; n < 40; n++) { for (int i = 0; i < 12; i++) s.Gather(i % 3 == 0); s.Deposit(); }
-            int before = s.Scrap; Assert.IsTrue(s.Upgrade(1)); Assert.Less(s.Scrap, before);
-            Assert.IsTrue(s.Upgrade(1)); Assert.IsTrue(s.Upgrade(1));
-            before = s.Scrap; Assert.IsFalse(s.Upgrade(1)); Assert.AreEqual(before, s.Scrap);
-        }
-        [Test] public void PauseFreezesClockAndDamage()
-        {
-            var s = new RunState(); s.Tick(10, 0); s.Paused = true; s.Tick(20, 0); s.Damage(20);
-            Assert.AreEqual(10, s.Elapsed); Assert.AreEqual(100, s.Health);
-        }
-        [Test] public void DeadlineWinsOnlyWhenFinalEnemiesAreCleared()
-        {
-            var won = new RunState(); won.Tick(720, 0); Assert.AreEqual(1, won.Outcome);
-            var lost = new RunState(); lost.Tick(720, 1); Assert.AreEqual(-1, lost.Outcome);
-        }
-        [Test] public void DefeatIsTerminalAndCannotCollect()
-        {
-            var s = new RunState(); s.Damage(100); Assert.AreEqual(-1, s.Outcome);
-            s.Tick(720, 0); Assert.AreEqual(-1, s.Outcome); Assert.IsFalse(s.Gather(false));
-        }
-        [Test] public void NewRunHasNoPreviousRunState()
-        {
-            var old = new RunState(); old.Gather(false); old.Deposit(); old.Tick(100, 0);
-            var next = new RunState(); Assert.AreEqual(0, next.Elapsed); Assert.AreEqual(0, next.Scrap);
-            Assert.AreEqual(100, next.Health); Assert.AreEqual(0, next.Outcome);
-        }
-        [Test] public void InvalidTimeAndDamageAreRejected()
-        {
-            var s = new RunState(); s.Tick(float.NaN, 0); s.Tick(-1, 0); s.Tick(float.PositiveInfinity, 0); s.Damage(-10);
-            Assert.AreEqual(0, s.Elapsed); Assert.AreEqual(100, s.Health);
+            var directory = Path.GetFullPath(Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/FirstPlayableV07-20261110/Wallet-" + Guid.NewGuid().ToString("N")));
+            Directory.CreateDirectory(directory);
+            var file = Path.Combine(directory, "prototype-wallet.json");
+            File.WriteAllText(file, "{\"format\":1,\"data\":{\"coins\":27,\"lastVictory\":\"v06\"}}");
+            var wallet = new PrototypeWallet(directory);
+            Assert.AreEqual(800, wallet.StartingFunds);
+            Assert.IsTrue(wallet.RecordVictory("first"));
+            Assert.IsTrue(wallet.RecordVictory("first"));
+            wallet = new PrototypeWallet(directory);
+            Assert.AreEqual(1, wallet.Wins);
+            Assert.AreEqual(900, wallet.StartingFunds);
+            Assert.IsTrue(wallet.RecordVictory("second"));
+            Assert.AreEqual(900, wallet.StartingFunds);
+            Assert.IsTrue(wallet.RecordVictory("third"));
+            Assert.IsTrue(wallet.RecordVictory("fourth"));
+            Assert.AreEqual(1000, new PrototypeWallet(directory).StartingFunds);
+            Assert.AreEqual(27, (int)JObject.Parse(File.ReadAllText(file))["data"]["coins"]);
         }
     }
 }

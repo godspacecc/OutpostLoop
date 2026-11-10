@@ -5,52 +5,44 @@ using QFramework;
 
 namespace OutpostLoop
 {
-    /// <summary>原型跨局补给币，只保存余额和最近一次结算标识。</summary>
+    /// <summary>跨局保存胜场和上次结算标识，旧版补给币随存档保留。</summary>
     public sealed class PrototypeWallet : IUtility
     {
-        public const int VictoryCoins = 10;
-        public const int SupplyPrice = 5;
-        public const int ScrapPack = 8;
-        public const int EnergyPack = 3;
+        public const int InitialFunds = 800;
         private const string FileName = "prototype-wallet.json";
 
         [Serializable]
         private sealed class BalanceData
         {
             public int coins;
+            public int wins;
             public string lastVictory;
         }
 
         private readonly JsonFileStore<BalanceData> store;
         private BalanceData data;
-        public int Coins => data?.coins ?? 0;
+        public int Wins => data?.wins ?? 0;
+        public int StartingFunds => Wins >= 3 ? 1000 : Wins >= 1 ? 900 : InitialFunds;
 
         public PrototypeWallet(string directory = null)
         {
             store = new JsonFileStore<BalanceData>(directory);
             var read = store.Read(FileName);
             if (read.Status == SaveFileStatus.Missing) data = new BalanceData();
-            else if (read.Status == SaveFileStatus.Valid && read.Data.coins >= 0) data = read.Data;
+            else if (read.Status == SaveFileStatus.Valid && read.Data.coins >= 0 && read.Data.wins >= 0) data = read.Data;
         }
 
-        /// <summary>先落盘再公布余额，同一局的重复结算不会重复发放。</summary>
-        internal bool RewardVictory(string runId)
+        /// <summary>先保存再公布新档位，重试同一局不会重复计入胜场。</summary>
+        public bool RecordVictory(string runId)
         {
             if (data == null || string.IsNullOrEmpty(runId)) return false;
             if (data.lastVictory == runId) return true;
-            int coins = (int)Math.Min(int.MaxValue, (long)data.coins + VictoryCoins);
-            return Save(new BalanceData { coins = coins, lastVictory = runId });
-        }
-
-        /// <summary>支付失败时保留旧余额，调用方也不会发放物资。</summary>
-        internal bool Pay(int price)
-        {
-            if (data == null || price <= 0 || data.coins < price) return false;
-            return Save(new BalanceData { coins = data.coins - price, lastVictory = data.lastVictory });
-        }
-
-        private bool Save(BalanceData next)
-        {
+            var next = new BalanceData
+            {
+                coins = data.coins,
+                wins = data.wins < int.MaxValue ? data.wins + 1 : data.wins,
+                lastVictory = runId
+            };
             try
             {
                 store.Save(FileName, next);
@@ -59,7 +51,7 @@ namespace OutpostLoop
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
             {
-                Log.Warning("补给币保存失败：" + error.GetType().Name);
+                Log.Warning("胜场保存失败：" + error.GetType().Name);
                 return false;
             }
         }

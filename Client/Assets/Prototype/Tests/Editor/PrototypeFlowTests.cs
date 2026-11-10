@@ -1,138 +1,153 @@
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
+using static OutpostLoop.Tests.PrototypeWorldTests;
 
 namespace OutpostLoop.Tests
 {
-    /// <summary>通过真实领域采集、运输和升级入口验证完整局，不注入库存。</summary>
+    /// <summary>最低起始档下，用真实生产和支出路径完成四次守城对照。</summary>
     public class PrototypeFlowTests
     {
-        [TearDown] public void CloseFoundation() { Game.FoundationRuntime.Shutdown(); }
+        [SetUp] public void Prepare() => Game.FoundationRuntime.Initialize();
+        [TearDown] public void Close() => Game.FoundationRuntime.Shutdown();
 
-        [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
-
-        [Test] public void EconomyAndDefenseOpeningsCanWinOnTheSameTwoSeeds()
+        [Test]
+        public void EconomyAndDefenseOpeningsCanWinOnTwoSeeds()
         {
             foreach (int seed in new[] { 732, 733 })
             foreach (bool economy in new[] { true, false })
             {
-                var world = new WorldState(seed);
+                var world = WithBase(seed, economy ? -4 : 4);
                 var run = world.Run;
-                bool firstPurchase = false, supportBuilt = false;
-                int extraTurrets = 0, loggedClear = 0;
-                float observedArrival = float.NegativeInfinity;
+                var center = world.BasePosition;
                 string strategy = economy ? "economy" : "defense";
-                for (int step = 0; step < 7300 && run.Outcome == 0; step++)
+                int turrets = 0;
+                if (!economy)
                 {
-                    if (!firstPurchase)
+                    BuildNear(world, ExpansionKind.Turret, center + Vector2.right * 5);
+                    turrets = 1;
+                }
+                var miningCell = FindMiningPlacement(world, center + (economy ? Vector2.up : Vector2.left) * 5);
+                Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Extractor, miningCell));
+                int station = world.FindBuilding(miningCell);
+                Debug.Log($"V07 {seed} {strategy} base={center} first={(economy ? "mine" : "turret")} station={world.Buildings[station].Position}");
+                int support = -1;
+                float lastArrival = float.NegativeInfinity;
+                bool firstDelivery = false, firstClear = false, thirdClear = false;
+                for (int step = 0; step < 10000 && run.Outcome == 0; step++)
+                {
+                    if (world.Buildings[station].CanProduce && run.Funds >= ExpansionSite.PersonnelCost)
+                        Assert.IsTrue(world.Produce(station));
+                    if (world.Buildings[station].Personnel != null)
                     {
-                        firstPurchase = economy ? TryBuild(world, ExpansionKind.Extractor, Vector2.zero) : run.Upgrade(1);
-                        if (firstPurchase)
-                            Debug.Log($"V05 seed={seed} strategy={strategy} first={(economy ? "extractor" : "firepower")} time={run.Elapsed:F1}");
+                        if (turrets == 0 && run.Funds >= 300)
+                        {
+                            BuildNear(world, ExpansionKind.Turret, center + Vector2.down * 5);
+                            turrets++;
+                        }
+                        if (turrets > 0 && run.Levels[1] == 0) run.Upgrade(1);
+                        if (turrets > 0 && turrets < 4 && run.Funds >= 300)
+                        {
+                            var offset = turrets == 1 ? Vector2.up : turrets == 2 ? Vector2.left : Vector2.right;
+                            BuildNear(world, ExpansionKind.Turret, center + offset * 5);
+                            turrets++;
+                        }
+                        if (turrets >= 2 && run.Health < 82) run.Upgrade(2);
+                        if (turrets == 4)
+                        {
+                            run.Upgrade(1);
+                            if (run.Levels[1] == 3 && support < 0 && run.Funds >= (economy ? 500 : 400))
+                                support = BuildNear(world, economy ? ExpansionKind.Extractor : ExpansionKind.Barracks,
+                                    center + (economy ? Vector2.left : Vector2.down) * 9);
+                        }
+                        if (support >= 0 && world.Buildings[support].CanProduce) world.Produce(support);
                     }
-                    if (firstPurchase)
+                    if (world.LastArrival > lastArrival && world.Enemies.Count > 0)
                     {
-                        if (run.Levels[1] < 3) run.Upgrade(1);
-                        if (run.Levels[1] >= 2 && !supportBuilt)
-                            supportBuilt = TryBuild(world, economy ? ExpansionKind.Barracks : ExpansionKind.Barricade,
-                                economy ? new Vector2(0, -7) : new Vector2(0, 8));
-                        if (supportBuilt && economy)
-                            for (int i = 0; i < world.Buildings.Count; i++)
-                                if (world.Buildings[i].CanTrain) world.TrainGarrison(i);
-                        if (run.Levels[1] >= 2 && extraTurrets < 2 &&
-                            TryBuild(world, ExpansionKind.Turret, new Vector2(0, extraTurrets == 0 ? 5 : -5))) extraTurrets++;
-                        if (run.Levels[1] == 3 && (run.Health < 75 || extraTurrets >= 2)) run.Upgrade(2);
-                    }
-                    if (world.ResourceOrder < 0 && !world.WorkerReturning)
-                    {
-                        bool needEnergy = firstPurchase && run.Energy < (run.Levels[1] < 3 ? run.EnergyCost(1) : 5);
-                        int nearest = FindNode(world, needEnergy);
-                        if (nearest < 0) nearest = FindNode(world, !needEnergy);
-                        if (nearest >= 0) Assert.IsTrue(world.AssignResource(nearest));
-                    }
-                    if (world.LastArrival > observedArrival && world.Enemies.Count > 0)
-                    {
-                        observedArrival = world.LastArrival;
-                        var approach = world.Enemies[world.Enemies.Count - 1].Position;
+                        lastArrival = world.LastArrival;
+                        var approach = world.Enemies[world.Enemies.Count - 1].Position - center;
                         int sector = Mathf.Abs(approach.x) >= Mathf.Abs(approach.y)
                             ? (approach.x < 0 ? 0 : 1) : (approach.y > 0 ? 2 : 3);
-                        Assert.IsTrue(world.DeploySquad(sector));
+                        if (!economy && support >= 0) world.DeploySquad(support, sector);
                     }
-                    if (loggedClear == 0 && world.Kills >= 10)
+                    if (!firstClear && world.Kills >= 10)
                     {
-                        LogState(world, strategy, "after1");
-                        loggedClear = 1;
+                        firstClear = true;
+                        LogState(world, strategy, "wave 1 cleared");
                     }
-                    if (loggedClear == 1 && world.Kills >= 42)
+                    if (!thirdClear && world.Kills >= 42)
                     {
-                        LogState(world, strategy, "after3");
-                        loggedClear = 3;
+                        thirdClear = true;
+                        LogState(world, strategy, "wave 3 cleared");
                     }
+                    int beforeStep = run.Funds;
                     world.Step(.1f);
+                    if (!firstDelivery && run.Funds > beforeStep)
+                    {
+                        firstDelivery = true;
+                        LogState(world, strategy, "first delivery");
+                    }
                 }
                 LogState(world, strategy, "result");
-                Assert.IsTrue(firstPurchase && supportBuilt, $"seed={seed}, {strategy}");
-                Assert.AreEqual(1, run.Outcome, $"seed={seed}, {strategy}");
+                Assert.IsTrue(firstDelivery);
+                Assert.AreEqual(1, run.Outcome, $"{seed} {strategy}");
                 Assert.AreEqual(120, world.Kills);
             }
         }
 
-        private static void LogState(WorldState world, string strategy, string stage)
+        // 用玩家在开局能看到的矿点选择采集站。优先给采集员留下可接续的矿点。
+        private static Vector2Int FindMiningPlacement(WorldState world, Vector2 preferred)
         {
-            var layout = string.Join(",", System.Linq.Enumerable.Select(
-                System.Linq.Enumerable.Where(world.Buildings, b => b.Kind != ExpansionKind.Empty), b => $"{b.Kind}@{b.Footprint.min}"));
-            Debug.Log($"V05 seed={world.Seed} strategy={strategy} {stage} t={world.Run.Elapsed:F1} " +
-                $"stock={world.Run.Scrap}/{world.Run.Energy} hp={world.Run.Health} kills={world.Kills} " +
-                $"outcome={world.Run.Outcome} lastLoss={world.LastDestroyedKind} layout={layout}");
-        }
-
-        private static int FindNode(WorldState world, bool energy)
-        {
-            int nearest = -1;
-            float distance = float.PositiveInfinity;
-            for (int i = 0; i < world.Nodes.Count; i++)
-            {
-                var node = world.Nodes[i];
-                if (node.Remaining <= 0 || node.Energy != energy || node.Position.sqrMagnitude >= distance) continue;
-                distance = node.Position.sqrMagnitude;
-                nearest = i;
-            }
-            return nearest;
-        }
-
-        private static bool TryBuild(WorldState world, ExpansionKind kind, Vector2 preference)
-        {
-            var spec = ExpansionSite.SpecFor(kind);
-            if (world.Run.Scrap < spec.Scrap || world.Run.Energy < spec.Energy) return false;
-            float best = float.PositiveInfinity;
-            var target = Vector2Int.zero;
-            for (int x = -8; x <= 8; x++)
-            for (int y = -8; y <= 8; y++)
+            float best = float.NegativeInfinity;
+            var selected = Vector2Int.zero;
+            var center = BattleGrid.Cell(world.BasePosition);
+            for (int x = center.x - 11; x <= center.x + 11; x++)
+            for (int y = center.y - 11; y <= center.y + 11; y++)
             {
                 var cell = new Vector2Int(x, y);
-                float distance = (BattleGrid.Center(cell) - preference).sqrMagnitude;
-                if (distance >= best || world.PreviewPlacement(kind, cell, false, -1, out _, out int node) != PlacementIssue.None) continue;
-                if (kind == ExpansionKind.Extractor && world.Nodes[node].Energy) continue;
-                target = cell;
-                best = distance;
+                if (world.PreviewPlacement(ExpansionKind.Extractor, cell, false, -1, out var footprint, out int node) != PlacementIssue.None) continue;
+                var position = BattleGrid.Center(footprint);
+                int mineCount = world.Nodes.Count(mine => (mine.Position - position).sqrMagnitude <= 12 * 12);
+                float score = Mathf.Min(5, mineCount) * 6f - Vector2.Distance(position, preferred) -
+                    .4f * Vector2.Distance(position, world.Nodes[node].Position);
+                if (score <= best) continue;
+                selected = cell;
+                best = score;
             }
-            return !float.IsPositiveInfinity(best) && world.Build(kind, target) == PlacementIssue.None;
+            Assert.IsFalse(float.IsNegativeInfinity(best));
+            return selected;
         }
-        [Test] public void ControllerRestartReplacesWorldAndKeepsBoundedPool()
+
+        private static void LogState(WorldState world, string strategy, string stage)
         {
-            var root=new GameObject("FlowTestRoot");
+            var layout = string.Join(",", world.Buildings.Where(site => site.Kind != ExpansionKind.Empty)
+                .Select(site => $"{site.Kind}@{site.Footprint.min}"));
+            Debug.Log($"V07 {world.Seed} {strategy} {stage}: t={world.Run.Elapsed:F1} funds={world.Run.Funds} " +
+                $"hp={world.Run.Health} kills={world.Kills} outcome={world.Run.Outcome} loss={world.LastDestroyedKind} layout={layout}");
+        }
+
+        [Test]
+        public void ControllerRestartResetsCommanderAndKeepsBoundedPool()
+        {
+            var root = new GameObject("FlowTestRoot");
             try
             {
-                var c=root.AddComponent<PrototypeController>();c.Initialize();c.Restart(true);
-                var prior=c.World;prior.AssignResource(0);prior.DeploySquad(2);prior.Run.Damage(100);
+                var c = root.AddComponent<PrototypeController>();
+                c.Initialize();
                 c.Restart(true);
-                Assert.AreNotSame(prior,c.World);Assert.AreEqual(0,c.World.Run.Outcome);Assert.IsFalse(c.World.Run.Paused);
-                Assert.AreEqual(0,c.World.Run.Scrap);Assert.AreEqual(48,root.GetComponentsInChildren<Transform>(true).Length>48?CountEnemies(root):0);
-                Assert.AreEqual(-1,c.World.ResourceOrder);Assert.AreEqual(-1,c.World.SquadSector);
-                Assert.AreEqual(1,root.GetComponentsInChildren<Camera>(true).Length);
+                var prior = c.World;
+                BuildBase(prior, -4);
+                prior.Run.Damage(100);
+                c.Restart(true);
+                Assert.AreNotSame(prior, c.World);
+                Assert.AreNotEqual(prior.Seed, c.World.Seed);
+                Assert.IsNull(c.World.Headquarters);
+                Assert.AreEqual(0, c.World.Run.Outcome);
+                Assert.IsFalse(c.World.Run.Paused);
+                Assert.AreEqual(48, root.GetComponentsInChildren<Transform>(true).Count(t => t.name == "PooledEnemy"));
+                Assert.AreEqual(1, root.GetComponentsInChildren<Camera>(true).Length);
             }
-            finally{Object.DestroyImmediate(root);}
+            finally { Object.DestroyImmediate(root); }
         }
-        private static int CountEnemies(GameObject root)
-        {int count=0;foreach(var t in root.GetComponentsInChildren<Transform>(true))if(t.name=="PooledEnemy")count++;return count;}
     }
 }

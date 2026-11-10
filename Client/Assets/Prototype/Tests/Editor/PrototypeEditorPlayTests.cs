@@ -47,6 +47,8 @@ namespace OutpostLoop.Tests
             controller.Restart(true);
             var first = controller.World;
             Assert.AreSame(first, Game.Game.Interface.GetModel<PrototypeModel>().World);
+            yield return null;
+            ClickBase(controller, -4);
             for (int frame = 0; frame < 30; frame++) yield return null;
             Assert.Greater(first.Run.Elapsed, 0, "真实Play中的生命周期应推进局时");
             controller.enabled = false;
@@ -63,7 +65,8 @@ namespace OutpostLoop.Tests
             Assert.AreNotSame(first, controller.World);
             Assert.AreEqual(0, controller.World.Run.Elapsed);
             Assert.IsTrue(controller.World.Run.Paused);
-            Assert.AreEqual(controller.World.Run.Config.InitialHealth, controller.World.Run.Health);
+            Assert.IsNull(controller.World.Headquarters);
+            Assert.AreEqual(0, controller.World.Run.Health);
             yield return new ExitPlayMode();
         }
 
@@ -75,138 +78,87 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             var walletDirectory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
-                "../../Backup/Artifacts/ConstructionAffordability-20261110/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
+                "../../Backup/Artifacts/FirstPlayableV07-20261110/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
             var wallet = new PrototypeWallet(walletDirectory);
             Game.Game.Interface.RegisterUtility(wallet);
-            var run = controller.World.Run;
-            Assert.IsTrue(run.Paused);
-            Assert.IsTrue(Game.UIHelper.HasUIOpen);
-            Assert.IsNull(GameObject.Find("OpenPause"), "开局前应隐藏局内暂停入口");
-            var artwork = GameObject.Find("BaseArtwork")?.GetComponent<RawImage>();
-            Assert.IsNotNull(artwork?.texture, "从 Boot 进入 Main 后，开始页应显示场景引用的基地概念图");
-            Click("PrimaryAction");
-            Assert.IsFalse(run.Paused);
-            Assert.IsFalse(Game.UIHelper.HasUIOpen);
-            Assert.IsFalse(artwork.gameObject.activeInHierarchy);
-            Assert.IsNotNull(GameObject.Find("OpenUpgrade"), "指挥视图可直接打开升级");
-            var camera = controller.GetComponentInChildren<Camera>();
-            var scrapNode = controller.World.Nodes[1];
-            var worldPoint = new Vector3(scrapNode.Position.x, .6f, scrapNode.Position.y);
-            Assert.IsTrue(controller.OrderResourceAt(camera.WorldToScreenPoint(worldPoint)), "主视图资源投影应可点选");
-            Assert.AreEqual(1, controller.World.ResourceOrder);
-            Click("DeploySquad2");
-            Assert.AreEqual(2, controller.World.SquadSector);
-            for (int i = 0; i < 400 && run.Scrap == 0; i++) controller.World.Step(.1f);
-            yield return null;
-            Assert.GreaterOrEqual(run.Scrap, run.ScrapCost(1), "库存来自实际工人自动返程");
-            Assert.Greater(controller.World.SquadPosition.y, 0);
-            Click("OpenPause");
-            Assert.IsTrue(run.Paused, "离开基地时也应能通过 HUD 暂停");
-            Assert.IsTrue(Game.UIHelper.HasUIOpen);
+            controller.Restart(false);
+            var world = controller.World;
+            Assert.IsNotNull(GameObject.Find("BaseArtwork")?.GetComponent<RawImage>()?.texture);
             Assert.IsNull(GameObject.Find("OpenPause"));
-            var pausedElapsed = run.Elapsed;
-            for (int frame = 0; frame < 5; frame++) yield return null;
-            Assert.AreEqual(pausedElapsed, run.Elapsed, "触屏暂停应冻结本局倒计时");
             Click("PrimaryAction");
-            Assert.IsFalse(run.Paused);
-            Assert.IsNotNull(GameObject.Find("OpenPause"), "继续后应恢复局内暂停入口");
+            Assert.IsFalse(world.Run.Paused);
+            Assert.AreEqual(800, world.Run.Funds);
+            Assert.IsNotNull(GameObject.Find("Commander"));
+            Assert.IsNull(GameObject.Find("Headquarters"));
+            Assert.IsNull(GameObject.Find("DeploySquad0"));
+            Assert.IsFalse(GameObject.Find("OpenUpgrade").GetComponent<Button>().interactable);
+            var camera = controller.GetComponentInChildren<Camera>();
+            Assert.IsTrue(controller.MoveCommanderAt(camera.WorldToScreenPoint(new Vector3(0, 0, -4))));
+            PrototypeWorldTests.Advance(world, 1);
+            Assert.AreEqual(new Vector2(0, -4), world.CommanderPosition);
+            Assert.AreEqual(0, world.Run.Elapsed);
 
-            int cost = run.ScrapCost(1);
-            int beforeUpgrade = run.Scrap;
-            yield return null;
+            Click("OpenConstruction");
+            Assert.IsNull(GameObject.Find("BuildTurret"));
+            Click("BuildHeadquarters");
+            Assert.IsFalse(ClickCell(controller, BattleGrid.Cell(world.CommanderPosition)));
+            Assert.AreEqual(800, world.Run.Funds);
+            Assert.IsTrue(ClickCell(controller, new Vector2Int(-4, 0)));
+            Assert.IsNotNull(GameObject.Find("Headquarters"));
+            Assert.IsNull(GameObject.Find("Commander"));
+            Assert.IsTrue(GameObject.Find("OpenUpgrade").GetComponent<Button>().interactable);
+
             Click("OpenUpgrade");
-            Assert.IsTrue(run.Paused);
-            Assert.IsNull(GameObject.Find("OpenPause"), "升级窗口应隐藏暂停入口");
-            Assert.IsNull(GameObject.Find("OpenConstruction"), "建造入口只在局内 HUD 显示");
+            Assert.IsTrue(world.Run.Paused);
             Click("Purchase1");
-            Assert.AreEqual(1, run.Levels[1]);
-            Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
-            Click("Purchase1");
-            Assert.AreEqual(1, run.Levels[1], "资源不足时按钮不能改变升级等级");
+            Assert.AreEqual(600, world.Run.Funds);
+            Assert.AreEqual(1, world.Run.Levels[1]);
             Click("PrimaryAction");
             Click("OpenConstruction");
-            var world = controller.World;
-            var original = new Vector2Int(-2, 0);
-            Assert.IsTrue(ClickCell(controller, original));
-            Click("MoveSelectedTurret");
-            Assert.IsFalse(ClickCell(controller, new Vector2Int(2, 0)), "不应覆盖已有炮塔");
-            var target = FindPlacement(world, ExpansionKind.Turret, 4);
-            Assert.IsTrue(ClickCell(controller, target));
-            Assert.AreEqual(-1, world.FindBuilding(original));
-            Assert.AreEqual(4, world.FindBuilding(target));
-            var turretButton = GameObject.Find("BuildTurret").GetComponent<Button>();
-            Assert.IsFalse(turretButton.interactable);
-            Assert.AreEqual(turretButton.image.color.r, turretButton.image.color.g, "库存不足时按钮底色应为灰色");
             Click("BuildTurret");
-            yield return null;
-            Assert.IsNull(GameObject.Find("BuildRange"), "点击禁用按钮不应进入选址");
-            Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
-            Assert.IsFalse(run.Paused);
-
-            var turretSpec = ExpansionSite.SpecFor(ExpansionKind.Turret);
-            int scrap = turretSpec.Scrap - run.Scrap;
-            int energy = turretSpec.Energy - run.Energy;
-            for (int i = 0; i < scrap + energy - 1; i++)
-            {
-                if (run.CargoScrap + run.CargoEnergy == run.Capacity) run.Deposit();
-                Assert.IsTrue(run.Gather(i >= scrap));
-            }
-            run.Deposit();
-            yield return null;
-            Assert.AreEqual(turretSpec.Scrap, run.Scrap);
-            Assert.IsFalse(turretButton.interactable, "废料足够但缺一单位能源时仍不可点击");
-            Assert.IsTrue(run.Gather(true));
-            run.Deposit();
-            yield return null;
-            Assert.IsTrue(turretButton.interactable, "库存足够后，无需重开侧栏即可建造");
-            Assert.AreNotEqual(turretButton.image.color.r, turretButton.image.color.g, "恢复可建时恢复原色");
-            Click("BuildTurret");
-            Assert.AreEqual(turretSpec.Scrap, run.Scrap, "选类型不会扣费");
             Assert.IsTrue(ClickCell(controller, FindPlacement(world, ExpansionKind.Turret)));
-            Assert.IsTrue(world.Buildings[6].IsUnderConstruction);
-            var model = GameObject.Find("Building6").transform;
-            Assert.IsTrue(model.Find("Worksite").gameObject.activeInHierarchy);
-            Assert.IsFalse(model.Find("Turret").gameObject.activeInHierarchy);
-            Assert.AreEqual(0, run.Scrap);
-            Assert.AreEqual(0, run.Energy);
-            foreach (string kind in new[] { "Extractor", "Barracks", "Barricade", "Turret" })
-                Assert.IsFalse(GameObject.Find("Build" + kind).GetComponent<Button>().interactable, kind);
-            Click("CloseConstruction");
-            for (int i = 0; i < 62; i++) world.Step(.1f);
+            Assert.AreEqual(300, world.Run.Funds);
+            var extractor = GameObject.Find("BuildExtractor").GetComponent<Button>();
+            Assert.IsFalse(extractor.interactable);
+            Assert.AreEqual(extractor.image.color.r, extractor.image.color.g);
+            Click("BuildExtractor");
             yield return null;
-            Assert.IsTrue(model.Find("Turret").gameObject.activeInHierarchy);
-            Assert.IsFalse(model.Find("Worksite").gameObject.activeInHierarchy);
+            Assert.IsNull(GameObject.Find("BuildRange"));
+            Click("OpenPause");
+            Click("RestartRun");
+            Assert.AreSame(world, controller.World, "重开需二次确认");
+            Click("PrimaryAction");
+            Assert.AreSame(world, controller.World);
+            Assert.IsFalse(world.Run.Paused);
 
-            Assert.IsFalse(run.Paused);
-            run.Damage(run.Health);
+            world.Run.Damage(world.Run.Health);
             yield return null;
-            Assert.IsTrue(Game.UIHelper.HasUIOpen);
-            Assert.IsNull(GameObject.Find("OpenPause"), "结算时应隐藏暂停入口");
-            Assert.AreEqual(0, wallet.Coins, "失败不给补给币");
-            var oldWorld = controller.World;
+            Assert.IsNotNull(GameObject.Find("PrimaryAction"));
+            Assert.AreEqual(0, wallet.Wins);
             Click("PrimaryAction");
-            Assert.AreNotSame(oldWorld, controller.World);
-            Assert.AreEqual(0, controller.World.Run.Levels[1]);
-            Assert.IsTrue(controller.World.Run.Paused, "结算后的下一局应先停在开局补给页");
-            Assert.IsNotNull(GameObject.Find("SupplyScrap"), "开局前应能选择废料补给");
-            Click("PrimaryAction");
-            Assert.IsFalse(controller.World.Run.Paused);
+            Assert.AreNotSame(world, controller.World);
+            Assert.AreNotEqual(world.Seed, controller.World.Seed);
+            Assert.IsTrue(controller.World.Run.Paused);
+            Assert.AreEqual(800, controller.World.Run.Funds);
+            Assert.IsNull(controller.World.Headquarters);
 
-            // 直接推进结算条件，整局实战由原有流程测试覆盖。
-            var victory = controller.World.Run;
-            victory.Tick(victory.Config.Duration, 0);
-            for (int frame = 0; frame < 5; frame++) yield return null;
-            Assert.AreEqual(PrototypeWallet.VictoryCoins, wallet.Coins, "胜利发币一次");
-            Assert.AreEqual(wallet.Coins, new PrototypeWallet(walletDirectory).Coins, "退出后可读回胜利余额");
             Click("PrimaryAction");
-            Click("SupplyScrap");
-            Click("SupplyEnergy");
-            Assert.AreEqual(PrototypeWallet.VictoryCoins, wallet.Coins, "只选择补给不扣币");
+            ClickBase(controller, 4);
+            var victory = controller.World;
+            while (victory.Wave < 6 || victory.WaitingEnemies > 0)
+            {
+                victory.Enemies.Clear();
+                victory.Step(.1f);
+            }
+            victory.Enemies.Clear();
+            victory.Step(.1f);
+            yield return null;
+            Assert.AreEqual(1, victory.Run.Outcome);
+            Assert.AreEqual(1, wallet.Wins);
+            Assert.AreEqual(900, new PrototypeWallet(walletDirectory).StartingFunds);
             Click("PrimaryAction");
-            Assert.AreEqual(0, wallet.Coins);
-            Assert.AreEqual(0, new PrototypeWallet(walletDirectory).Coins, "购买后保存剩余余额");
-            Assert.AreEqual(PrototypeWallet.ScrapPack, controller.World.Run.Scrap);
-            Assert.AreEqual(PrototypeWallet.EnergyPack, controller.World.Run.Energy);
+            Assert.AreEqual(900, controller.World.Run.Funds);
+            Assert.IsNull(controller.World.Headquarters);
             yield return new ExitPlayMode();
         }
 
@@ -221,6 +173,8 @@ namespace OutpostLoop.Tests
             Click("PrimaryAction");
             var camera = controller.GetComponentInChildren<Camera>();
             Assert.IsFalse(camera.orthographic);
+            var openingCamera = camera.transform.position;
+            ClickBase(controller, -4);
             var home = camera.transform.position;
             var facing = camera.transform.rotation;
             var inputSettings = InputSystem.settings;
@@ -258,12 +212,7 @@ namespace OutpostLoop.Tests
                 Assert.Greater(camera.transform.position.y, closeHeight, "滚轮向后应拉远镜头");
 
                 var world = controller.World;
-                var node = world.Nodes[1];
-                var resource = new Vector3(node.Position.x, .6f, node.Position.y);
-                Assert.IsTrue(controller.OrderResourceAt(camera.WorldToScreenPoint(resource)));
-                Assert.AreEqual(1, world.ResourceOrder, "旋转后应点中同一个资源节点");
-                for (int i = 0; i < 400 && world.Run.Scrap == 0; i++) world.Step(.1f);
-                Click("OpenConstruction");
+                if (!GameObject.Find("ConstructionPanel")) Click("OpenConstruction");
                 Click("BuildExtractor");
                 var cell = FindPlacement(world, ExpansionKind.Extractor);
                 Assert.IsTrue(ClickCell(controller, cell), "移动、旋转和缩放后应落在正确地格");
@@ -294,7 +243,7 @@ namespace OutpostLoop.Tests
                 for (int i = 0; i < 5; i++) yield return null;
                 Assert.Less(camera.transform.position.x, home.x);
                 controller.Restart(false);
-                Assert.Less(Vector3.Distance(home, camera.transform.position), .001f, "新局恢复默认镜头");
+                Assert.Less(Vector3.Distance(openingCamera, camera.transform.position), .001f, "新局恢复指挥员镜头");
             }
             finally
             {
@@ -306,9 +255,9 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
-        /// <summary>从 Boot 用真实按钮派工、施工和付费出兵，核对所选地块及完工模型。</summary>
+        /// <summary>从 Boot 用真实按钮建造和生产，核对采集入账、暂停及守军调防。</summary>
         [UnityTest]
-        public IEnumerator BootExpansionButtonsBuildExtractorFromWorkerStock()
+        public IEnumerator BootConstructionProducesMinersAndMobileGuards()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
@@ -316,98 +265,68 @@ namespace OutpostLoop.Tests
             var controller = Object.FindObjectOfType<PrototypeController>();
             var world = controller.World;
             Click("PrimaryAction");
-            var node = world.Nodes[1];
-            var camera = controller.GetComponentInChildren<Camera>();
-            Assert.IsTrue(controller.OrderResourceAt(camera.WorldToScreenPoint(new Vector3(node.Position.x, .6f, node.Position.y))));
-            for (int i = 0; i < 400 && world.Run.Scrap == 0; i++) world.Step(.1f);
-            int before = world.Run.Scrap;
-            var spec = ExpansionSite.SpecFor(ExpansionKind.Extractor);
-            Assert.GreaterOrEqual(before, spec.Scrap);
-            Click("OpenConstruction");
-            Assert.IsFalse(world.Run.Paused, "建造侧栏应保持战斗实时推进");
-            Assert.IsFalse(Game.UIHelper.HasUIOpen, "建造不应登记为阻断玩法的窗口");
+            ClickBase(controller, -4);
             Click("BuildExtractor");
-            Assert.AreEqual(before, world.Run.Scrap);
-            Assert.IsFalse(ClickCell(controller, Vector2Int.zero));
-            Assert.AreEqual(before, world.Run.Scrap);
-            var location = FindPlacement(world, ExpansionKind.Extractor);
-            Assert.IsTrue(ClickCell(controller, location));
-            int index = world.FindBuilding(location);
-            var site = world.Buildings[index];
-            Assert.AreEqual(ExpansionKind.Extractor, site.Kind);
-            Assert.AreEqual(before - spec.Scrap, world.Run.Scrap);
-            var plot = GameObject.Find("Building" + index).transform;
-            var model = plot.Find("Extractor").gameObject;
-            Assert.IsTrue(plot.Find("Worksite").gameObject.activeInHierarchy);
-            Assert.IsFalse(model.activeInHierarchy);
-            var source = world.Nodes[site.NodeIndex];
-            int beforeRemaining = source.Remaining;
+            var cell = FindPlacement(world, ExpansionKind.Extractor);
+            Assert.IsTrue(ClickCell(controller, cell));
+            int index = world.FindBuilding(cell);
+            var station = world.Buildings[index];
+            int startingFunds = world.Run.Funds;
+            Assert.IsTrue(station.IsUnderConstruction);
+            Assert.IsNull(GameObject.Find("ProducePersonnel"));
             var elapsed = world.Run.Elapsed;
-            for (int i = 0; i < 5; i++) yield return null;
-            Assert.Greater(world.Run.Elapsed, elapsed, "真实生命周期应在面板打开时推进");
-            Assert.AreEqual(beforeRemaining, source.Remaining);
-            Click("OpenUpgrade");
-            Assert.IsNull(GameObject.Find("ConstructionPanel"), "打开基地升级应关闭独立建造面板");
-            var pausedConstruction = site.ConstructionLeft;
-            for (int i = 0; i < 5; i++) yield return null;
-            Assert.AreEqual(pausedConstruction, site.ConstructionLeft);
-            Click("PrimaryAction");
-            for (int i = 0; i < 80; i++) world.Step(.1f);
             yield return null;
-            Assert.IsTrue(model.activeInHierarchy);
-            Assert.IsFalse(plot.Find("Worksite").gameObject.activeInHierarchy);
-            Assert.Less(source.Remaining, beforeRemaining);
-            Assert.Greater(world.Run.Scrap + world.Run.Energy, before - spec.Scrap);
+            Assert.Greater(world.Run.Elapsed, elapsed);
+            PrototypeWorldTests.Advance(world, 5.2f);
+            yield return null;
+            Assert.IsNull(station.Personnel);
+            Click("ProducePersonnel");
+            Assert.AreEqual(startingFunds - 150, world.Run.Funds);
+            Assert.Greater(station.ProductionLeft, 0);
+            Click("OpenPause");
+            float remaining = station.ProductionLeft;
+            yield return null;
+            Assert.AreEqual(remaining, station.ProductionLeft);
+            Click("PrimaryAction");
+            PrototypeWorldTests.Advance(world, 26);
+            yield return null;
+            Assert.NotNull(station.Personnel);
+            Assert.Greater(world.Run.Funds, startingFunds - 150);
+            Assert.IsTrue(GameObject.Find("Building" + index).transform.Find("Gatherer").gameObject.activeInHierarchy);
 
-            foreach (int resource in new[] { 2, 0 })
-            {
-                Assert.IsTrue(world.AssignResource(resource));
-                for (int i = 0; i < 600 && (world.ResourceOrder >= 0 || world.WorkerReturning); i++) world.Step(.1f);
-            }
             Click("OpenConstruction");
             Click("BuildBarracks");
-            var barracksLocation = FindPlacement(world, ExpansionKind.Barracks);
-            Assert.IsTrue(ClickCell(controller, barracksLocation));
-            int barracksIndex = world.FindBuilding(barracksLocation);
+            var barracksCell = FindPlacement(world, ExpansionKind.Barracks);
+            Assert.IsTrue(ClickCell(controller, barracksCell));
+            int barracksIndex = world.FindBuilding(barracksCell);
             var barracks = world.Buildings[barracksIndex];
-            Assert.AreEqual(ExpansionKind.Barracks, barracks.Kind);
-            Assert.IsNull(GameObject.Find("TrainGarrison"));
-            Click("CloseConstruction");
-            for (int i = 0; i < 85; i++) world.Step(.1f);
-            Assert.IsTrue(ClickCell(controller, barracksLocation));
-            Assert.IsFalse(barracks.HasGarrison);
-            int beforeTrainingScrap = world.Run.Scrap;
-            int beforeTrainingEnergy = world.Run.Energy;
-            Click("TrainGarrison");
-            Assert.AreEqual(beforeTrainingScrap - ExpansionSite.TrainingScrap, world.Run.Scrap);
-            Assert.AreEqual(beforeTrainingEnergy - ExpansionSite.TrainingEnergy, world.Run.Energy);
-            Assert.AreEqual(ExpansionSite.TrainingSeconds, barracks.TrainingLeft);
-            Assert.IsNull(GameObject.Find("TrainGarrison"));
-            for (int i = 0; i < 125; i++) world.Step(.1f);
+            PrototypeWorldTests.Advance(world, 8.1f);
             yield return null;
-            Assert.IsTrue(barracks.HasGarrison);
-            var garrison = GameObject.Find("Building" + barracksIndex).transform.Find("Garrison").gameObject;
-            Assert.IsTrue(garrison.activeInHierarchy);
-            for (int i = 0; i < 40; i++)
-                world.Enemies.Add(new EnemyState { Position = barracks.Position, Health = 10000 });
-            for (int i = 0; i < 20; i++) world.Step(.1f);
+            Assert.IsNull(GameObject.Find("DeploySquad2"));
+            Click("ProducePersonnel");
+            PrototypeWorldTests.Advance(world, 12.1f);
             yield return null;
-            Assert.AreEqual(ExpansionKind.Empty, barracks.Kind);
-            Assert.IsFalse(garrison.activeInHierarchy, "兵营被毁时移除已部署守军");
+            Assert.IsNotNull(barracks.Personnel);
+            Click("DeploySquad2");
+            Assert.AreEqual(2, barracks.Personnel.Sector);
+            PrototypeWorldTests.Advance(world, 10);
+            var post = world.BasePosition + Vector2.up * 12;
+            if (world.FindBuilding(BattleGrid.Cell(post)) >= 0)
+                Assert.AreEqual(BattleGrid.CellSize, Vector2.Distance(post, barracks.Personnel.Position), "驻防目标被占时使用相邻格");
+            else Assert.AreEqual(post, barracks.Personnel.Position);
             yield return new ExitPlayMode();
         }
 
-        private static Vector2Int FindPlacement(WorldState world, ExpansionKind kind, int moving = -1)
+        private static void ClickBase(PrototypeController controller, int cellX)
         {
-            for (int x = -5; x <= -2; x++)
-                for (int y = 1; y <= 6; y++)
-                {
-                    var cell = new Vector2Int(x, y);
-                    if (world.PreviewPlacement(kind, cell, false, moving, out _, out _) == PlacementIssue.None)
-                        return cell;
-                }
-            Assert.Fail("找不到可见的合法落位");
-            return default;
+            Click("OpenConstruction");
+            Click("BuildHeadquarters");
+            Assert.IsTrue(ClickCell(controller, new Vector2Int(cellX, 0)));
+        }
+
+        private static Vector2Int FindPlacement(WorldState world, ExpansionKind kind)
+        {
+            return PrototypeWorldTests.FindPlacement(world, kind, world.BasePosition + Vector2.up * 7);
         }
 
         private static bool ClickCell(PrototypeController controller, Vector2Int cell)

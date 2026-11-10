@@ -28,12 +28,13 @@ namespace OutpostLoop
         private bool awaitingStart;
         private bool rewardAttempted;
         public bool VictoryRewardRecorded { get; private set; }
-        public int SupplyCoins => this.GetUtility<PrototypeWallet>()?.Coins ?? 0;
+        public int Wins => this.GetUtility<PrototypeWallet>()?.Wins ?? 0;
+        public int StartingFunds => this.GetUtility<PrototypeWallet>()?.StartingFunds ?? PrototypeWallet.InitialFunds;
         protected override void OnInit(){model=this.GetModel<PrototypeModel>();Game.LifeCycle.RegisterUpdate(OnTick);}
         protected override void OnDeinit(){Game.LifeCycle.UnregisterUpdate(OnTick);}
         public WorldState Begin(int seed,bool running)
         {
-            var next=new WorldState(seed);next.Run.Paused=!running;
+            var next=new WorldState(seed, startingFunds: StartingFunds);next.Run.Paused=!running;
             model.World=next;
             awaitingStart = !running;
             rewardAttempted = false;
@@ -41,8 +42,8 @@ namespace OutpostLoop
             this.GetSystem<Game.AudioSystem>()?.SetPaused(!running);
             this.SendEvent(new PrototypeRunStarted{Seed=seed});return next;
         }
-        public bool AssignResource(int node) => model.World?.AssignResource(node) == true;
-        public bool DeploySquad(int sector) => model.World?.DeploySquad(sector) == true;
+        public bool MoveCommander(Vector2 point) => !awaitingStart && model.World?.MoveCommander(point) == true;
+        public bool DeploySquad(int building, int sector) => !awaitingStart && model.World?.DeploySquad(building, sector) == true;
 
         private void OnTick()
         {
@@ -50,15 +51,11 @@ namespace OutpostLoop
             if (model.World?.Run.Outcome > 0 && !rewardAttempted) TryRecordVictory();
         }
 
-        /// <summary>只接受开局准备阶段的付款，成功后将物资加入库存并开始计时。</summary>
-        internal bool StartWithSupplies(bool scrap, bool energy)
+        /// <summary>从准备页进入指挥员选址阶段，资金已按开局档位记录。</summary>
+        internal bool StartRun()
         {
-            var run = model.World?.Run;
-            if (!awaitingStart || run == null || run.Outcome != 0) return false;
-            int price = (scrap ? PrototypeWallet.SupplyPrice : 0) + (energy ? PrototypeWallet.SupplyPrice : 0);
-            if (price > 0 && this.GetUtility<PrototypeWallet>()?.Pay(price) != true) return false;
+            if (!awaitingStart || model.World == null) return false;
             awaitingStart = false;
-            run.AddStarterSupplies(scrap, energy);
             SetPaused(false);
             return true;
         }
@@ -70,7 +67,7 @@ namespace OutpostLoop
             if (run == null || run.Outcome <= 0) return false;
             rewardAttempted = true;
             if (!VictoryRewardRecorded)
-                VictoryRewardRecorded = this.GetUtility<PrototypeWallet>()?.RewardVictory(run.RewardId) == true;
+                VictoryRewardRecorded = this.GetUtility<PrototypeWallet>()?.RecordVictory(run.RewardId) == true;
             return VictoryRewardRecorded;
         }
         /// <summary>同步本局暂停与基础音频状态；UI声音不受会话暂停影响。</summary>
@@ -94,7 +91,7 @@ namespace OutpostLoop
         public PlacementIssue MoveTurret(int source, Vector2Int cell) =>
             awaitingStart ? PlacementIssue.Inactive : model.World?.MoveTurret(source, cell) ?? PlacementIssue.Inactive;
 
-        /// <summary>转发兵营独立的付费训练订单。</summary>
-        public bool TrainGarrison(int sector) => !awaitingStart && model.World?.TrainGarrison(sector) == true;
+        /// <summary>转发生产建筑的付费人员订单。</summary>
+        public bool Produce(int building) => !awaitingStart && model.World?.Produce(building) == true;
     }
 }

@@ -18,9 +18,11 @@ namespace OutpostLoop.Tests
         }
         [Test] public void PrototypeReadsGeneratedConfig()
         {
-            var config=PrototypeServices.LoadConfig();var state=new RunState(config);
-            Assert.AreSame(config,state.Config);Assert.AreEqual(config.InitialHealth,state.Health);
-            state.Tick(config.Duration,0);Assert.AreEqual(1,state.Outcome);
+            var config = PrototypeServices.LoadConfig();
+            var world = new WorldState(12, config);
+            PrototypeWorldTests.BuildBase(world, -4);
+            Assert.AreSame(config, world.Run.Config);
+            Assert.AreEqual(config.InitialHealth, world.Run.Health);
         }
         [Test] public void LifecycleDeduplicatesAndUnregisters()
         {

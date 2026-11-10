@@ -60,6 +60,8 @@ namespace OutpostLoop
         // 调防按钮反映当前命令，避免重复下达同一驻防指令。
         private Text[] squadLabels;
         private int displayedSector;
+        private bool displayedBase, displayedSquad;
+        private Button upgradeButton;
         private string displayedLanguage;
         protected override string Path() => null;
         public override UILayer Layer() => UILayer.HUD;
@@ -75,22 +77,30 @@ namespace OutpostLoop
             if (BaseUI == null || owner == controller) return;
             owner = controller;
             squadLabels = ((PrototypeOverlayView)BaseUI).BuildHudEntries(font, controller);
+            upgradeButton = BaseUI.transform.Find("OpenUpgrade").GetComponent<Button>();
             displayedLanguage = null;
             BaseUI.GetComponent<SafeAreaFitter>().ApplyNow();
         }
 
-        internal void Refresh(int sector)
+        internal void Refresh(bool hasBase, SitePersonnel squad)
         {
             string language = Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value;
-            if (displayedSector == sector && displayedLanguage == language) return;
+            int sector = squad?.Sector ?? -1;
+            bool hasSquad = squad != null;
+            if (displayedSector == sector && displayedLanguage == language && displayedBase == hasBase && displayedSquad == hasSquad) return;
             displayedSector = sector;
             displayedLanguage = language;
+            displayedBase = hasBase;
+            displayedSquad = hasSquad;
+            upgradeButton.interactable = hasBase;
             for (int i = 0; i < squadLabels.Length; i++)
             {
                 var label = squadLabels[i];
+                var button = label.transform.parent.GetComponent<Button>();
+                button.gameObject.SetActive(hasSquad);
                 string command = Loc.T("StrategyDeploy", Loc.T(PrototypeOverlayView.SectorNames[i]));
                 if (label.text != command) label.text = command;
-                label.GetComponentInParent<Button>().interactable = i != sector;
+                button.interactable = i != sector;
             }
         }
 
@@ -141,14 +151,14 @@ namespace OutpostLoop
         private static readonly Color LabelColor = new Color(.92f, .97f, .97f);
         private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
-        private Text heading, details, actionLabel, feedback, startBriefing;
+        private Text heading, details, actionLabel, feedback, startBriefing, restartAction;
         private GameObject purchaseRows;
-        private Text constructionStock, constructionFeedback, constructionDetail, trainGarrison, moveTurret;
-        private readonly Text[] constructionOptions = new Text[4];
+        private Text constructionStock, constructionFeedback, constructionDetail, producePersonnel, moveTurret;
+        private readonly Text[] constructionOptions = new Text[5];
         private static readonly ExpansionKind[] ExpansionOptions =
-            { ExpansionKind.Extractor, ExpansionKind.Barracks, ExpansionKind.Barricade, ExpansionKind.Turret };
+            { ExpansionKind.Headquarters, ExpansionKind.Extractor, ExpansionKind.Barracks, ExpansionKind.Barricade, ExpansionKind.Turret };
         private static readonly string[] ExpansionNames =
-            { "ExpansionEmpty", "ExpansionExtractor", "ExpansionBarracks", "ExpansionBarricade", "BuildingTurret" };
+            { "ExpansionEmpty", "ExpansionExtractor", "ExpansionBarracks", "ExpansionBarricade", "BuildingTurret", "BuildingHeadquarters" };
 
         internal static string BuildingName(ExpansionKind kind) => Loc.T(ExpansionNames[(int)kind]);
         internal static readonly string[] SectorNames = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
@@ -157,7 +167,7 @@ namespace OutpostLoop
         private GameObject startScreen;
         private Button startUpdateEntry;
         private Text startUpdateVersion, startUpdateStatus;
-        private Text supplyBalance, supplyScrap, supplyEnergy;
+        private Text startingBalance;
 
         internal static PrototypeOverlayView Create(string name)
         {
@@ -209,6 +219,8 @@ namespace OutpostLoop
             feedback = Label(panel, font, "Feedback", new Vector2(660,36), new Vector2(0,-145), 24);
             actionLabel = Button(panel, font, "PrimaryAction", "", new Vector2(450,68), new Vector2(0,-200),
                 new Vector2(.5f,.5f), controller.ActOnModal);
+            restartAction = Button(panel, font, "RestartRun", "", new Vector2(390, 48),
+                new Vector2(0, -117), new Vector2(.5f, .5f), controller.RequestRestart);
         }
 
         /// <summary>建造侧栏直接挂在局内 HUD，地图和基地升级保持各自入口。</summary>
@@ -228,15 +240,15 @@ namespace OutpostLoop
             {
                 var kind = ExpansionOptions[i];
                 constructionOptions[i] = Button(panel, font, "Build" + kind, "", new Vector2(468, 39),
-                    new Vector2(0, 110 - i * 44), new Vector2(.5f, .5f), () => controller.SelectPlacement(kind));
+                    new Vector2(0, 110 - Mathf.Max(0, i - 1) * 44), new Vector2(.5f, .5f), () => controller.SelectPlacement(kind));
                 constructionOptions[i].fontSize = 18;
             }
             constructionDetail = Label(panel, font, "ConstructionDetail", new Vector2(478, 66), new Vector2(0, -86), 18);
-            trainGarrison = Button(panel, font, "TrainGarrison", "", new Vector2(468, 38),
-                new Vector2(0, -143), new Vector2(.5f, .5f), controller.OrderGarrison);
+            producePersonnel = Button(panel, font, "ProducePersonnel", "", new Vector2(468, 38),
+                new Vector2(0, -143), new Vector2(.5f, .5f), controller.OrderPersonnel);
             moveTurret = Button(panel, font, "MoveSelectedTurret", "", new Vector2(468, 38),
                 new Vector2(0, -143), new Vector2(.5f, .5f), controller.BeginTurretMove);
-            trainGarrison.fontSize = moveTurret.fontSize = 18;
+            producePersonnel.fontSize = moveTurret.fontSize = 18;
             constructionFeedback = Label(panel, font, "ConstructionFeedback", new Vector2(478, 32), new Vector2(0, -186), 19);
         }
 
@@ -280,13 +292,8 @@ namespace OutpostLoop
                 startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
                 SetText(startUpdateStatus, PrototypeUpdateText.Status(snapshot));
-                if (startBriefing != null) startBriefing.text = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
-                int selected = (controller.WantScrapPack ? 1 : 0) + (controller.WantEnergyPack ? 1 : 0);
-                string wallet = Loc.T("SupplyBalance", controller.SupplyCoins, selected * PrototypeWallet.SupplyPrice);
-                if (controller.SupplyError != null) wallet += "\n" + Loc.T(controller.SupplyError);
-                SetText(supplyBalance, wallet);
-                SetText(supplyScrap, SupplyLabel("SupplyScrap", PrototypeWallet.ScrapPack, controller.WantScrapPack));
-                SetText(supplyEnergy, SupplyLabel("SupplyEnergy", PrototypeWallet.EnergyPack, controller.WantEnergyPack));
+                SetText(startBriefing, Loc.T("CommanderBrief"));
+                SetText(startingBalance, Loc.T("StartingFundsTier", controller.World.Run.Funds) + "\n" + TierProgress(controller));
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;
                 var safe = Screen.safeArea.size;
@@ -302,11 +309,13 @@ namespace OutpostLoop
             purchaseRows.SetActive(upgrading);
             feedback.gameObject.SetActive(upgrading);
             details.gameObject.SetActive(!upgrading);
+            restartAction.transform.parent.gameObject.SetActive(mode == PrototypeOverlay.Paused);
             switch (mode)
             {
                 case PrototypeOverlay.Paused:
                     SetText(heading, Loc.T("PreviewText0"));
-                    SetText(details, Loc.T("PreviewText1"));
+                    SetText(details, Loc.T(controller.ConfirmingRestart ? "ConfirmRestartDetail" : "PreviewText1"));
+                    SetText(restartAction, Loc.T(controller.ConfirmingRestart ? "ConfirmRestartAction" : "RestartRun"));
                     SetText(actionLabel, Loc.T("PreviewText2"));
                     break;
                 case PrototypeOverlay.Upgrade:
@@ -315,93 +324,101 @@ namespace OutpostLoop
                     SetText(actionLabel, Loc.T("PreviewText4"));
                     for (int i = 0; i < Routes.Length; i++)
                     {
-                        var cost = run.Levels[i] >= run.Config.MaxLevel ? Loc.T("PreviewText5") : Loc.T("PreviewCost", run.ScrapCost(i), run.EnergyCost(i));
+                        var cost = run.Levels[i] >= run.Config.MaxLevel ? Loc.T("PreviewText5") : Loc.T("FundsCost", run.UpgradeCost(i));
                         SetText(routeLabels[i], $"{Routes[i]}   {run.Levels[i]} / {run.Config.MaxLevel}   {cost}");
                     }
                     break;
                 case PrototypeOverlay.Result:
                     SetText(heading, run.Outcome > 0 ? Loc.T("PreviewText6") : Loc.T("PreviewText7"));
-                    string result = Loc.T("PreviewResult", Mathf.FloorToInt(run.Elapsed), controller.World.Kills);
+                    string result = Loc.T("BattleResultKills", controller.World.Kills);
                     bool pendingReward = run.Outcome > 0 && !controller.VictoryRewardRecorded;
                     if (run.Outcome > 0)
-                        result += "\n" + (pendingReward ? Loc.T("SupplyRewardPending")
-                            : Loc.T("SupplyReward", PrototypeWallet.VictoryCoins, controller.SupplyCoins));
-                    if (run.Outcome < 0) result += "\n" + Loc.T(run.Health == 0 ? "DefeatBaseLost" : "DefeatEnemiesRemain");
+                        result += "\n" + (pendingReward ? Loc.T("WinSavePending") :
+                            Loc.T("VictoryFinalWave") + "\n" + Loc.T("StartingFundsTier", controller.StartingFunds) + " · " + TierProgress(controller));
+                    if (run.Outcome < 0) result += "\n" + Loc.T("DefeatBaseLost");
                     SetText(details, result);
                     SetText(actionLabel, Loc.T(pendingReward ? "SupplyRetryReward" : "SupplyNextRun"));
                     break;
             }
         }
 
-        private static string SupplyLabel(string key, int amount, bool selected)
-        {
-            string label = Loc.T(key, amount, PrototypeWallet.SupplyPrice);
-            return selected ? Loc.T("SupplySelected", label) : label;
-        }
+        private static string TierProgress(PrototypeController controller) => controller.Wins >= 3
+            ? Loc.T("FundsTierMax")
+            : Loc.T("FundsTierNext", controller.Wins, controller.Wins == 0 ? 1 : 3, controller.Wins == 0 ? 900 : 1000);
 
         /// <summary>侧栏显示实时库存、鼠标落位原因及选中建筑的生产状态。</summary>
         internal void PresentConstruction(PrototypeController controller)
         {
             var world = controller.World;
             var run = world.Run;
-            SetText(constructionStock, Loc.T("HudStock", run.Scrap, run.Energy));
+            SetText(constructionStock, Loc.T("FundsStock", run.Funds));
             SetText(constructionFeedback, controller.ActionFeedback);
             for (int i = 0; i < constructionOptions.Length; i++)
             {
                 var kind = ExpansionOptions[i];
-                var spec = ExpansionSite.SpecFor(kind);
-                string label = Loc.T("BuildingOption", BuildingName(kind), Loc.T("PreviewCost", spec.Scrap, spec.Energy), spec.BuildSeconds);
-                bool selected = controller.PlacementKind == kind && controller.MovingTurret < 0;
                 var option = constructionOptions[i];
+                bool isBase = kind == ExpansionKind.Headquarters;
+                option.transform.parent.gameObject.SetActive(isBase != world.Headquarters.HasValue);
+                var spec = ExpansionSite.SpecFor(kind);
+                string label = isBase ? Loc.T("BuildHeadquartersOption") :
+                    Loc.T("BuildingOption", BuildingName(kind), Loc.T("FundsCost", spec.Cost), spec.BuildSeconds);
+                bool selected = controller.PlacementKind == kind && controller.MovingTurret < 0;
                 SetText(option, selected ? Loc.T("ExpansionSelected", label) : label);
-                // 保留价格可读，任一种资源不足都用 UGUI 禁用按钮。
-                var button = option.GetComponentInParent<Button>();
-                bool affordable = run.CanAfford(spec.Scrap, spec.Energy);
-                if (button.interactable == affordable) continue;
-                button.interactable = affordable;
-                button.image.color = affordable ? ButtonColor : new Color(.36f, .36f, .36f);
-                option.color = affordable ? LabelColor : new Color(.65f, .65f, .65f);
+                SetAffordable(option, run.CanAfford(spec.Cost));
             }
 
             var site = controller.SelectedBuilding < 0 ? null : world.Buildings[controller.SelectedBuilding];
             bool selectedSite = !controller.HasPlacement && site != null && site.Kind != ExpansionKind.Empty;
-            bool canTrain = selectedSite && site.CanTrain;
+            bool canProduce = selectedSite && site.CanProduce;
             bool canMove = selectedSite && site.Kind == ExpansionKind.Turret && !site.IsUnderConstruction;
-            trainGarrison.transform.parent.gameObject.SetActive(canTrain);
+            producePersonnel.transform.parent.gameObject.SetActive(canProduce);
             moveTurret.transform.parent.gameObject.SetActive(canMove);
-            if (canTrain)
-                SetText(trainGarrison, Loc.T("GarrisonTrain", ExpansionSite.TrainingScrap, ExpansionSite.TrainingEnergy, ExpansionSite.TrainingSeconds));
+            if (canProduce)
+            {
+                SetText(producePersonnel, Loc.T(site.Kind == ExpansionKind.Extractor ? "ProduceGatherer" : "ProduceGuard",
+                    ExpansionSite.PersonnelCost, site.ProductionDuration));
+                SetAffordable(producePersonnel, run.CanAfford(ExpansionSite.PersonnelCost));
+            }
             if (canMove) SetText(moveTurret, Loc.T("MoveSelectedTurret"));
 
             if (controller.HasPlacement)
             {
                 string instruction = Loc.T(controller.PlacementKind == ExpansionKind.Barricade ? "PlacementRotate" : "PlacementControls");
-                if (controller.HoverIssue.HasValue) instruction += "\n" + PrototypeController.PlacementMessage(controller.HoverIssue.Value);
+                if (controller.HoverIssue.HasValue) instruction += "\n" + controller.PlacementMessage(controller.HoverIssue.Value);
                 if (controller.HoverResource >= 0) instruction += "\n" + ResourceStatus(world.Nodes[controller.HoverResource]);
                 SetText(constructionDetail, instruction);
                 return;
             }
             if (!selectedSite)
             {
-                SetText(constructionDetail, Loc.T("PlacementGuide"));
+                SetText(constructionDetail, Loc.T(world.Headquarters.HasValue ? "PlacementGuide" : "HeadquartersGuide"));
                 return;
             }
             string status = site.IsUnderConstruction ? Loc.T("ConstructionRemaining", Mathf.CeilToInt(site.ConstructionLeft))
+                : site.ProductionLeft > 0 ? Loc.T("ProductionRemaining", Mathf.CeilToInt(site.ProductionLeft))
+                : site.PersonnelWaiting ? Loc.T("PersonnelExitBlocked")
                 : site.Kind switch
                 {
-                    ExpansionKind.Extractor => ResourceStatus(world.Nodes[site.NodeIndex]),
-                    ExpansionKind.Barracks when site.TrainingLeft > 0 => Loc.T("ExpansionTraining", Mathf.CeilToInt(site.TrainingLeft)),
-                    ExpansionKind.Barracks when site.GarrisonWaiting => Loc.T("GarrisonExitBlocked"),
-                    ExpansionKind.Barracks when site.HasGarrison => Loc.T("ExpansionGarrisonReady"),
-                    ExpansionKind.Barracks => Loc.T("ExpansionGarrisonIdle"),
+                    ExpansionKind.Extractor => (site.NodeIndex < 0 ? Loc.T("MineUnavailable") : ResourceStatus(world.Nodes[site.NodeIndex])) +
+                        (site.Personnel != null ? "\n" + Loc.T("GathererCargo", site.Personnel.Cargo, run.Capacity) : ""),
+                    ExpansionKind.Barracks => Loc.T(site.Personnel != null ? "ExpansionGarrisonReady" : "ExpansionGarrisonIdle"),
                     ExpansionKind.Barricade => Loc.T("ExpansionBarricadeHint"),
                     _ => Loc.T("TurretOperational")
                 };
             SetText(constructionDetail, Loc.T("ExpansionStatus", BuildingName(site.Kind), site.Health, site.HealthLimit, status));
         }
 
-        private static string ResourceStatus(ResourceNode node) =>
-            Loc.T("ResourceMarkerRemaining", Loc.T(node.Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap"), node.Remaining);
+        private static string ResourceStatus(ResourceNode node) => Loc.T("MineRemaining", node.Remaining);
+
+        /// <summary>资金不足时禁用实际按钮，价格仍然可读。</summary>
+        private static void SetAffordable(Text label, bool affordable)
+        {
+            var button = label.transform.parent.GetComponent<Button>();
+            if (button.interactable == affordable) return;
+            button.interactable = affordable;
+            button.image.color = affordable ? ButtonColor : new Color(.36f, .36f, .36f);
+            label.color = affordable ? LabelColor : new Color(.65f, .65f, .65f);
+        }
 
         /// <summary>复用设置窗口的公告与重启交互，打开时直接定位更新检查。</summary>
         private static void OpenUpdateCheck()
@@ -452,7 +469,7 @@ namespace OutpostLoop
             StartText(font, "ArtworkCaption", Loc.T("PreviewText11"), 833, 891, 420, 50, 22, ink);
 
             Fill("BriefingRule", 96, 644, 650, 2, line);
-            string briefing = Loc.T("PreviewBrief", controller.World.Run.Config.Duration / 60);
+            string briefing = Loc.T("CommanderBrief");
             StartText(font, "Briefing", briefing, 96, 660, 650, 94, 27, ink);
             startBriefing = startStage.Find("Briefing").GetComponent<Text>();
             var action = Button(startStage, font, "PrimaryAction", Loc.T("PreviewText12"), new Vector2(390, 77),
@@ -460,16 +477,11 @@ namespace OutpostLoop
             action.color = new Color32(15, 32, 26, 255);
             action.fontStyle = FontStyle.Bold;
             action.transform.parent.GetComponent<Image>().color = mint;
-            supplyBalance = Label(StartRect("SupplyBalance", 96, 867, 650, 49), font, "Label",
-                new Vector2(650, 49), Vector2.zero, 21);
-            supplyBalance.alignment = TextAnchor.MiddleLeft;
-            supplyScrap = Button(startStage, font, "SupplyScrap", "", new Vector2(310, 52),
-                new Vector2(251, -950), new Vector2(0, 1), () => controller.ToggleSupply(false));
-            supplyEnergy = Button(startStage, font, "SupplyEnergy", "", new Vector2(310, 52),
-                new Vector2(576, -950), new Vector2(0, 1), () => controller.ToggleSupply(true));
-            supplyScrap.fontSize = supplyEnergy.fontSize = 20;
+            startingBalance = Label(StartRect("StartingBalance", 96, 871, 650, 96), font, "Label",
+                new Vector2(650, 96), Vector2.zero, 23);
+            startingBalance.alignment = TextAnchor.MiddleLeft;
             Fill("FooterRule", 96, 992, 1728, 2, line);
-            StartText(font, "Controls", Loc.T("PreviewText13"), 96, 1003, 800, 50, 20, muted);
+            StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);
         }
 
         // 开始页按 1920×1080 的左上角坐标布置，整页随安全区缩放。

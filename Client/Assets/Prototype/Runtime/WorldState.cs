@@ -6,7 +6,7 @@ using OutpostLoop.Config;
 namespace OutpostLoop
 {
     /// <summary>有限资源节点的规则状态。</summary>
-    public sealed class ResourceNode { public Vector2 Position; public bool Energy; public int Remaining; }
+    public sealed class ResourceNode { public Vector2 Position; public int Remaining; }
 
     /// <summary>统一推进网格占地、单位行动和波次，不依赖视图。</summary>
     public sealed class WorldState
@@ -20,19 +20,15 @@ namespace OutpostLoop
         public List<ResourceNode> Nodes { get; } = new List<ResourceNode>();
         public List<EnemyState> Enemies { get; } = new List<EnemyState>();
         public IReadOnlyList<ExpansionSite> Buildings { get; }
-        public Vector2 WorkerPosition { get; private set; } = new Vector2(0, -4);
-        public int ResourceOrder { get; private set; } = -1;
-        public bool WorkerReturning { get; private set; }
-        public bool WorkerBlocked { get; private set; }
-        public Vector2 SquadPosition { get; private set; } = new Vector2(0, -6);
-        public int SquadSector { get; private set; } = -1;
-        public bool SquadBlocked { get; private set; }
-        public Vector2 SquadShotTarget { get; private set; }
-        public float SquadShotTime { get; private set; } = float.NegativeInfinity;
+        // 选址前只有指挥员。基地一旦启用，占地和驻防都以玩家所选位置为准。
+        public Vector2 CommanderPosition { get; private set; }
+        public RectInt? Headquarters { get; private set; }
+        public Vector2 BasePosition => Headquarters.HasValue ? BattleGrid.Center(Headquarters.Value) : CommanderPosition;
         public int Wave => waves.Wave;
         public int WaitingEnemies => waves.Waiting;
         public float LastArrival => waves.LastArrival;
         public int Kills { get; private set; }
+        public float LastMineDepletedAt { get; private set; } = float.NegativeInfinity;
         public ExpansionKind LastDestroyedKind { get; private set; }
         public Vector2 LastDestroyedPosition { get; private set; }
         public float LastDestroyedAt { get; private set; } = float.NegativeInfinity;
@@ -40,51 +36,57 @@ namespace OutpostLoop
         // 每份距离场只在占地变更或目的地变更时重新计算。
         private readonly BattleNavigation navigation;
         private readonly WaveDirector waves;
-        private readonly RouteWalker workerRoute = new RouteWalker(), squadRoute = new RouteWalker();
-        private int[] coreRoute, coreAttackRoute, resourceRoute, postRoute;
+        private readonly RouteWalker commanderWalker = new RouteWalker();
+        private int[] commanderRoute, coreAttackRoute;
         private readonly int[][] buildingRoutes = new int[ExpansionLimit + TurretLimit][];
-        private int resourceRouteIndex = -1, postRouteIndex = -1;
-        private float gatherClock, squadShotClock;
+        private Vector2Int? miningPreviewCell;
+        private bool miningPreviewValid;
 
-        /// <summary>东西炮塔占用真实格子。资源保持原来的近远分布，并让开占地。</summary>
-        public WorldState(int seed, PrototypeConfig config = null)
+        /// <summary>保留两侧候选区，矿点按种子生成，玩家不带建筑及生产人员进场。</summary>
+        public WorldState(int seed, PrototypeConfig config = null, int startingFunds = PrototypeWallet.InitialFunds)
         {
             Seed = seed;
-            Run = new RunState(config);
+            Run = new RunState(config, startingFunds);
             var buildings = new ExpansionSite[ExpansionLimit + TurretLimit];
             for (int i = 0; i < buildings.Length; i++) buildings[i] = new ExpansionSite();
             Buildings = Array.AsReadOnly(buildings);
-            Buildings[4].Place(ExpansionKind.Turret, new RectInt(-2, 0, 1, 1), -1, true);
-            Buildings[5].Place(ExpansionKind.Turret, new RectInt(2, 0, 1, 1), -1, true);
             navigation = new BattleNavigation(Rules.MapRadius);
-            RefreshNavigation();
             var random = new System.Random(seed);
             waves = new WaveDirector(random);
+            var west = new RectInt(-5, -1, 3, 3);
+            var east = new RectInt(3, -1, 3, 3);
             for (int i = 0; i < Rules.ResourceNodeCount; i++)
             {
                 float angle = (float)random.NextDouble() * Mathf.PI * 2;
                 float radius = i < Rules.NearNodeCount ? Rules.NearRadius + i * Rules.NearRadiusStep
                     : Rules.FarRadius + (float)random.NextDouble() * Rules.FarRadiusRange;
-                Vector2 position = Vector2.zero;
-                for (int attempt = 0; attempt < 64; attempt++, angle += .618f)
+                for (int attempt = 0; attempt < 128; attempt++, angle += .618f)
                 {
-                    position = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                    var position = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
                     var cell = BattleGrid.Cell(position);
-                    if (navigation.Walkable(cell) && !UnitOccupies(new RectInt(cell, Vector2Int.one)) &&
-                        !Nodes.Exists(node => BattleGrid.Cell(node.Position) == cell)) break;
+                    if (!navigation.Walkable(cell) || cell == Vector2Int.zero || west.Contains(cell) || east.Contains(cell) ||
+                        Nodes.Exists(node => BattleGrid.Cell(node.Position) == cell)) continue;
+                    Nodes.Add(new ResourceNode { Position = position, Remaining = 480 });
+                    break;
                 }
-                bool energy = i % Rules.EnergyEvery == 0;
-                Nodes.Add(new ResourceNode { Position = position, Energy = energy, Remaining = energy ? Rules.EnergyAmount : Rules.ScrapAmount });
             }
         }
 
+        /// <summary>启用后接收相对真实基地和占地重算的路线。</summary>
         private void RefreshNavigation()
         {
-            navigation.Rebuild(Buildings);
-            coreRoute = navigation.Field(BattleGrid.Base, 1.1f);
-            coreAttackRoute = navigation.Field(BattleGrid.Base, Rules.AttackRadius);
+            navigation.Rebuild(Buildings, Headquarters);
+            coreAttackRoute = navigation.Field(Headquarters.Value, Rules.AttackRadius);
             Array.Clear(buildingRoutes, 0, buildingRoutes.Length);
-            resourceRoute = postRoute = null;
+        }
+
+        public bool MoveCommander(Vector2 point)
+        {
+            if (!Active || Headquarters.HasValue) return false;
+            var cell = BattleGrid.Cell(Vector2.ClampMagnitude(point, Rules.MapRadius - BattleGrid.CellSize));
+            if (!navigation.Walkable(cell)) return false;
+            commanderRoute = navigation.Field(new RectInt(cell, Vector2Int.one), 0);
+            return true;
         }
 
         public int FindBuilding(Vector2Int cell)
@@ -103,37 +105,66 @@ namespace OutpostLoop
             return -1;
         }
 
+        /// <summary>点选已出场的守军时返回其兵营。</summary>
+        public int FindSquad(Vector2 point)
+        {
+            int index = -1;
+            float closest = 2.25f;
+            for (int i = 0; i < Buildings.Count; i++)
+            {
+                var site = Buildings[i];
+                if (site.Kind != ExpansionKind.Barracks || site.Personnel == null) continue;
+                float distance = (site.Personnel.Position - point).sqrMagnitude;
+                if (distance > closest) continue;
+                closest = distance;
+                index = i;
+            }
+            return index;
+        }
+
         private bool UnitOccupies(RectInt footprint)
         {
-            if (footprint.Contains(BattleGrid.Cell(WorkerPosition)) || footprint.Contains(BattleGrid.Cell(SquadPosition))) return true;
+            if (!Headquarters.HasValue && footprint.Contains(BattleGrid.Cell(CommanderPosition))) return true;
             foreach (var site in Buildings)
-                if (site.HasGarrison && footprint.Contains(BattleGrid.Cell(site.GarrisonPosition))) return true;
+                if (site.Personnel != null && footprint.Contains(BattleGrid.Cell(site.Personnel.Position))) return true;
             foreach (var enemy in Enemies)
                 if (enemy.Health > 0 && footprint.Contains(BattleGrid.Cell(enemy.Position))) return true;
             return false;
         }
 
-        /// <summary>侧栏预览与左键提交调用同一校验，移动炮塔只忽略自己的原占地。</summary>
+        private bool MineralOccupies(RectInt footprint) =>
+            Nodes.Exists(node => node.Remaining > 0 && footprint.Contains(BattleGrid.Cell(node.Position)));
+
+        private bool InBuildArea(RectInt footprint, Vector2 center)
+        {
+            foreach (var part in footprint.allPositionsWithin)
+                if (!navigation.InBounds(part) || (BattleGrid.Center(part) - center).sqrMagnitude >
+                    BattleGrid.BuildRadius * BattleGrid.BuildRadius) return false;
+            return true;
+        }
+
+        /// <summary>预览与左键提交共用校验。主基地以光标格为中心，外围建筑以光标格为起点。</summary>
         public PlacementIssue PreviewPlacement(ExpansionKind kind, Vector2Int cell, bool rotated, int moving,
             out RectInt footprint, out int node)
         {
             var spec = ExpansionSite.SpecFor(kind);
             var size = rotated && kind == ExpansionKind.Barricade ? new Vector2Int(spec.Size.y, spec.Size.x) : spec.Size;
-            footprint = new RectInt(cell, size);
+            footprint = new RectInt(kind == ExpansionKind.Headquarters ? cell - Vector2Int.one : cell, size);
             node = -1;
             if (!Active || spec.Health == 0) return PlacementIssue.Inactive;
+            if (kind == ExpansionKind.Headquarters) return PreviewHeadquarters(cell, footprint);
+            if (!Headquarters.HasValue) return PlacementIssue.Inactive;
             if (moving >= 0 && (kind != ExpansionKind.Turret || moving >= Buildings.Count ||
                 Buildings[moving].Kind != ExpansionKind.Turret || Buildings[moving].IsUnderConstruction))
                 return PlacementIssue.MissingTurret;
+            if (!InBuildArea(footprint, BasePosition)) return PlacementIssue.Outside;
+            if (Headquarters.Value.Overlaps(footprint) || UnitOccupies(footprint) || MineralOccupies(footprint))
+                return PlacementIssue.Occupied;
             foreach (var part in footprint.allPositionsWithin)
             {
-                if (BattleGrid.Center(part).sqrMagnitude > BattleGrid.BuildRadius * BattleGrid.BuildRadius) return PlacementIssue.Outside;
                 int occupied = FindBuilding(part);
-                if (BattleGrid.Base.Contains(part) || (occupied >= 0 && occupied != moving)) return PlacementIssue.Occupied;
+                if (occupied >= 0 && occupied != moving) return PlacementIssue.Occupied;
             }
-            if (UnitOccupies(footprint)) return PlacementIssue.Occupied;
-            foreach (var resource in Nodes)
-                if (resource.Remaining > 0 && footprint.Contains(BattleGrid.Cell(resource.Position))) return PlacementIssue.Occupied;
             if (moving >= 0) return PlacementIssue.None;
             if (FreeSlot(kind) < 0) return PlacementIssue.Limit;
             if (kind == ExpansionKind.Extractor)
@@ -141,7 +172,41 @@ namespace OutpostLoop
                 node = FindResourceFor(BattleGrid.Center(footprint));
                 if (node < 0) return PlacementIssue.NoResource;
             }
-            return Run.CanAfford(spec.Scrap, spec.Energy) ? PlacementIssue.None : PlacementIssue.InsufficientStock;
+            return Run.CanAfford(spec.Cost) ? PlacementIssue.None : PlacementIssue.InsufficientStock;
+        }
+
+        private PlacementIssue PreviewHeadquarters(Vector2Int cell, RectInt footprint)
+        {
+            if (Headquarters.HasValue) return PlacementIssue.Limit;
+            var center = BattleGrid.Center(cell);
+            if (center.sqrMagnitude > 28 * 28 || !InBuildArea(footprint, center)) return PlacementIssue.Outside;
+            if ((center - CommanderPosition).sqrMagnitude > 12 * 12) return PlacementIssue.CommanderTooFar;
+            if (UnitOccupies(footprint) || MineralOccupies(footprint)) return PlacementIssue.Occupied;
+            if (miningPreviewCell != cell)
+            {
+                miningPreviewCell = cell;
+                miningPreviewValid = CanStartMining(footprint, center);
+            }
+            return miningPreviewValid ? PlacementIssue.None : PlacementIssue.NoResource;
+        }
+
+        /// <summary>主基地预留至少一块能通往矿点的合法采集站用地。</summary>
+        private bool CanStartMining(RectInt headquarters, Vector2 center)
+        {
+            var size = ExpansionSite.SpecFor(ExpansionKind.Extractor).Size;
+            var origin = BattleGrid.Cell(center);
+            const int radius = BattleGrid.BuildRadius / BattleGrid.CellSize;
+            var possible = new RectInt(origin - Vector2Int.one * radius, Vector2Int.one * (2 * radius + 1));
+            foreach (var cell in possible.allPositionsWithin)
+            {
+                var station = new RectInt(cell, size);
+                if (!InBuildArea(station, center) || station.Overlaps(headquarters) || MineralOccupies(station)) continue;
+                int node = FindResourceFor(BattleGrid.Center(station));
+                if (node < 0 || headquarters.Contains(BattleGrid.Cell(Nodes[node].Position))) continue;
+                // 选址阶段只有这两个小型占地，矿点和站点外侧都位于连通的地图圆盘内。
+                return true;
+            }
+            return false;
         }
 
         private int FindResourceFor(Vector2 position)
@@ -167,8 +232,16 @@ namespace OutpostLoop
         {
             var issue = PreviewPlacement(kind, cell, rotated, -1, out var footprint, out int node);
             if (issue != PlacementIssue.None) return issue;
+            if (kind == ExpansionKind.Headquarters)
+            {
+                Headquarters = footprint;
+                commanderRoute = null;
+                Run.EstablishBase();
+                RefreshNavigation();
+                return PlacementIssue.None;
+            }
             var spec = ExpansionSite.SpecFor(kind);
-            if (!Run.TrySpend(spec.Scrap, spec.Energy)) return PlacementIssue.InsufficientStock;
+            if (!Run.TrySpend(spec.Cost)) return PlacementIssue.InsufficientStock;
             Buildings[FreeSlot(kind)].Place(kind, footprint, node);
             RefreshNavigation();
             return PlacementIssue.None;
@@ -184,67 +257,66 @@ namespace OutpostLoop
             return PlacementIssue.None;
         }
 
-        /// <summary>兵营完工后由玩家付款训练，施工与训练使用不同计时。</summary>
-        public bool TrainGarrison(int index)
+        /// <summary>生产建筑完工后一次付费，完成或等待出入口期间禁止重复订单。</summary>
+        public bool Produce(int index)
         {
-            if (!Active || index < 0 || index >= Buildings.Count || !Buildings[index].CanTrain ||
-                !Run.TrySpend(ExpansionSite.TrainingScrap, ExpansionSite.TrainingEnergy)) return false;
-            Buildings[index].BeginTraining();
+            if (!Active || index < 0 || index >= Buildings.Count || !Buildings[index].CanProduce ||
+                !Run.TrySpend(ExpansionSite.PersonnelCost)) return false;
+            Buildings[index].BeginProduction();
             return true;
         }
 
-        public bool AssignResource(int index)
+        public bool DeploySquad(int index, int sector)
         {
-            if (!Active || index < 0 || index >= Nodes.Count || Nodes[index].Remaining <= 0) return false;
-            if (ResourceOrder == index) return true;
-            ResourceOrder = index;
-            WorkerReturning = Run.CargoScrap + Run.CargoEnergy > 0;
-            gatherClock = 0;
+            if (!Active || index < 0 || index >= Buildings.Count || sector < 0 || sector >= Posts.Length) return false;
+            var site = Buildings[index];
+            if (site.Kind != ExpansionKind.Barracks || site.Personnel == null) return false;
+            site.Personnel.Sector = sector;
             return true;
         }
 
-        public bool DeploySquad(int sector)
+        /// <summary>按设施管理采集、返程和载货。矿点耗尽后先送达手里的货。</summary>
+        private void StepGatherer(ExpansionSite site, float dt)
         {
-            if (!Active || sector < 0 || sector >= Posts.Length) return false;
-            SquadSector = sector;
-            return true;
-        }
-
-        /// <summary>采运走可通行格。受阻时保留原命令，地图改变后自动恢复。</summary>
-        private void StepWorker(float dt)
-        {
-            WorkerBlocked = false;
-            if (!WorkerReturning && ResourceOrder < 0) return;
-            if (!WorkerReturning && Nodes[ResourceOrder].Remaining <= 0)
+            var gatherer = site.Personnel;
+            if (gatherer == null) return;
+            if (site.NodeIndex < 0 && gatherer.Cargo == 0) { gatherer.Blocked = false; return; }
+            if (site.NodeIndex < 0) gatherer.Returning = true;
+            int target = gatherer.Returning ? -2 : site.NodeIndex;
+            if (gatherer.Revision != navigation.Revision || gatherer.RouteTarget != target)
             {
-                ResourceOrder = -1;
-                WorkerReturning = true;
+                gatherer.Revision = navigation.Revision;
+                gatherer.RouteTarget = target;
+                gatherer.Route = gatherer.Returning ? navigation.Field(site.Footprint, 1.1f) :
+                    navigation.Field(new RectInt(BattleGrid.Cell(Nodes[target].Position), Vector2Int.one), 0);
             }
-            if (!WorkerReturning && (resourceRoute == null || resourceRouteIndex != ResourceOrder))
+            if (!Follow(gatherer, (Rules.MoveSpeed + Run.Levels[0]) * dt)) return;
+            if (gatherer.Returning)
             {
-                resourceRouteIndex = ResourceOrder;
-                resourceRoute = navigation.Field(new RectInt(BattleGrid.Cell(Nodes[ResourceOrder].Position), Vector2Int.one), 0);
-            }
-            var field = WorkerReturning ? coreRoute : resourceRoute;
-            var position = WorkerPosition;
-            WorkerBlocked = navigation.Distance(field, BattleGrid.Cell(position)) < 0;
-            if (WorkerBlocked) return;
-            bool arrived = navigation.Follow(field, ref position, workerRoute, (Rules.MoveSpeed + Run.Levels[0]) * dt);
-            WorkerPosition = position;
-            if (!arrived) return;
-            if (WorkerReturning)
-            {
-                Run.Deposit();
-                WorkerReturning = false;
+                Run.CreditDelivery(gatherer.Cargo);
+                gatherer.Cargo = 0;
+                gatherer.Returning = false;
                 return;
             }
-            var node = Nodes[ResourceOrder];
-            gatherClock += dt;
-            if (gatherClock < Rules.GatherInterval / (1 + Run.Levels[0] * Rules.GatherLevelFactor)) return;
-            gatherClock = 0;
-            if (Run.Gather(node.Energy)) node.Remaining--;
-            if (node.Remaining <= 0) ResourceOrder = -1;
-            WorkerReturning = ResourceOrder < 0 || Run.CargoScrap + Run.CargoEnergy >= Run.Capacity;
+            var node = Nodes[target];
+            gatherer.GatherClock += dt;
+            if (gatherer.GatherClock + .00001f < Rules.GatherInterval / (1 + Run.Levels[0] * Rules.GatherLevelFactor)) return;
+            gatherer.GatherClock = 0;
+            int amount = Mathf.Min(20, Mathf.Min(node.Remaining, Run.Capacity - gatherer.Cargo));
+            node.Remaining -= amount;
+            gatherer.Cargo += amount;
+            if (node.Remaining == 0) LastMineDepletedAt = Run.Elapsed;
+            gatherer.Returning = node.Remaining == 0 || gatherer.Cargo == Run.Capacity;
+        }
+
+        private bool Follow(SitePersonnel personnel, float travel)
+        {
+            var point = personnel.Position;
+            personnel.Blocked = navigation.Distance(personnel.Route, BattleGrid.Cell(point)) < 0;
+            if (personnel.Blocked) return false;
+            bool arrived = navigation.Follow(personnel.Route, ref point, personnel.Walker, travel);
+            personnel.Position = point;
+            return arrived;
         }
 
         private EnemyState FindEnemy(Vector2 origin, float range)
@@ -261,40 +333,34 @@ namespace OutpostLoop
             return target;
         }
 
-        private void StepSquad(float dt)
+        private void StepSquad(ExpansionSite site, float dt)
         {
-            SquadBlocked = false;
-            if (SquadSector >= 0)
+            var squad = site.Personnel;
+            if (squad == null) return;
+            if (squad.Sector >= 0)
             {
-                if (postRoute == null || postRouteIndex != SquadSector)
+                if (squad.Revision != navigation.Revision || squad.RouteTarget != squad.Sector)
                 {
-                    postRouteIndex = SquadSector;
-                    var cell = BattleGrid.Cell(Posts[SquadSector] * 12);
-                    postRoute = navigation.Field(new RectInt(cell, Vector2Int.one), navigation.Walkable(cell) ? 0 : 1.1f);
+                    squad.Revision = navigation.Revision;
+                    squad.RouteTarget = squad.Sector;
+                    var cell = BattleGrid.Cell(BasePosition + Posts[squad.Sector] * 12);
+                    squad.Route = navigation.Field(new RectInt(cell, Vector2Int.one), navigation.Walkable(cell) ? 0 : 1.1f);
                 }
-                var position = SquadPosition;
-                SquadBlocked = navigation.Distance(postRoute, BattleGrid.Cell(position)) < 0;
-                if (!SquadBlocked) navigation.Follow(postRoute, ref position, squadRoute, Rules.MoveSpeed * dt);
-                SquadPosition = position;
+                Follow(squad, Rules.MoveSpeed * dt);
             }
-            squadShotClock += dt;
-            if (squadShotClock < Rules.ShotInterval) return;
-            var target = FindEnemy(SquadPosition, Rules.ShotRange * .75f);
-            if (target == null) return;
-            target.Health -= Rules.ShotDamage / 2f;
-            SquadShotTarget = target.Position;
-            SquadShotTime = Run.Elapsed;
-            squadShotClock = 0;
+            Fire(site, squad.Position, Rules.ShotRange * .75f, Rules.ShotDamage / 2f, dt);
         }
 
-        /// <summary>部署只使用兵营紧邻的空闲通行格，出入口堵住时等待。</summary>
-        private void TryDeployGarrison(ExpansionSite site)
+        /// <summary>生产完毕后，从设施的空闲相邻格出场。</summary>
+        private void TryDeploy(ExpansionSite site)
         {
             var ring = new RectInt(site.Footprint.min - Vector2Int.one, site.Footprint.size + Vector2Int.one * 2);
             foreach (var cell in ring.allPositionsWithin)
             {
-                if (!navigation.Walkable(cell) || UnitOccupies(new RectInt(cell, Vector2Int.one))) continue;
-                site.DeployGarrison(BattleGrid.Center(cell));
+                var point = BattleGrid.Center(cell);
+                if (!navigation.Walkable(cell) || BattleGrid.DistanceTo(site.Footprint, point) > 1.1f ||
+                    UnitOccupies(new RectInt(cell, Vector2Int.one))) continue;
+                site.Deploy(point);
                 return;
             }
         }
@@ -304,22 +370,17 @@ namespace OutpostLoop
             foreach (var site in Buildings)
             {
                 if (site.IsUnderConstruction) { site.AdvanceConstruction(dt); continue; }
+                if (site.ProductionLeft > 0) site.AdvanceProduction(dt);
+                if (site.PersonnelWaiting) TryDeploy(site);
                 switch (site.Kind)
                 {
                     case ExpansionKind.Extractor:
-                        var node = Nodes[site.NodeIndex];
-                        if (node.Remaining <= 0) break;
-                        site.WorkClock += dt;
-                        float cycle = ExpansionSite.SpecFor(site.Kind).Cycle;
-                        if (site.WorkClock < cycle) break;
-                        site.WorkClock -= cycle;
-                        node.Remaining--;
-                        Run.ReceiveExtractedResource(node.Energy);
+                        if (site.NodeIndex < 0 || Nodes[site.NodeIndex].Remaining <= 0)
+                            site.NodeIndex = FindResourceFor(site.Position);
+                        StepGatherer(site, dt);
                         break;
                     case ExpansionKind.Barracks:
-                        if (site.TrainingLeft > 0) site.AdvanceTraining(dt);
-                        if (site.GarrisonWaiting) TryDeployGarrison(site);
-                        if (site.HasGarrison) Fire(site, site.GarrisonPosition, Rules.ShotRange * .75f, Rules.ShotDamage / 2f, dt);
+                        StepSquad(site, dt);
                         break;
                     case ExpansionKind.Turret:
                         int level = Run.Levels[1];
@@ -356,7 +417,7 @@ namespace OutpostLoop
                 closest = distance;
                 target = i;
             }
-            if (target < 0 && BattleGrid.DistanceTo(BattleGrid.Base, enemy.Position) <= Rules.AttackRadius) target = -1;
+            if (target < 0 && BattleGrid.DistanceTo(Headquarters.Value, enemy.Position) <= Rules.AttackRadius) target = -1;
             if (enemy.AttackSite != target)
             {
                 enemy.AttackSite = target;
@@ -413,10 +474,16 @@ namespace OutpostLoop
         {
             if (!Active || float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0) return;
             float dt = Mathf.Min(seconds, Rules.MaxStep);
-            StepWorker(dt);
+            if (!Headquarters.HasValue)
+            {
+                if (commanderRoute == null) return;
+                var point = CommanderPosition;
+                if (navigation.Follow(commanderRoute, ref point, commanderWalker, Rules.MoveSpeed * dt)) commanderRoute = null;
+                CommanderPosition = point;
+                return;
+            }
             waves.Step(Run.Elapsed + dt, Rules.WaveTimes, Enemies, Rules);
             StepBuildings(dt);
-            StepSquad(dt);
             for (int i = Enemies.Count - 1; i >= 0; i--)
             {
                 var enemy = Enemies[i];
@@ -424,7 +491,7 @@ namespace OutpostLoop
                 StepEnemy(enemy, dt);
                 if (Run.Outcome != 0) return;
             }
-            Run.Tick(dt, Enemies.Count + waves.Waiting);
+            Run.Tick(dt, Wave == Rules.WaveTimes.Count && Enemies.Count == 0 && waves.Waiting == 0);
         }
     }
 }
