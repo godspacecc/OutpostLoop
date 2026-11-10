@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections;
 using NUnit.Framework;
 using QFramework;
@@ -356,6 +357,142 @@ namespace OutpostLoop.Tests
                 settings.backgroundBehavior = backgroundBehavior;
             }
             yield return new ExitPlayMode();
+        }
+
+        /// <summary>两次开局均使用触点侦察与建造，验证手势切换不误操作。</summary>
+        [UnityTest]
+        public IEnumerator BootSingleTouchScoutsAndBuildsAcrossTwoSeeds()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var camera = controller.GetComponentInChildren<Camera>();
+            var settings = InputSystem.settings;
+            var editorBehavior = settings.editorInputBehaviorInPlayMode;
+            var backgroundBehavior = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            var screen = InputSystem.AddDevice<Touchscreen>();
+            int finger = 10;
+            int? previousSeed = null;
+            try
+            {
+                for (int run = 0; run < 2; run++)
+                {
+                    if (run > 0)
+                    {
+                        controller.Restart(false);
+                        yield return null;
+                    }
+                    Click("PrimaryAction");
+                    // 固定全图取景，使远处黑区与合法占地在测试窗口中可触及。
+                    typeof(PrototypeController).GetField("mapView", System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.NonPublic).SetValue(controller, 1f);
+                    yield return null;
+                    var world = controller.World;
+                    Assert.AreNotEqual(previousSeed, world.Seed);
+                    previousSeed = world.Seed;
+                    var initial = world.CommanderPosition;
+                    var target = ScoutCell(camera, p => p.magnitude > 17f && p.magnitude < 23f && !world.Vision.IsVisible(p));
+                    var point = ProjectCell(camera, target);
+
+                    yield return QueueTouch(screen, finger, point, UnityEngine.InputSystem.TouchPhase.Began);
+                    Assert.AreEqual(initial, world.CommanderPosition, "单指按下不提交侦察");
+                    yield return QueueTouch(screen, finger + 1, point + Vector2.right * 8, UnityEngine.InputSystem.TouchPhase.Began);
+                    yield return QueueTouch(screen, finger + 1, point + Vector2.right * 8, UnityEngine.InputSystem.TouchPhase.Ended);
+                    yield return QueueTouch(screen, finger++, point, UnityEngine.InputSystem.TouchPhase.Ended);
+                    finger++;
+                    Assert.AreEqual(initial, world.CommanderPosition, "两指先后抬起不提交侦察");
+
+                    yield return QueueTouch(screen, finger, point, UnityEngine.InputSystem.TouchPhase.Began);
+                    yield return QueueTouch(screen, finger++, point, UnityEngine.InputSystem.TouchPhase.Ended);
+                    PrototypeWorldTests.Advance(world, 8);
+                    Assert.That(Vector2.Distance(world.CommanderPosition, BattleGrid.Center(target)), Is.LessThan(.2f));
+                    Assert.IsTrue(world.Vision.IsVisible(BattleGrid.Center(target)));
+                    Assert.IsFalse(world.Headquarters.HasValue);
+
+                    Click("OpenConstruction");
+                    Click("BuildHeadquarters");
+                    yield return null;
+                    int funds = world.Run.Funds;
+                    var hidden = ScoutCell(camera, p => !world.Vision.IsVisible(p));
+                    var hiddenPoint = ProjectCell(camera, hidden);
+                    yield return QueueTouch(screen, finger, hiddenPoint, UnityEngine.InputSystem.TouchPhase.Began);
+                    yield return QueueTouch(screen, finger++, hiddenPoint, UnityEngine.InputSystem.TouchPhase.Ended);
+                    Assert.IsFalse(world.Headquarters.HasValue);
+                    Assert.AreEqual(funds, world.Run.Funds);
+                    Assert.NotNull(GameObject.Find("CancelPlacement"), "非法落位应保留选址");
+
+                    yield return QueueTouch(screen, finger, hiddenPoint, UnityEngine.InputSystem.TouchPhase.Began);
+                    Click("CancelPlacement");
+                    yield return QueueTouch(screen, finger++, hiddenPoint, UnityEngine.InputSystem.TouchPhase.Ended);
+                    Assert.IsNull(GameObject.Find("CancelPlacement"), "取消后退出选址");
+                    PrototypeWorldTests.Advance(world, 8);
+                    Assert.That(Vector2.Distance(world.CommanderPosition, BattleGrid.Center(target)), Is.LessThan(.2f));
+                    Assert.AreEqual(funds, world.Run.Funds);
+
+                    Click("BuildHeadquarters");
+                    yield return null;
+                    var baseCell = ScoutCell(camera, p => world.PreviewPlacement(
+                        ExpansionKind.Headquarters, BattleGrid.Cell(p), false, -1, out _, out _) == PlacementIssue.None);
+                    var basePoint = ProjectCell(camera, baseCell);
+                    yield return QueueTouch(screen, finger, basePoint, UnityEngine.InputSystem.TouchPhase.Began);
+                    yield return QueueTouch(screen, finger++, basePoint, UnityEngine.InputSystem.TouchPhase.Ended);
+                    Assert.IsTrue(world.Headquarters.HasValue);
+                    Assert.AreEqual(BattleGrid.Center(baseCell), world.BasePosition);
+
+                    // 主基地落位会复位镜头。仍按真实触点提交首座采集站。
+                    typeof(PrototypeController).GetField("mapView", System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.NonPublic).SetValue(controller, 1f);
+                    Click("BuildExtractor");
+                    yield return null;
+                    var mineCell = ScoutCell(camera, p => world.PreviewPlacement(
+                        ExpansionKind.Extractor, BattleGrid.Cell(p), false, -1, out _, out _) == PlacementIssue.None);
+                    var minePoint = ProjectCell(camera, mineCell);
+                    yield return QueueTouch(screen, finger, minePoint, UnityEngine.InputSystem.TouchPhase.Began);
+                    yield return QueueTouch(screen, finger++, minePoint, UnityEngine.InputSystem.TouchPhase.Ended);
+                    int building = world.FindBuilding(mineCell);
+                    Assert.GreaterOrEqual(building, 0);
+                    Assert.AreEqual(ExpansionKind.Extractor, world.Buildings[building].Kind);
+                    PrototypeWorldTests.Advance(world, 5.2f);
+                    Assert.IsFalse(world.Buildings[building].IsUnderConstruction);
+                    TestContext.WriteLine($"Touch scouting run {run + 1} (seed {world.Seed}): established headquarters and completed extractor.");
+                }
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(screen);
+                settings.editorInputBehaviorInPlayMode = editorBehavior;
+                settings.backgroundBehavior = backgroundBehavior;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        private static Vector2 ProjectCell(Camera camera, Vector2Int cell)
+        {
+            var p = BattleGrid.Center(cell);
+            return camera.WorldToScreenPoint(new Vector3(p.x, 0, p.y));
+        }
+
+        /// <summary>从实际视口选出不被 UI 遮挡的候选地块。</summary>
+        private static Vector2Int ScoutCell(Camera camera, System.Predicate<Vector2> suitable)
+        {
+            float scale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
+            var ui = new List<RaycastResult>();
+            for (int z = -22; z <= 22; z++)
+            for (int x = -22; x <= 22; x++)
+            {
+                var cell = new Vector2Int(x, z);
+                if (!suitable(BattleGrid.Center(cell))) continue;
+                var screenPoint = ProjectCell(camera, cell);
+                if (!camera.pixelRect.Contains(screenPoint)) continue;
+                var hud = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / scale;
+                if (new Rect(16, 16, 330, 165).Contains(hud) || new Rect(1050, 18, 210, 235).Contains(hud)) continue;
+                EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = screenPoint }, ui);
+                if (!ui.Exists(hit => hit.module is UnityEngine.UI.GraphicRaycaster)) return cell;
+            }
+            throw new AssertionException("当前视口找不到无遮挡的测试地块");
         }
 
         /// <summary>提交真实触屏设备状态，并等待战场循环读取。</summary>

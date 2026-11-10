@@ -62,6 +62,7 @@ namespace OutpostLoop
         private int displayedSector;
         private bool displayedBase, displayedSquad;
         private Button upgradeButton, researchButton, returnButton;
+        private LocalizedText commandGuide;
         private string displayedLanguage;
         protected override string Path() => null;
         public override UILayer Layer() => UILayer.HUD;
@@ -80,6 +81,7 @@ namespace OutpostLoop
             upgradeButton = BaseUI.transform.Find("OpenUpgrade").GetComponent<Button>();
             researchButton = BaseUI.transform.Find("OpenResearch").GetComponent<Button>();
             returnButton = BaseUI.transform.Find("OpenReturn").GetComponent<Button>();
+            commandGuide = BaseUI.transform.Find("CommandGuide/Controls").GetComponent<LocalizedText>();
             displayedLanguage = null;
             BaseUI.GetComponent<SafeAreaFitter>().ApplyNow();
         }
@@ -94,6 +96,13 @@ namespace OutpostLoop
             returnButton.interactable = owner.World.Expedition?.BasicComplete == true;
             BaseUI.transform.Find("CommandGuide").gameObject.SetActive(!exploring);
             BaseUI.transform.Find("ExpeditionGuide").gameObject.SetActive(exploring);
+            string guide = owner.TouchScoutingAvailable && UnityEngine.InputSystem.Touchscreen.current != null
+                ? "TouchScoutGuide" : "HudControls";
+            if (commandGuide.Key != guide)
+            {
+                commandGuide.Key = guide;
+                commandGuide.Refresh();
+            }
             string language = Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value;
             int sector = squad?.Sector ?? -1;
             bool hasSquad = squad != null;
@@ -164,6 +173,8 @@ namespace OutpostLoop
         private Text heading, details, actionLabel, feedback, restartAction;
         private GameObject purchaseRows;
         private Text constructionStock, constructionFeedback, constructionDetail, producePersonnel, moveTurret;
+        // 选址时和生产、迁移互斥，共用侧栏操作位置。
+        private Text cancelPlacementButton;
         private readonly Text[] constructionOptions = new Text[5];
         private static readonly ExpansionKind[] ExpansionOptions =
             { ExpansionKind.Headquarters, ExpansionKind.Extractor, ExpansionKind.Barracks, ExpansionKind.Barricade, ExpansionKind.Turret };
@@ -261,7 +272,9 @@ namespace OutpostLoop
                 new Vector2(0, -143), new Vector2(.5f, .5f), controller.OrderPersonnel);
             moveTurret = Button(panel, font, "MoveSelectedTurret", "", new Vector2(468, 38),
                 new Vector2(0, -143), new Vector2(.5f, .5f), controller.BeginTurretMove);
-            producePersonnel.fontSize = moveTurret.fontSize = 18;
+            cancelPlacementButton = Button(panel, font, "CancelPlacement", "", new Vector2(468, 38),
+                new Vector2(0, -143), new Vector2(.5f, .5f), controller.CancelPlacementFromHud);
+            producePersonnel.fontSize = moveTurret.fontSize = cancelPlacementButton.fontSize = 18;
             constructionFeedback = Label(panel, font, "ConstructionFeedback", new Vector2(478, 32), new Vector2(0, -186), 19);
         }
 
@@ -416,10 +429,15 @@ namespace OutpostLoop
                 SetAffordable(producePersonnel, run.CanAfford(ExpansionSite.PersonnelCost));
             }
             if (canMove) SetText(moveTurret, Loc.T("MoveSelectedTurret"));
+            bool touchScouting = controller.TouchScoutingAvailable && UnityEngine.InputSystem.Touchscreen.current != null;
+            bool canCancelOnTouch = touchScouting && controller.HasPlacement;
+            cancelPlacementButton.transform.parent.gameObject.SetActive(canCancelOnTouch);
+            if (canCancelOnTouch) SetText(cancelPlacementButton, Loc.T("TouchCancelPlacement"));
 
             if (controller.HasPlacement)
             {
-                string instruction = Loc.T(controller.PlacementKind == ExpansionKind.Barricade ? "PlacementRotate" : "PlacementControls");
+                string instruction = Loc.T(touchScouting ? "TouchPlacementControls" :
+                    controller.PlacementKind == ExpansionKind.Barricade ? "PlacementRotate" : "PlacementControls");
                 if (controller.HoverIssue.HasValue) instruction += "\n" + controller.PlacementMessage(controller.HoverIssue.Value);
                 if (controller.HoverResource >= 0) instruction += "\n" + controller.ResourceStatus(controller.HoverResource);
                 SetText(constructionDetail, instruction);

@@ -367,7 +367,7 @@ namespace Game
         /// </summary>
         public static string Previewtext11 => Loc.T("PreviewText11");
         /// <summary>
-        /// 开始这一局  →
+        /// 守城试玩  →
         /// </summary>
         public static string Previewtext12 => Loc.T("PreviewText12");
         /// <summary>
@@ -618,6 +618,18 @@ namespace Game
         /// ✓ {0}
         /// </summary>
         public static string Supplyselected(object arg0) => Loc.T("SupplySelected", arg0);
+        /// <summary>
+        /// 取消选址
+        /// </summary>
+        public static string Touchcancelplacement => Loc.T("TouchCancelPlacement");
+        /// <summary>
+        /// 轻点战场落位 · 双指缩放
+        /// </summary>
+        public static string Touchplacementcontrols => Loc.T("TouchPlacementControls");
+        /// <summary>
+        /// 轻点地面，指挥员前往侦察。
+        /// </summary>
+        public static string Touchscoutguide => Loc.T("TouchScoutGuide");
         /// <summary>
         /// {0} · 建造 {3} 秒
         /// 废料 {1} / 能源 {2}

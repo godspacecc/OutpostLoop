@@ -36,6 +36,8 @@ namespace OutpostLoop
         // 单指抬手才提交点击；一旦检测到双指，直到所有触点结束都不再派发点击。
         private readonly List<RaycastResult> touchRaycasts = new List<RaycastResult>();
         private int tapTouchId, pinchFirstId, pinchSecondId;
+        // 触点抬起前若切换选址状态，放弃本次点击。
+        private bool tapBeganWithPlacement;
         private float pinchDistance;
         private bool suppressBattleTap, ignoreTouchUntilRelease;
         // 指挥视图和小地图共用同一套屏幕命中区域。
@@ -422,7 +424,11 @@ namespace OutpostLoop
             if (playing) PollBattleCamera(overUI, touching);
             else orbitingCamera = false;
             UpdateBattleCamera();
-            if (tap.HasValue) ActOnBattlefield(tap.Value);
+            if (tap.HasValue)
+            {
+                if (TouchScoutingAvailable && !HasPlacement) MoveCommanderAt(tap.Value);
+                else ActOnBattlefield(tap.Value);
+            }
             else if (playing && !touching && !overUI && !orbitingCamera)
             {
                 if (Input.GetMouseButtonDown(0)) ActOnBattlefield(mousePosition);
@@ -463,8 +469,11 @@ namespace OutpostLoop
             if (suppressBattleTap) return true;
             var touch = touches[0];
             var position = touch.screenPosition;
-            if (touch.phase == TouchPhase.Began && gameCamera.pixelRect.Contains(position) && !TouchHitsUi(position))
+            if (touch.phase == TouchPhase.Began && IsBattleTapPoint(position) && !TouchHitsUi(position))
+            {
                 tapTouchId = touch.touchId;
+                tapBeganWithPlacement = HasPlacement;
+            }
             if (touch.touchId != tapTouchId) return true;
 
             float tapSlop = 12f * HudScale;
@@ -473,7 +482,9 @@ namespace OutpostLoop
             else if (touch.phase == TouchPhase.Ended)
             {
                 tapTouchId = 0;
-                if (gameCamera.pixelRect.Contains(position) && !TouchHitsUi(position)) tap = position;
+                if ((!TouchScoutingAvailable || tapBeganWithPlacement == HasPlacement) &&
+                    IsBattleTapPoint(position) && !TouchHitsUi(position))
+                    tap = position;
             }
             return true;
         }
@@ -505,6 +516,10 @@ namespace OutpostLoop
             eventSystem.RaycastAll(new PointerEventData(eventSystem) { position = position }, touchRaycasts);
             return touchRaycasts.Exists(hit => hit.module is GraphicRaycaster);
         }
+
+        /// <summary>开局侦察点击避开状态栏和小地图，其他触屏点击沿用相机范围。</summary>
+        private bool IsBattleTapPoint(Vector2 position) =>
+            TouchScoutingAvailable ? IsCameraPoint(position) : gameCamera.pixelRect.Contains(position);
 
         /// <summary>缩放和旋转从主战场接收，避开小地图和状态栏。</summary>
         private bool IsCameraPoint(Vector2 position)
@@ -593,7 +608,10 @@ namespace OutpostLoop
             gameCamera.farClipPlane = distance + 2f * radius;
         }
 
-        /// <summary>基地尚未部署时，右键战场移动指挥员。</summary>
+        /// <summary>主基地落位前，触屏单击可复用指挥员移动入口。</summary>
+        internal bool TouchScoutingAvailable => World != null && World.Expedition == null && !World.Headquarters.HasValue;
+
+        /// <summary>基地尚未部署时，将屏幕上的地面位置转为指挥员移动指令。</summary>
         public bool MoveCommanderAt(Vector2 screenPoint)
         {
             return CanBuild && !HasPlacement && TryBattlefieldPoint(screenPoint, out var point) &&
@@ -745,9 +763,22 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
+        /// <summary>触屏按钮退出选址，结束当前触点，避免抬手时转成移动命令。</summary>
+        internal void CancelPlacementFromHud()
+        {
+            if (!CanBuild || !TouchScoutingAvailable || !HasPlacement) return;
+            CancelPlacementFromInput();
+            RefreshOverlay();
+        }
+
         private void CancelPlacementFromInput()
         {
             cancelPlacementFrame = Time.frameCount;
+            if (TouchScoutingAvailable)
+            {
+                tapTouchId = 0;
+                ignoreTouchUntilRelease = true;
+            }
             CancelPlacement();
         }
 
