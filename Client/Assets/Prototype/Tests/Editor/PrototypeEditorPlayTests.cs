@@ -321,6 +321,60 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
+        /// <summary>从探索入口验证方向键、全图边界和回焦点能在同一局切换。</summary>
+        [UnityTest]
+        public IEnumerator BootWildernessCameraPansAndRecoversFromFullMap()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            Click("DepartWilderness");
+            StringAssert.Contains("方向键平移镜头", GameObject.Find("ExpeditionGuide").transform.Find("Controls").GetComponent<Text>().text);
+            var camera = controller.GetComponentInChildren<Camera>();
+            var home = camera.transform.position;
+            var inputSettings = InputSystem.settings;
+            var previousEditorBehavior = inputSettings.editorInputBehaviorInPlayMode;
+            var previousBackgroundBehavior = inputSettings.backgroundBehavior;
+            inputSettings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            inputSettings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var mouse = InputSystem.AddDevice<Mouse>();
+            try
+            {
+                keyboard.MakeCurrent();
+                mouse.MakeCurrent();
+                var center = camera.pixelRect.center;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
+                for (int i = 0; i < 5; i++) yield return null;
+                Assert.Greater(camera.transform.position.x, home.x, "荒野默认视角应响应方向键");
+
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, -1200) });
+                for (int i = 0; i < 3; i++) yield return null;
+                var overview = camera.transform.position;
+                Assert.Greater(overview.y, home.y, "滚轮拉到全图应抬高镜头");
+                for (int i = 0; i < 5; i++) yield return null;
+                Assert.That(Vector3.Distance(camera.transform.position, overview), Is.LessThan(.001f), "全图应保持居中");
+
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, 240) });
+                for (int i = 0; i < 5; i++) yield return null;
+                Assert.Less(camera.transform.position.y, overview.y);
+                Assert.Greater(camera.transform.position.x, overview.x, "拉近后应恢复平移");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.H));
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.That(Vector3.Distance(camera.transform.position, home), Is.LessThan(.001f), "H 应恢复指挥员焦点和默认缩放");
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                InputSystem.RemoveDevice(mouse);
+                inputSettings.editorInputBehaviorInPlayMode = previousEditorBehavior;
+                inputSettings.backgroundBehavior = previousBackgroundBehavior;
+            }
+            yield return new ExitPlayMode();
+        }
+
         /// <summary>以触屏设备事件验证缩放、选址防误触以及单指抬手落位。</summary>
         [UnityTest]
         public IEnumerator BootTouchPinchZoomsWithoutPlacingHeadquarters()

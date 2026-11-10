@@ -323,7 +323,7 @@ namespace OutpostLoop
             var expeditionGuide = Rect("ExpeditionGuide", transform, Vector2.zero, guideSize, new Vector2(348, 60));
             expeditionGuide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
             Label(expeditionGuide, font, "Controls", new Vector2(546, 90), new Vector2(-34, 0), 20).text =
-                "右键移动 · 靠近资源按 E 采集 · V 建造 · T 研究\n基础任务完成后可回归 · H 回焦点";
+                "右键移动 · E 采集或交互 · V 建造 · T 研究\n方向键平移镜头 · 中键旋转 · 滚轮缩放 · H 回焦点\n基础任务完成后可回归";
             Button(expeditionGuide, font, "DismissExpeditionIntro", "关闭", new Vector2(78, 42), new Vector2(272, 0),
                 new Vector2(.5f, .5f), controller.DismissExpeditionIntro).fontSize = 18;
             var commands = new Text[SectorNames.Length];
