@@ -255,6 +255,74 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
+        /// <summary>以触屏设备事件验证缩放、选址防误触以及单指抬手落位。</summary>
+        [UnityTest]
+        public IEnumerator BootTouchPinchZoomsWithoutPlacingHeadquarters()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var camera = controller.GetComponentInChildren<Camera>();
+            var settings = InputSystem.settings;
+            var editorBehavior = settings.editorInputBehaviorInPlayMode;
+            var backgroundBehavior = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            var screen = InputSystem.AddDevice<Touchscreen>();
+            try
+            {
+                Click("PrimaryAction");
+                Click("OpenConstruction");
+                Click("BuildHeadquarters");
+                var cell = new Vector2Int(-4, 0);
+                var point = BattleGrid.Center(cell);
+                var worldPoint = new Vector3(point.x, 0, point.y);
+                var first = (Vector2)camera.WorldToScreenPoint(worldPoint);
+                var second = first + Vector2.right * (camera.pixelWidth * .15f);
+                var spread = second + Vector2.right * (camera.pixelWidth * .18f);
+                float initialHeight = camera.transform.position.y;
+                yield return QueueTouch(screen, 1, first, UnityEngine.InputSystem.TouchPhase.Began);
+                Assert.IsFalse(controller.World.Headquarters.HasValue, "第一指按下时应等待后续手势");
+                yield return QueueTouch(screen, 2, second, UnityEngine.InputSystem.TouchPhase.Began);
+                yield return QueueTouch(screen, 2, spread, UnityEngine.InputSystem.TouchPhase.Moved);
+                float nearHeight = camera.transform.position.y;
+                Assert.Less(nearHeight, initialHeight, "双指张开应拉近");
+                yield return QueueTouch(screen, 2, second, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.Greater(camera.transform.position.y, nearHeight, "双指捏合应拉远");
+                yield return QueueTouch(screen, 2, second, UnityEngine.InputSystem.TouchPhase.Ended);
+                yield return QueueTouch(screen, 1, first, UnityEngine.InputSystem.TouchPhase.Ended);
+                Assert.IsFalse(controller.World.Headquarters.HasValue, "两指先后抬起不应落位");
+                var tap = (Vector2)camera.WorldToScreenPoint(worldPoint);
+                yield return QueueTouch(screen, 3, tap, UnityEngine.InputSystem.TouchPhase.Began);
+                Assert.IsFalse(controller.World.Headquarters.HasValue, "单指应在抬手时确认");
+                yield return QueueTouch(screen, 3, tap, UnityEngine.InputSystem.TouchPhase.Ended);
+                Assert.IsTrue(controller.World.Headquarters.HasValue, "双指结束后应能用单指落位");
+                Assert.AreEqual(point, controller.World.BasePosition);
+
+                Click("OpenPause");
+                float pausedHeight = camera.transform.position.y;
+                yield return QueueTouch(screen, 4, first, UnityEngine.InputSystem.TouchPhase.Began);
+                yield return QueueTouch(screen, 5, second, UnityEngine.InputSystem.TouchPhase.Began);
+                yield return QueueTouch(screen, 5, spread, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.AreEqual(pausedHeight, camera.transform.position.y, "暂停时应屏蔽双指缩放");
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(screen);
+                settings.editorInputBehaviorInPlayMode = editorBehavior;
+                settings.backgroundBehavior = backgroundBehavior;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>提交真实触屏设备状态，并等待战场循环读取。</summary>
+        private static IEnumerator QueueTouch(Touchscreen screen, int id, Vector2 position, UnityEngine.InputSystem.TouchPhase phase)
+        {
+            InputSystem.QueueStateEvent(screen, new TouchState { touchId = id, position = position, phase = phase });
+            for (int i = 0; i < 3; i++) yield return null;
+        }
+
         /// <summary>从 Boot 用真实按钮建造和生产，核对采集入账、暂停及守军调防。</summary>
         [UnityTest]
         public IEnumerator BootConstructionProducesMinersAndMobileGuards()

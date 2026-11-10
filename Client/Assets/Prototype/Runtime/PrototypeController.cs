@@ -2,7 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using UnityEngine.UI;
 using QFramework;
+using BattleTouch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 namespace OutpostLoop
 {
@@ -29,6 +33,11 @@ namespace OutpostLoop
         private float cameraYaw;
         private float mapView = DefaultMapView;
         private bool orbitingCamera;
+        // 单指抬手才提交点击；一旦检测到双指，直到所有触点结束都不再派发点击。
+        private readonly List<RaycastResult> touchRaycasts = new List<RaycastResult>();
+        private int tapTouchId, pinchFirstId, pinchSecondId;
+        private float pinchDistance;
+        private bool suppressBattleTap, ignoreTouchUntilRelease;
         // 指挥视图和小地图共用同一套屏幕命中区域。
         private static readonly Rect StatusRect = new Rect(16, 16, 330, 165);
         private static readonly Rect MapRect = new Rect(1050, 18, 210, 235);
@@ -108,9 +117,15 @@ namespace OutpostLoop
             Boot.BootHost.ReportFailure(new Dictionary<string,string>{{"reason",startupError ?? "Prototype initialization failed"}});
         }
         // 失活时暂停本局，避免隐藏视图仍推进采运和防守。
-        private void OnEnable(){if(initialized)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);}
+        private void OnEnable()
+        {
+            EnhancedTouchSupport.Enable();
+            if (initialized) Game.LifeCycle.RegisterUpdate(PollInputAndPresent);
+        }
         private void OnDisable()
         {
+            EnhancedTouchSupport.Disable();
+            ignoreTouchUntilRelease = true;
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Hide();
             hud?.Hide();
@@ -189,6 +204,7 @@ namespace OutpostLoop
             ConfirmingRestart = false;
             selectedSquad = -1;
             World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
+            ignoreTouchUntilRelease = true;
             ResetBattleCamera();
             UpdateBattleCamera();
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
@@ -359,6 +375,7 @@ namespace OutpostLoop
             if(!initialized)return;
             if (UtilityWindowOpen)
             {
+                PollBattleTouch(false, out _);
                 orbitingCamera = false;
                 CloseConstruction();
                 return;
@@ -374,43 +391,126 @@ namespace OutpostLoop
             bool overUI = EventSystem.current?.IsPointerOverGameObject() == true;
             bool playing = Overlay == PrototypeOverlay.None;
             var mousePosition = (Vector2)Input.mousePosition;
-            if (playing) PollBattleCamera(overUI);
+            bool touching = PollBattleTouch(playing, out var tap);
+            if (playing) PollBattleCamera(overUI, touching);
             else orbitingCamera = false;
             UpdateBattleCamera();
-            if (playing && !overUI && !orbitingCamera)
+            if (tap.HasValue) ActOnBattlefield(tap.Value);
+            else if (playing && !touching && !overUI && !orbitingCamera)
             {
                 if (Input.GetMouseButtonDown(0)) ActOnBattlefield(mousePosition);
                 else if (!wasPlacing && Input.GetMouseButtonDown(1)) MoveCommanderAt(mousePosition);
             }
             SyncView();
-            UpdatePlacementPreview(mousePosition, overUI);
+            UpdatePlacementPreview(mousePosition, overUI || touching && suppressBattleTap);
             RefreshOverlay();
         }
 
+        /// <summary>读取本帧触点，双指手势优先于单指战场点击。</summary>
+        private bool PollBattleTouch(bool playing, out Vector2? tap)
+        {
+            tap = null;
+            var touches = BattleTouch.activeTouches;
+            if (touches.Count == 0)
+            {
+                tapTouchId = pinchFirstId = pinchSecondId = 0;
+                suppressBattleTap = ignoreTouchUntilRelease = false;
+                return false;
+            }
+
+            ignoreTouchUntilRelease |= !playing;
+            if (ignoreTouchUntilRelease) return true;
+
+            if (touches.Count > 1)
+            {
+                suppressBattleTap = true;
+                tapTouchId = 0;
+                if (touches.Count == 2 && touches[0].inProgress && touches[1].inProgress)
+                    ApplyBattlePinch(touches[0], touches[1]);
+                else
+                    pinchFirstId = pinchSecondId = 0;
+                return true;
+            }
+
+            pinchFirstId = pinchSecondId = 0;
+            if (suppressBattleTap) return true;
+            var touch = touches[0];
+            var position = touch.screenPosition;
+            if (touch.phase == TouchPhase.Began && gameCamera.pixelRect.Contains(position) && !TouchHitsUi(position))
+                tapTouchId = touch.touchId;
+            if (touch.touchId != tapTouchId) return true;
+
+            float tapSlop = 12f * HudScale;
+            if ((position - touch.startScreenPosition).sqrMagnitude > tapSlop * tapSlop || touch.phase == TouchPhase.Canceled)
+                tapTouchId = 0;
+            else if (touch.phase == TouchPhase.Ended)
+            {
+                tapTouchId = 0;
+                if (gameCamera.pixelRect.Contains(position) && !TouchHitsUi(position)) tap = position;
+            }
+            return true;
+        }
+
+        /// <summary>两指都从战场开始才缩放，按相邻帧的间距比复用滚轮缩放上下限。</summary>
+        private void ApplyBattlePinch(BattleTouch first, BattleTouch second)
+        {
+            float distance = Vector2.Distance(first.screenPosition, second.screenPosition);
+            if (pinchFirstId != first.touchId || pinchSecondId != second.touchId)
+            {
+                pinchFirstId = first.touchId;
+                pinchSecondId = second.touchId;
+                var a = first.startScreenPosition;
+                var b = second.startScreenPosition;
+                pinchDistance = IsCameraPoint(a) && IsCameraPoint(b) && !TouchHitsUi(a) && !TouchHitsUi(b) ? distance : -1f;
+                return;
+            }
+            if (pinchDistance < 0f) return;
+            if (pinchDistance > 1f && distance > 1f)
+                ScaleBattleCamera(pinchDistance / distance);
+            pinchDistance = distance;
+        }
+
+        /// <summary>触点即时检测 UGUI，避免读到上一帧的指针悬停状态。</summary>
+        private bool TouchHitsUi(Vector2 position)
+        {
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null) return false;
+            eventSystem.RaycastAll(new PointerEventData(eventSystem) { position = position }, touchRaycasts);
+            return touchRaycasts.Exists(hit => hit.module is GraphicRaycaster);
+        }
+
+        /// <summary>缩放和旋转从主战场接收，避开小地图和状态栏。</summary>
+        private bool IsCameraPoint(Vector2 position)
+        {
+            var hudPoint = new Vector2(position.x, Screen.height - position.y) / HudScale;
+            return gameCamera.pixelRect.Contains(position) && !MapRect.Contains(hudPoint) && !StatusRect.Contains(hudPoint);
+        }
+
+        /// <summary>滚轮和触屏复用同一缩放范围。</summary>
+        private void ScaleBattleCamera(float factor) => mapView = Mathf.Clamp(mapView * factor, ClosestMapView, 1f);
+
         /// <summary>键盘相对当前镜头平移；中键只从战场内开始旋转，松开立即结束。</summary>
-        private void PollBattleCamera(bool overUI)
+        private void PollBattleCamera(bool overUI, bool touching)
         {
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            orbitingCamera = mouse?.middleButton.isPressed == true && orbitingCamera;
+            orbitingCamera = !touching && mouse?.middleButton.isPressed == true && orbitingCamera;
             if (keyboard?.hKey.wasPressedThisFrame == true)
             {
                 ResetBattleCamera();
                 return;
             }
-            if (mouse != null)
+            if (mouse != null && !touching)
             {
                 var position = mouse.position.ReadValue();
-                var hudPoint = new Vector2(position.x, Screen.height - position.y) / HudScale;
-                bool pointerOnBattlefield = !overUI && gameCamera.pixelRect.Contains(position) &&
-                    !MapRect.Contains(hudPoint) && !StatusRect.Contains(hudPoint);
+                bool pointerOnBattlefield = !overUI && IsCameraPoint(position);
                 orbitingCamera |= pointerOnBattlefield && mouse.middleButton.wasPressedThisFrame;
                 if (orbitingCamera)
                     cameraYaw = Mathf.Repeat(cameraYaw + mouse.delta.x.ReadValue() * CameraTurnPerPixel / HudScale, 360f);
                 // 按当前距离等比例缩放，让近景也能分多步拉近。
                 float wheelNotches = mouse.scroll.y.ReadValue() / ScrollUnitsPerNotch;
                 if (pointerOnBattlefield && wheelNotches != 0)
-                    mapView = Mathf.Clamp(mapView * Mathf.Pow(ZoomFactorPerNotch, -wheelNotches), ClosestMapView, 1f);
+                    ScaleBattleCamera(Mathf.Pow(ZoomFactorPerNotch, -wheelNotches));
             }
 
             if (keyboard != null)
