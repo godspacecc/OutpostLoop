@@ -184,7 +184,7 @@ namespace OutpostLoop
             GUI.Label(new Rect(30, 92, 305, 28), World.MissionStatus);
             GUI.Label(new Rect(30, 122, 305, 28), status);
             GUI.Label(new Rect(30, 152, 305, 28), danger);
-            if (mapView == 1f) GUI.Label(new Rect(30, 179, 305, 24), "全图视角 · 滚轮拉近后可平移");
+            if (mapView == 1f) GUI.Label(new Rect(30, 179, 305, 24), "全图视角 · 滚轮或双指张开拉近后可平移");
         }
     }
 }

@@ -38,7 +38,9 @@ namespace OutpostLoop
         private int tapTouchId, pinchFirstId, pinchSecondId;
         // 触点抬起前若切换选址状态，放弃本次点击。
         private bool tapBeganWithPlacement;
+        // 双指间距用于缩放，中点用于把上一帧的地面位置拖到当前触点下。
         private float pinchDistance;
+        private Vector2 touchCameraCenter;
         private bool suppressBattleTap, ignoreTouchUntilRelease;
         // 指挥视图和小地图共用同一套屏幕命中区域。
         private Rect StatusRect => new Rect(16, 16, 330, World?.Expedition != null ? 194 : 165);
@@ -468,7 +470,7 @@ namespace OutpostLoop
                 suppressBattleTap = true;
                 tapTouchId = 0;
                 if (touches.Count == 2 && touches[0].inProgress && touches[1].inProgress)
-                    ApplyBattlePinch(touches[0], touches[1]);
+                    ApplyBattleCameraGesture(touches[0], touches[1]);
                 else
                     pinchFirstId = pinchSecondId = 0;
                 return true;
@@ -498,10 +500,11 @@ namespace OutpostLoop
             return true;
         }
 
-        /// <summary>两指都从战场开始才缩放，按相邻帧的间距比复用滚轮缩放上下限。</summary>
-        private void ApplyBattlePinch(BattleTouch first, BattleTouch second)
+        /// <summary>两指从战场起手后，中点拖动地面，间距变化缩放镜头。</summary>
+        private void ApplyBattleCameraGesture(BattleTouch first, BattleTouch second)
         {
             float distance = Vector2.Distance(first.screenPosition, second.screenPosition);
+            var center = (first.screenPosition + second.screenPosition) * .5f;
             if (pinchFirstId != first.touchId || pinchSecondId != second.touchId)
             {
                 pinchFirstId = first.touchId;
@@ -509,11 +512,17 @@ namespace OutpostLoop
                 var a = first.startScreenPosition;
                 var b = second.startScreenPosition;
                 pinchDistance = IsCameraPoint(a) && IsCameraPoint(b) && !TouchHitsUi(a) && !TouchHitsUi(b) ? distance : -1f;
+                touchCameraCenter = center;
                 return;
             }
             if (pinchDistance < 0f) return;
             if (pinchDistance > 1f && distance > 1f)
                 ScaleBattleCamera(pinchDistance / distance);
+            if (center != touchCameraCenter && mapView < 1f &&
+                TryProjectBattleGround(touchCameraCenter, out var previousGround) &&
+                TryProjectBattleGround(center, out var currentGround))
+                cameraFocus += previousGround - currentGround;
+            touchCameraCenter = center;
             pinchDistance = distance;
         }
 
@@ -530,7 +539,7 @@ namespace OutpostLoop
         private bool IsBattleTapPoint(Vector2 position) =>
             TouchScoutingAvailable ? IsCameraPoint(position) : gameCamera.pixelRect.Contains(position);
 
-        /// <summary>缩放和旋转从主战场接收，避开小地图和状态栏。</summary>
+        /// <summary>镜头手势从主战场接收，避开小地图和状态栏。</summary>
         private bool IsCameraPoint(Vector2 position)
         {
             var hudPoint = new Vector2(position.x, Screen.height - position.y) / HudScale;
@@ -826,9 +835,15 @@ namespace OutpostLoop
 
         private bool TryBattlefieldPoint(Vector2 screenPoint, out Vector2 point)
         {
+            if (IsCameraPoint(screenPoint)) return TryProjectBattleGround(screenPoint, out point);
             point = default;
-            var hudPoint = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
-            if (!gameCamera.pixelRect.Contains(screenPoint) || MapRect.Contains(hudPoint) || StatusRect.Contains(hudPoint)) return false;
+            return false;
+        }
+
+        /// <summary>将屏幕位置投影到战场地面，供点选和镜头拖动共用。</summary>
+        private bool TryProjectBattleGround(Vector2 screenPoint, out Vector2 point)
+        {
+            point = default;
             var ray = gameCamera.ScreenPointToRay(screenPoint);
             if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float distance)) return false;
             var hit = ray.GetPoint(distance);

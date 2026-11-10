@@ -375,7 +375,95 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
-        /// <summary>以触屏设备事件验证缩放、选址防误触以及单指抬手落位。</summary>
+        /// <summary>从荒野入口验证双指平移、缩放及暂停和界面门禁。</summary>
+        [UnityTest]
+        public IEnumerator BootWildernessTouchCameraPansAndZooms()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var camera = controller.GetComponentInChildren<Camera>();
+            var settings = InputSystem.settings;
+            var editorBehavior = settings.editorInputBehaviorInPlayMode;
+            var backgroundBehavior = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            var screen = InputSystem.AddDevice<Touchscreen>();
+            try
+            {
+                Click("DepartWilderness");
+                var controls = GameObject.Find("ExpeditionGuide").transform.Find("Controls").GetComponent<Text>();
+                StringAssert.Contains("两指拖动平移", controls.text);
+                Assert.LessOrEqual(controls.preferredHeight, controls.rectTransform.rect.height, "完整镜头提示应在面板内");
+                var commanderPosition = controller.World.CommanderPosition;
+                var center = camera.pixelRect.center;
+                var gap = Vector2.right * (camera.pixelWidth * .10f);
+                var drag = gap * .4f;
+                var home = camera.transform.position;
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Began);
+                center += drag;
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Moved);
+                var panned = camera.transform.position;
+                Assert.Less(panned.x, home.x - .01f, "右拖应使地面向右跟手");
+                Assert.That(panned.y, Is.EqualTo(home.y).Within(.001f), "等距拖动不缩放");
+
+                center += drag;
+                var wide = gap * 1.5f;
+                yield return QueueTouchPair(screen, center - wide, center + wide, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.Less(camera.transform.position.x, panned.x - .01f, "张开时仍应响应中点拖动");
+                Assert.Less(camera.transform.position.y, panned.y, "张开应拉近");
+
+                var narrow = gap * .1f;
+                yield return QueueTouchPair(screen, center - narrow, center + narrow, UnityEngine.InputSystem.TouchPhase.Moved);
+                var overview = camera.transform.position;
+                Assert.Greater(overview.y, home.y, "捏到最远应显示全图");
+                center -= drag;
+                yield return QueueTouchPair(screen, center - narrow, center + narrow, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.That(Vector3.Distance(camera.transform.position, overview), Is.LessThan(.001f), "全图保持居中");
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Moved);
+                var zoomed = camera.transform.position;
+                center -= drag;
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.Greater(camera.transform.position.x, zoomed.x + .01f, "拉近后恢复平移");
+                Assert.AreEqual(commanderPosition, controller.World.CommanderPosition, "镜头手势不派发移动指令");
+
+                Click("OpenPause");
+                var paused = camera.transform.position;
+                yield return QueueTouchPair(screen, center - wide, center + wide, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.AreEqual(paused, camera.transform.position, "暂停时屏蔽镜头手势");
+                Click("PrimaryAction");
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.AreEqual(paused, camera.transform.position, "暂停前的触点必须松开再起手");
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Ended);
+
+                var pauseButton = GameObject.Find("OpenPause").GetComponent<RectTransform>();
+                var buttonPoint = RectTransformUtility.WorldToScreenPoint(null, pauseButton.TransformPoint(pauseButton.rect.center));
+                float hudScale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
+                var minimapPoint = new Vector2(1155f * hudScale, Screen.height - 140f * hudScale);
+                foreach (var blocked in new[] { buttonPoint, minimapPoint })
+                {
+                    yield return QueueTouchPair(screen, blocked, center, UnityEngine.InputSystem.TouchPhase.Began);
+                    yield return QueueTouchPair(screen, blocked + drag, center + drag, UnityEngine.InputSystem.TouchPhase.Moved);
+                    Assert.AreEqual(paused, camera.transform.position, "按钮和小地图不能发起镜头手势");
+                    yield return QueueTouchPair(screen, blocked + drag, center + drag, UnityEngine.InputSystem.TouchPhase.Ended);
+                }
+
+                Game.UIHelper.ShowUI<PrototypeSettingsCtrl>();
+                yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Began);
+                yield return QueueTouchPair(screen, center - gap, center + wide, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.AreEqual(paused, camera.transform.position, "设置界面屏蔽镜头手势");
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(screen);
+                settings.editorInputBehaviorInPlayMode = editorBehavior;
+                settings.backgroundBehavior = backgroundBehavior;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>以触屏设备事件验证平移缩放、选址防误触以及单指抬手落位。</summary>
         [UnityTest]
         public IEnumerator BootTouchPinchZoomsWithoutPlacingHeadquarters()
         {
@@ -402,6 +490,7 @@ namespace OutpostLoop.Tests
                 var second = first + Vector2.right * (camera.pixelWidth * .15f);
                 var spread = second + Vector2.right * (camera.pixelWidth * .18f);
                 float initialHeight = camera.transform.position.y;
+                int initialFunds = controller.World.Run.Funds;
                 yield return QueueTouch(screen, 1, first, UnityEngine.InputSystem.TouchPhase.Began);
                 Assert.IsFalse(controller.World.Headquarters.HasValue, "第一指按下时应等待后续手势");
                 yield return QueueTouch(screen, 2, second, UnityEngine.InputSystem.TouchPhase.Began);
@@ -410,9 +499,14 @@ namespace OutpostLoop.Tests
                 Assert.Less(nearHeight, initialHeight, "双指张开应拉近");
                 yield return QueueTouch(screen, 2, second, UnityEngine.InputSystem.TouchPhase.Moved);
                 Assert.Greater(camera.transform.position.y, nearHeight, "双指捏合应拉远");
-                yield return QueueTouch(screen, 2, second, UnityEngine.InputSystem.TouchPhase.Ended);
-                yield return QueueTouch(screen, 1, first, UnityEngine.InputSystem.TouchPhase.Ended);
+                var drag = Vector2.right * (camera.pixelWidth * .05f);
+                float positionBeforeDrag = camera.transform.position.x;
+                yield return QueueTouchPair(screen, first + drag, second + drag, UnityEngine.InputSystem.TouchPhase.Moved);
+                Assert.Less(camera.transform.position.x, positionBeforeDrag, "选址期间可拖动镜头");
+                yield return QueueTouch(screen, 2, second + drag, UnityEngine.InputSystem.TouchPhase.Ended);
+                yield return QueueTouch(screen, 1, first + drag, UnityEngine.InputSystem.TouchPhase.Ended);
                 Assert.IsFalse(controller.World.Headquarters.HasValue, "两指先后抬起不应落位");
+                Assert.AreEqual(initialFunds, controller.World.Run.Funds, "镜头手势不扣建造费用");
                 var tap = (Vector2)camera.WorldToScreenPoint(worldPoint);
                 yield return QueueTouch(screen, 3, tap, UnityEngine.InputSystem.TouchPhase.Began);
                 Assert.IsFalse(controller.World.Headquarters.HasValue, "单指应在抬手时确认");
@@ -577,6 +671,13 @@ namespace OutpostLoop.Tests
         {
             InputSystem.QueueStateEvent(screen, new TouchState { touchId = id, position = position, phase = phase });
             for (int i = 0; i < 3; i++) yield return null;
+        }
+
+        /// <summary>在同一输入帧提交两根手指，复现不改变间距的平移。</summary>
+        private static IEnumerator QueueTouchPair(Touchscreen screen, Vector2 first, Vector2 second, UnityEngine.InputSystem.TouchPhase phase)
+        {
+            InputSystem.QueueStateEvent(screen, new TouchState { touchId = 1, position = first, phase = phase });
+            yield return QueueTouch(screen, 2, second, phase);
         }
 
         /// <summary>从 Boot 用真实按钮建造和生产，核对采集入账、暂停及守军调防。</summary>
