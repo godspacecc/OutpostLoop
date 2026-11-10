@@ -2,7 +2,7 @@
   "dependencies": {
     "com.code-philosophy.hybridclr": "https://gitee.com/focus-creative-games/hybridclr_unity.git#e4def761d69b27b7b51a5de0f6d272861416a2d6",
     "com.cysharp.unitask": "2.5.11",
-    "com.ivanmurzak.unity.mcp": "1.7.1",
+    "com.ivanmurzak.unity.mcp": "1.9.0",
     "com.tuyoogame.yooasset": "2.3.17",
     "com.unity.inputsystem": "1.7.0",
     "com.unity.nuget.newtonsoft-json": "3.2.1",

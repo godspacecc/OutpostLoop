@@ -662,7 +662,25 @@ PlayerSettings:
   webGLMemoryGeometricGrowthStep: 0.2
   webGLMemoryGeometricGrowthCap: 96
   webGLPowerPreference: 2
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    EmbeddedLinux: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    GameCoreScarlett: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    GameCoreXboxOne: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    LinuxHeadlessSimulation: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    Nintendo Switch: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    PS4: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    PS5: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    QNX: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    Server: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    Stadia: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    Standalone: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    VisionOS: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    WebGL: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    Windows Store Apps: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    XboxOne: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    iPhone: UNITY_MCP_READY;UNITY_MCP_DEPS_40
+    tvOS: UNITY_MCP_READY;UNITY_MCP_DEPS_40
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:
