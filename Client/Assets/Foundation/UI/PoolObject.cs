@@ -11,5 +11,7 @@ namespace Game
     {
         public string PoolName;
         public bool IsPooled;
+        // 池名可以重复使用，归还时用池实例辨别同名重建前后的对象。
+        internal GameObjectPool Owner;
     }
 }

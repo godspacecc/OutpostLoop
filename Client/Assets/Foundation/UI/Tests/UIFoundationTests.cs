@@ -63,6 +63,27 @@ namespace OutpostLoop.Tests
             GameObjectPoolHelper.ReturnObjectToPool(first);
         }
         [Test]
+        public void RecreatedPoolRejectsObjectBorrowedFromRemovedPool()
+        {
+            const string poolName = "same name";
+            var prefab = Create("pool item");
+            var borrower = Create("temporary borrower");
+            GameObjectPoolHelper.InitPool(prefab, poolName, 1);
+            var oldItem = GameObjectPoolHelper.GetObjectFromPool(prefab, poolName);
+            oldItem.transform.SetParent(borrower.transform, false);
+            GameObjectPoolHelper.RemovePool(poolName);
+            GameObjectPoolHelper.InitPool(prefab, poolName, 1);
+
+            GameObjectPoolHelper.ReturnObjectToPool(oldItem);
+            var newItem = GameObjectPoolHelper.GetObjectFromPool(prefab, poolName);
+            Assert.AreNotSame(oldItem, newItem);
+            Assert.AreSame(borrower.transform, oldItem.transform.parent);
+            Assert.IsTrue(oldItem.activeSelf);
+
+            GameObjectPoolHelper.ReturnObjectToPool(newItem);
+            Assert.AreSame(newItem, GameObjectPoolHelper.GetObjectFromPool(prefab, poolName));
+        }
+        [Test]
         public void BaseUIAwakePreservesAuthoredColor()
         {
             var owner = Create("Message");

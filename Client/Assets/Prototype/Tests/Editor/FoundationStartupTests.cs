@@ -36,16 +36,32 @@ namespace OutpostLoop.Tests
         [Test] public void ShutdownClearsTimersAndCallbacksAndCanRestart()
         {
             Game.FoundationRuntime.Initialize();
-            int frames=0,timers=0,quits=0;
-            Game.LifeCycle.RegisterUpdate(()=>frames++);
-            Game.LifeCycle.RegisterQuit(()=>quits++);
-            Game.TimerMgr.Instance.Add(()=>{timers++;return true;});
-            Game.FoundationRuntime.Shutdown();Game.FoundationRuntime.Shutdown();
-            Game.LifeCycle.Update();Game.TimerMgr.Instance.TickForTests(1);
-            Assert.AreEqual(0,frames);Assert.AreEqual(0,timers);Assert.AreEqual(1,quits);
-            Game.FoundationRuntime.Initialize();
-            Assert.IsTrue(ResourceLoader.IsConfigured);
-            Game.FoundationRuntime.Shutdown();
+            var timer = Game.TimerMgr.Instance;
+            int frames = 0, staleTimers = 0, quits = 0, freshTimers = 0;
+            try
+            {
+                Game.LifeCycle.RegisterUpdate(() => frames++);
+                Game.LifeCycle.RegisterQuit(() =>
+                {
+                    quits++;
+                    timer.Add(() => { staleTimers++; return true; });
+                });
+                timer.Add(() => { staleTimers++; return true; });
+                Game.FoundationRuntime.Shutdown();
+                Game.FoundationRuntime.Shutdown();
+                Game.LifeCycle.Update();
+                timer.TickForTests(1);
+                Assert.AreEqual(0, frames);
+                Assert.AreEqual(0, staleTimers, "退出回调中新建的计时器也应清理");
+                Assert.AreEqual(1, quits);
+
+                Game.FoundationRuntime.Initialize();
+                Assert.IsTrue(ResourceLoader.IsConfigured);
+                timer.Add(() => { freshTimers++; return true; });
+                Game.LifeCycle.Update();
+                Assert.AreEqual(1, freshTimers, "新会话的计时器应重新订阅帧更新");
+            }
+            finally { timer.Clear(); }
         }
         [Test] public void InitializeIsIdempotent()
         {

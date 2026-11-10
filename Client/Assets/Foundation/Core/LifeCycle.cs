@@ -152,6 +152,8 @@ namespace Game
             ApplicationFocuses.Clear();
             _frameEndActions.Clear();
             _processing.Clear();
+            // 退出回调也可能添加计时器，等回调完成后再清理并复位帧订阅。
+            TimerMgr.Instance.Clear();
         }
 
         public static void ApplicationPause(bool paused)

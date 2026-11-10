@@ -54,6 +54,27 @@ namespace OutpostLoop.Tests
             }
             finally { UnityEngine.Object.DestroyImmediate(root); }
         }
+        /// <summary>同一视图有多种触屏控件时只生成一次命名空间引用。</summary>
+        [Test]
+        public void GeneratorImportsOnScreenNamespaceForTouchControls()
+        {
+            var root = new GameObject("TouchProbe", typeof(RectTransform));
+            try
+            {
+                var collector = root.AddComponent<ReferenceCollector>();
+                collector.data.Add(new ReferenceCollectorData { key = "Stick", gameObject = root, TypeName = "UnityEngine.InputSystem.OnScreen.OnScreenStick" });
+                collector.data.Add(new ReferenceCollectorData { key = "Button", gameObject = root, TypeName = "UnityEngine.InputSystem.OnScreen.OnScreenButton" });
+                var output = Path.GetFullPath(Path.Combine(Application.dataPath, "../../Backup/Artifacts/FoundationLifecycleParity-20261110/TouchProbeUI.cs"));
+                Invoke("WriteViewScript", root, output, collector, "UI", "BaseUI");
+                var source = File.ReadAllText(output);
+                const string import = "using UnityEngine.InputSystem.OnScreen;";
+                Assert.That(source.Split(new[] { import }, StringSplitOptions.None).Length, Is.EqualTo(2));
+                StringAssert.Contains("public OnScreenStick Stick;", source);
+                StringAssert.Contains("public OnScreenButton Button;", source);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
         /// <summary>同名 Prefab 在三个项目间应生成同一类名和引用类型。</summary>
         [Test] public void BoxNamingAndCollectorDefaultMatchReference()
         {

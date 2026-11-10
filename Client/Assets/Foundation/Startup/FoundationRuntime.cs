@@ -47,7 +47,6 @@ namespace Game
             architecture = null;
             Cleanup(UIHelper.Shutdown);
             Cleanup(() => current?.Deinit());
-            Cleanup(TimerMgr.Instance.Clear);
             Cleanup(LifeCycle.Quit);
             LocalizationLanguages.ResetCache();
             ResourceLoader.Shutdown();

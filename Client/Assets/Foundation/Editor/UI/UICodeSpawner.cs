@@ -223,6 +223,15 @@ namespace Game
             {
                 builder.AppendLine("using UnityEngine.UI;");
             }
+
+            // 生成的字段使用短类型名，触屏控件需要其独立命名空间。
+            if (referenceCollector.data.Any(item =>
+                    item != null &&
+                    !string.IsNullOrWhiteSpace(item.TypeName) &&
+                    item.TypeName.StartsWith("UnityEngine.InputSystem.OnScreen.", StringComparison.Ordinal)))
+            {
+                builder.AppendLine("using UnityEngine.InputSystem.OnScreen;");
+            }
         }
 
         internal static ReferenceCollectorData[] ValidReferences(ReferenceCollector referenceCollector)

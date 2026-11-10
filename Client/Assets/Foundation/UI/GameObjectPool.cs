@@ -24,6 +24,8 @@ namespace Game
         private readonly string _poolName;
         private readonly Transform _root;
         private int _objectsInUse;
+        // Play 中池根到帧末才销毁，此标记立即停止借出和归还。
+        private bool _destroyed;
 
         public GameObjectPool(
             string poolName,
@@ -45,6 +47,8 @@ namespace Game
 
         public GameObject NextAvailableObject(bool autoActive)
         {
+            if (_destroyed) return null;
+
             while (_availableObjects.Count > 0 && _availableObjects.Peek() == null)
             {
                 _availableObjects.Pop();
@@ -75,7 +79,8 @@ namespace Game
 
         public void ReturnObjectToPool(PoolObject poolObject)
         {
-            if (poolObject == null || poolObject.PoolName != _poolName || poolObject.IsPooled)
+            if (_destroyed || poolObject == null || !ReferenceEquals(poolObject.Owner, this) ||
+                poolObject.PoolName != _poolName || poolObject.IsPooled)
             {
                 return;
             }
@@ -86,6 +91,9 @@ namespace Game
 
         public void Destroy()
         {
+            if (_destroyed) return;
+            _destroyed = true;
+            _availableObjects.Clear();
             if (_root == null)
             {
                 return;
@@ -120,6 +128,7 @@ namespace Game
                 var go = Object.Instantiate(_prefab);
                 var poolObject = go.GetComponent<PoolObject>() ?? go.AddComponent<PoolObject>();
                 poolObject.PoolName = _poolName;
+                poolObject.Owner = this;
                 AddObjectToPool(poolObject);
             }
         }
