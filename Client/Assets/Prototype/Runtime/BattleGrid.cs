@@ -92,9 +92,15 @@ namespace OutpostLoop
         }
 
         /// <summary>沿距离场逐格移动，走完格心再转向，避免斜穿建筑拐角。</summary>
-        internal bool Follow(int[] field, ref Vector2 position, RouteWalker walker, float travel)
+        internal bool Follow(int[] field, ref Vector2 position, RouteWalker walker, float travel, bool finishSegment = false)
         {
-            if (walker.Field != field) { walker.Field = field; walker.Next = null; }
+            if (walker.Field != field)
+            {
+                // 追逐移动目标时先走完当前通行段，避免目标换格时一直退回格心。
+                if (!finishSegment || walker.Revision != Revision) walker.Next = null;
+                walker.Field = field;
+                walker.Revision = Revision;
+            }
             var cell = BattleGrid.Cell(position);
             int distance = Distance(field, cell);
             if (distance < 0) return false;
@@ -130,5 +136,6 @@ namespace OutpostLoop
     {
         internal int[] Field;
         internal Vector2? Next;
+        internal int Revision;
     }
 }

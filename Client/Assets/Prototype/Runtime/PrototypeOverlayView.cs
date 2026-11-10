@@ -61,7 +61,7 @@ namespace OutpostLoop
         private Text[] squadLabels;
         private int displayedSector;
         private bool displayedBase, displayedSquad;
-        private Button upgradeButton;
+        private Button upgradeButton, researchButton, returnButton;
         private string displayedLanguage;
         protected override string Path() => null;
         public override UILayer Layer() => UILayer.HUD;
@@ -78,12 +78,22 @@ namespace OutpostLoop
             owner = controller;
             squadLabels = ((PrototypeOverlayView)BaseUI).BuildHudEntries(font, controller);
             upgradeButton = BaseUI.transform.Find("OpenUpgrade").GetComponent<Button>();
+            researchButton = BaseUI.transform.Find("OpenResearch").GetComponent<Button>();
+            returnButton = BaseUI.transform.Find("OpenReturn").GetComponent<Button>();
             displayedLanguage = null;
             BaseUI.GetComponent<SafeAreaFitter>().ApplyNow();
         }
 
         internal void Refresh(bool hasBase, SitePersonnel squad)
         {
+            bool exploring = owner.World.Expedition != null;
+            upgradeButton.gameObject.SetActive(!exploring);
+            researchButton.gameObject.SetActive(exploring);
+            returnButton.gameObject.SetActive(exploring);
+            researchButton.interactable = exploring && owner.World.NearShelter;
+            returnButton.interactable = owner.World.Expedition?.BasicComplete == true;
+            BaseUI.transform.Find("CommandGuide").gameObject.SetActive(!exploring);
+            BaseUI.transform.Find("ExpeditionGuide").gameObject.SetActive(exploring);
             string language = Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value;
             int sector = squad?.Sector ?? -1;
             bool hasSquad = squad != null;
@@ -145,13 +155,13 @@ namespace OutpostLoop
     }
 
     /// <summary>临时玩法窗口复用同一套视图工具，展示逻辑不修改玩法状态。</summary>
-    internal sealed class PrototypeOverlayView : BaseUI
+    internal sealed partial class PrototypeOverlayView : BaseUI
     {
         private static readonly Color ButtonColor = new Color(.23f, .38f, .38f);
         private static readonly Color LabelColor = new Color(.92f, .97f, .97f);
         private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
-        private Text heading, details, actionLabel, feedback, startBriefing, restartAction;
+        private Text heading, details, actionLabel, feedback, restartAction;
         private GameObject purchaseRows;
         private Text constructionStock, constructionFeedback, constructionDetail, producePersonnel, moveTurret;
         private readonly Text[] constructionOptions = new Text[5];
@@ -160,14 +170,13 @@ namespace OutpostLoop
         private static readonly string[] ExpansionNames =
             { "ExpansionEmpty", "ExpansionExtractor", "ExpansionBarracks", "ExpansionBarricade", "BuildingTurret", "BuildingHeadquarters" };
 
-        internal static string BuildingName(ExpansionKind kind) => Loc.T(ExpansionNames[(int)kind]);
+        internal static string BuildingName(ExpansionKind kind) => kind == ExpansionKind.Shelter ? "庇护所" : Loc.T(ExpansionNames[(int)kind]);
         internal static readonly string[] SectorNames = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
         private GameObject startScreen;
         private Button startUpdateEntry;
         private Text startUpdateVersion, startUpdateStatus;
-        private Text startingBalance;
 
         internal static PrototypeOverlayView Create(string name)
         {
@@ -221,6 +230,7 @@ namespace OutpostLoop
                 new Vector2(.5f,.5f), controller.ActOnModal);
             restartAction = Button(panel, font, "RestartRun", "", new Vector2(390, 48),
                 new Vector2(0, -117), new Vector2(.5f, .5f), controller.RequestRestart);
+            BuildExpeditionModal(panel, font, controller);
         }
 
         /// <summary>建造侧栏直接挂在局内 HUD，地图和基地升级保持各自入口。</summary>
@@ -243,6 +253,9 @@ namespace OutpostLoop
                     new Vector2(0, 110 - Mathf.Max(0, i - 1) * 44), new Vector2(.5f, .5f), () => controller.SelectPlacement(kind));
                 constructionOptions[i].fontSize = 18;
             }
+            shelterOption = Button(panel, font, "BuildShelter", "", new Vector2(468, 39),
+                new Vector2(0, 110), new Vector2(.5f, .5f), () => controller.SelectPlacement(ExpansionKind.Shelter));
+            shelterOption.fontSize = 18;
             constructionDetail = Label(panel, font, "ConstructionDetail", new Vector2(478, 66), new Vector2(0, -86), 18);
             producePersonnel = Button(panel, font, "ProducePersonnel", "", new Vector2(468, 38),
                 new Vector2(0, -143), new Vector2(.5f, .5f), controller.OrderPersonnel);
@@ -261,12 +274,20 @@ namespace OutpostLoop
                 new Vector2(-180,62), new Vector2(1,0), controller.ToggleUpgrade);
             Button(transform, font, "OpenConstruction", Loc.T("ConstructionOpen"), new Vector2(240,64),
                 new Vector2(-460,62), new Vector2(1,0), controller.ToggleConstruction);
+            Button(transform, font, "OpenResearch", "研究  T", new Vector2(140,64),
+                new Vector2(-247,62), new Vector2(1,0), controller.ToggleResearch);
+            Button(transform, font, "OpenReturn", "回归", new Vector2(128,64),
+                new Vector2(-101,62), new Vector2(1,0), controller.ConfirmReturn);
             var guideSize = new Vector2(652, 94);
             var guide = Rect("CommandGuide", transform, Vector2.zero, guideSize, new Vector2(348, 60));
             guide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
             var guideText = Label(guide, font, "Controls", guideSize, Vector2.zero, 24).gameObject.AddComponent<LocalizedText>();
             guideText.Key = "HudControls";
             guideText.Refresh();
+            var expeditionGuide = Rect("ExpeditionGuide", transform, Vector2.zero, guideSize, new Vector2(348, 60));
+            expeditionGuide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
+            Label(expeditionGuide, font, "Controls", guideSize, Vector2.zero, 22).text =
+                "右键移动 · E 交互 · V 建造 · T 研究\n滚轮缩放 · 中键旋转 · 方向键平移 · H 回焦点";
             var commands = new Text[SectorNames.Length];
             for (int i = 0; i < commands.Length; i++)
             {
@@ -292,8 +313,7 @@ namespace OutpostLoop
                 startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
                 SetText(startUpdateStatus, PrototypeUpdateText.Status(snapshot));
-                SetText(startBriefing, Loc.T("CommanderBrief"));
-                SetText(startingBalance, Loc.T("StartingFundsTier", controller.World.Run.Funds) + "\n" + TierProgress(controller));
+                PresentDeparture(controller);
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;
                 var safe = Screen.safeArea.size;
@@ -307,9 +327,16 @@ namespace OutpostLoop
             var run = controller.World.Run;
             bool upgrading = mode == PrototypeOverlay.Upgrade;
             purchaseRows.SetActive(upgrading);
+            researchRows.SetActive(mode == PrototypeOverlay.Research);
+            cancelReturn.transform.parent.gameObject.SetActive(mode == PrototypeOverlay.ReturnConfirm);
             feedback.gameObject.SetActive(upgrading);
             details.gameObject.SetActive(!upgrading);
             restartAction.transform.parent.gameObject.SetActive(mode == PrototypeOverlay.Paused);
+            if (controller.World.Expedition != null)
+            {
+                PresentExpeditionModal(controller);
+                return;
+            }
             switch (mode)
             {
                 case PrototypeOverlay.Paused:
@@ -351,14 +378,23 @@ namespace OutpostLoop
         {
             var world = controller.World;
             var run = world.Run;
-            SetText(constructionStock, Loc.T("FundsStock", run.Funds));
+            bool exploring = world.Expedition != null;
+            SetText(constructionStock, exploring ? $"物资 {run.Funds}" : Loc.T("FundsStock", run.Funds));
             SetText(constructionFeedback, controller.ActionFeedback);
+            shelterOption.transform.parent.gameObject.SetActive(exploring);
+            if (exploring) PresentExpeditionBuilding(controller, shelterOption, ExpansionKind.Shelter);
             for (int i = 0; i < constructionOptions.Length; i++)
             {
                 var kind = ExpansionOptions[i];
                 var option = constructionOptions[i];
                 bool isBase = kind == ExpansionKind.Headquarters;
-                option.transform.parent.gameObject.SetActive(isBase != world.Headquarters.HasValue);
+                option.transform.parent.gameObject.SetActive(exploring ? kind == ExpansionKind.Turret : isBase != world.Headquarters.HasValue);
+                if (exploring)
+                {
+                    if (kind == ExpansionKind.Turret) PresentExpeditionBuilding(controller, option, kind);
+                    continue;
+                }
+                ((RectTransform)option.transform.parent).anchoredPosition = new Vector2(0, 110 - Mathf.Max(0, i - 1) * 44);
                 var spec = ExpansionSite.SpecFor(kind);
                 string label = isBase ? Loc.T("BuildHeadquartersOption") :
                     Loc.T("BuildingOption", BuildingName(kind), Loc.T("FundsCost", spec.Cost), spec.BuildSeconds);
@@ -370,7 +406,7 @@ namespace OutpostLoop
             var site = controller.SelectedBuilding < 0 ? null : world.Buildings[controller.SelectedBuilding];
             bool selectedSite = !controller.HasPlacement && site != null && site.Kind != ExpansionKind.Empty;
             bool canProduce = selectedSite && site.CanProduce;
-            bool canMove = selectedSite && site.Kind == ExpansionKind.Turret && !site.IsUnderConstruction;
+            bool canMove = !exploring && selectedSite && site.Kind == ExpansionKind.Turret && !site.IsUnderConstruction;
             producePersonnel.transform.parent.gameObject.SetActive(canProduce);
             moveTurret.transform.parent.gameObject.SetActive(canMove);
             if (canProduce)
@@ -391,7 +427,8 @@ namespace OutpostLoop
             }
             if (!selectedSite)
             {
-                SetText(constructionDetail, Loc.T(world.Headquarters.HasValue ? "PlacementGuide" : "HeadquartersGuide"));
+                SetText(constructionDetail, exploring ? "选建筑后左键落位，右键或 Esc 取消" :
+                    Loc.T(world.Headquarters.HasValue ? "PlacementGuide" : "HeadquartersGuide"));
                 return;
             }
             string status = site.IsUnderConstruction ? Loc.T("ConstructionRemaining", Mathf.CeilToInt(site.ConstructionLeft))
@@ -403,6 +440,7 @@ namespace OutpostLoop
                         (site.Personnel != null ? "\n" + Loc.T("GathererCargo", site.Personnel.Cargo, run.Capacity) : ""),
                     ExpansionKind.Barracks => Loc.T(site.Personnel != null ? "ExpansionGarrisonReady" : "ExpansionGarrisonIdle"),
                     ExpansionKind.Barricade => Loc.T("ExpansionBarricadeHint"),
+                    ExpansionKind.Shelter => "在 3 米内按 T 打开研究",
                     _ => Loc.T("TurretOperational")
                 };
             SetText(constructionDetail, Loc.T("ExpansionStatus", BuildingName(site.Kind), site.Health, site.HealthLimit, status));
@@ -445,11 +483,7 @@ namespace OutpostLoop
             StartText(font, "Brand", "OUTPOST LOOP", 96, 55, 420, 48, 23, mint, FontStyle.Bold);
             StartText(font, "Brief", Loc.T("PreviewText9"), 1670, 55, 160, 48, 22, mint, alignment: TextAnchor.MiddleRight);
             Fill("HeaderRule", 96, 122, 1728, 2, line);
-            StartText(font, "Operations", "F I E L D   O P E R A T I O N S", 96, 230, 630, 40, 19, mint);
-            var latinFont = UnityEngine.Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            StartText(latinFont, "TitleOutpost", "OUTPOST", 88, 268, 705, 150, 123, ink, FontStyle.Bold);
-            StartText(latinFont, "TitleLoop", "LOOP", 89, 386, 640, 150, 123, mint, FontStyle.Bold);
-            StartText(font, "GameLoop", Loc.T("PreviewText10"), 96, 555, 650, 44, 26, muted);
+            BuildDeparture(font, controller, ink, mint, muted, line);
 
             Fill("ArtFrame", 796, 160, 1028, 798, line);
             var hero = StartRect("BaseArtwork", 798, 162, 1024, 794).gameObject.AddComponent<RawImage>();
@@ -467,18 +501,6 @@ namespace OutpostLoop
             Fill("ArtworkCaptionPlate", 798, 883, 1024, 73, new Color32(17, 30, 25, 218));
             StartText(font, "ArtworkCaption", Loc.T("PreviewText11"), 833, 891, 420, 50, 22, ink);
 
-            Fill("BriefingRule", 96, 644, 650, 2, line);
-            string briefing = Loc.T("CommanderBrief");
-            StartText(font, "Briefing", briefing, 96, 660, 650, 94, 27, ink);
-            startBriefing = startStage.Find("Briefing").GetComponent<Text>();
-            var action = Button(startStage, font, "PrimaryAction", Loc.T("PreviewText12"), new Vector2(390, 77),
-                new Vector2(291, -825), new Vector2(0, 1), controller.ActOnModal);
-            action.color = new Color32(15, 32, 26, 255);
-            action.fontStyle = FontStyle.Bold;
-            action.transform.parent.GetComponent<Image>().color = mint;
-            startingBalance = Label(StartRect("StartingBalance", 96, 871, 650, 96), font, "Label",
-                new Vector2(650, 96), Vector2.zero, 23);
-            startingBalance.alignment = TextAnchor.MiddleLeft;
             Fill("FooterRule", 96, 992, 1728, 2, line);
             StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);
         }

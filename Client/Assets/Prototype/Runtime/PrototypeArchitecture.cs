@@ -33,17 +33,28 @@ namespace OutpostLoop
             (world.Run.Outcome == 0 || world.Run.Outcome > 0 && !VictoryRewardRecorded);
         public int Wins => this.GetUtility<PrototypeWallet>()?.Wins ?? 0;
         public int StartingFunds => this.GetUtility<PrototypeWallet>()?.StartingFunds ?? PrototypeWallet.InitialFunds;
+        internal ExpeditionProfile Profile => this.GetUtility<ExpeditionProfile>();
         protected override void OnInit(){model=this.GetModel<PrototypeModel>();Game.LifeCycle.RegisterUpdate(OnTick);}
         protected override void OnDeinit(){Game.LifeCycle.UnregisterUpdate(OnTick);}
         public WorldState Begin(int seed,bool running)
+            => SetWorld(new WorldState(seed, startingFunds: StartingFunds), running);
+
+        internal WorldState BeginExpedition(int seed, ExpeditionMap map)
         {
-            var next=new WorldState(seed, startingFunds: StartingFunds);next.Run.Paused=!running;
+            var next = WorldState.Depart(seed, map, Profile);
+            return next == null ? null : SetWorld(next, true);
+        }
+
+        private WorldState SetWorld(WorldState next, bool running)
+        {
+            next.Run.Paused = !running;
             model.World=next;
             awaitingStart = !running;
             rewardAttempted = false;
             VictoryRewardRecorded = false;
             this.GetSystem<Game.AudioSystem>()?.SetPaused(!running);
-            this.SendEvent(new PrototypeRunStarted{Seed=seed});return next;
+            this.SendEvent(new PrototypeRunStarted { Seed = next.Seed });
+            return next;
         }
         public bool MoveCommander(Vector2 point) => !awaitingStart && model.World?.MoveCommander(point) == true;
         public bool DeploySquad(int building, int sector) => !awaitingStart && model.World?.DeploySquad(building, sector) == true;
@@ -70,7 +81,9 @@ namespace OutpostLoop
             if (run == null || run.Outcome <= 0) return false;
             rewardAttempted = true;
             if (!VictoryRewardRecorded)
-                VictoryRewardRecorded = this.GetUtility<PrototypeWallet>()?.RecordVictory(run.RewardId) == true;
+                VictoryRewardRecorded = model.World.Expedition != null
+                    ? Profile?.RecordReturn(model.World) == true
+                    : this.GetUtility<PrototypeWallet>()?.RecordVictory(run.RewardId) == true;
             return VictoryRewardRecorded;
         }
         /// <summary>同步本局暂停与基础音频状态；UI声音不受会话暂停影响。</summary>
@@ -82,7 +95,7 @@ namespace OutpostLoop
         }
         public bool Purchase(int route)
         {
-            if(model.World==null)return false;
+            if(model.World==null || model.World.Expedition != null)return false;
             var run=model.World.Run;bool paused=run.Paused;
             try{run.Paused=false;return run.Upgrade(route);}finally{run.Paused=paused;}
         }

@@ -30,6 +30,46 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(package.CheckLocationValid("Game.dll.bytes"));
             Assert.IsEmpty(Object.FindObjectsOfType<Boot.Launcher>(), "Main 就绪后应销毁 Boot 入口");
         }
+
+        [UnityTest]
+        public IEnumerator BootExpeditionButtonsConfirmReturnAndRefreshProfile()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var profile = new ExpeditionProfile(PrototypeExpeditionTests.ProfileDirectory());
+            Game.Game.Interface.RegisterUtility(profile);
+            yield return null;
+            Assert.IsFalse(GameObject.Find("DepartIndustrial").GetComponent<Button>().interactable);
+            Assert.IsFalse(GameObject.Find("TrainCommander").GetComponent<Button>().interactable);
+            Click("DepartIndustrial");
+            Assert.IsNull(controller.World.Expedition);
+            Click("DepartWilderness");
+            var world = controller.World;
+            Assert.AreEqual(ExpeditionMap.Wilderness, world.Expedition.Map);
+            Assert.IsFalse(GameObject.Find("OpenReturn").GetComponent<Button>().interactable);
+            Click("OpenPause");
+            var elapsed = world.Run.Elapsed;
+            yield return null;
+            Assert.AreEqual(elapsed, world.Run.Elapsed);
+            Click("PrimaryAction");
+            PrototypeExpeditionTests.Survive(world);
+            yield return null;
+            Click("OpenReturn");
+            Assert.IsTrue(world.Run.Paused);
+            Click("CancelReturn");
+            Assert.IsFalse(world.Run.Paused);
+            Assert.AreEqual(0, profile.Funds);
+            Click("OpenReturn");
+            Click("PrimaryAction");
+            Assert.AreEqual(ExpeditionEnd.Returned, world.Expedition.End);
+            Assert.AreEqual(25, profile.Funds);
+            Click("PrimaryAction");
+            Assert.IsTrue(GameObject.Find("DepartWilderness").GetComponent<Button>().interactable);
+            Assert.AreEqual(25, profile.Funds);
+            yield return new ExitPlayMode();
+        }
         [UnityTest]
         public IEnumerator BootAdvancesPausesAndRestartsThroughFoundation()
         {

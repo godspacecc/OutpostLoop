@@ -8,7 +8,9 @@ namespace OutpostLoop
         public PrototypeConfig Config { get; }
         public int Funds { get; private set; }
         public int Capacity => 80 + Levels[0] * 20;
-        public float Elapsed { get; private set; }
+        public float Elapsed => (float)elapsed;
+        // 分钟级任务使用双精度累计，避免固定步长累计误差影响达标时刻。
+        private double elapsed;
         public bool Paused { get; set; }
         public int Health { get; private set; }
         public int Outcome { get; private set; }
@@ -24,6 +26,14 @@ namespace OutpostLoop
 
         /// <summary>主基地确认落位才具有耐久。</summary>
         internal void EstablishBase() => Health = Config.InitialHealth;
+
+        /// <summary>探索时生命属于指挥员，结束后结清未带出的物资。</summary>
+        internal void DeployCommander(int health) => Health = health;
+        internal void FinishExpedition(bool returned)
+        {
+            Outcome = returned ? 1 : -1;
+            Funds = 0;
+        }
 
         public int UpgradeCost(int route) => route >= 0 && route < Levels.Length ? 200 * (Levels[route] + 1) : int.MaxValue;
 
@@ -53,7 +63,7 @@ namespace OutpostLoop
         internal void Tick(float seconds, bool clearedFinalWave)
         {
             if (Paused || Outcome != 0) return;
-            Elapsed += seconds;
+            elapsed += seconds;
             if (clearedFinalWave) Outcome = 1;
         }
 

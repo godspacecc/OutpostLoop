@@ -2,10 +2,10 @@ using UnityEngine;
 
 namespace OutpostLoop
 {
-    public enum ExpansionKind { Empty, Extractor, Barracks, Barricade, Turret, Headquarters }
+    public enum ExpansionKind { Empty, Extractor, Barracks, Barricade, Turret, Headquarters, Shelter }
 
     /// <summary>预览与提交共用同一组拒绝原因。</summary>
-    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar, NotVisible }
+    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar, NotVisible, MissingResearch }
 
     /// <summary>建造侧栏与扣费规则共用的设施参数。</summary>
     public readonly struct ExpansionSpec
@@ -34,7 +34,8 @@ namespace OutpostLoop
         public int Health { get; private set; }
         public float ConstructionLeft { get; private set; }
         public bool IsUnderConstruction => ConstructionLeft > 0;
-        public int HealthLimit => IsUnderConstruction ? SpecFor(Kind).Health / 2 : SpecFor(Kind).Health;
+        public int HealthLimit => IsUnderConstruction ? spec.Health / 2 : spec.Health;
+        private ExpansionSpec spec;
         public int NodeIndex { get; internal set; } = -1;
         public float ProductionLeft { get; private set; }
         public float ProductionDuration => Kind == ExpansionKind.Extractor ? GathererSeconds : GuardSeconds;
@@ -53,12 +54,13 @@ namespace OutpostLoop
             ExpansionKind.Barracks => new ExpansionSpec(250, 72, 8, 2, 2),
             ExpansionKind.Barricade => new ExpansionSpec(100, 150, 3, 2, 1),
             ExpansionKind.Turret => new ExpansionSpec(300, 90, 6, 1, 1),
+            ExpansionKind.Shelter => new ExpansionSpec(20, 100, 4, 2, 2),
             _ => default
         };
 
-        internal void Place(ExpansionKind kind, RectInt footprint, int node)
+        internal void Place(ExpansionKind kind, RectInt footprint, int node, ExpansionSpec specification)
         {
-            var spec = SpecFor(kind);
+            spec = specification;
             Kind = kind;
             Footprint = footprint;
             Health = spec.Health / 2;
@@ -77,8 +79,14 @@ namespace OutpostLoop
         {
             ConstructionLeft = ConstructionLeft <= seconds + .00001f ? 0 : ConstructionLeft - seconds;
             if (IsUnderConstruction) return;
-            var spec = SpecFor(Kind);
             Health += spec.Health - spec.Health / 2;
+        }
+
+        /// <summary>科技在炮塔完工前生效，同时保留工地此前受到的损伤。</summary>
+        internal void ReinforceTurret()
+        {
+            Health += (120 - spec.Health) / 2;
+            spec = new ExpansionSpec(spec.Cost, 120, spec.BuildSeconds, spec.Size.x, spec.Size.y);
         }
 
         internal void BeginProduction() => ProductionLeft = ProductionDuration;
@@ -101,6 +109,7 @@ namespace OutpostLoop
             Health = Mathf.Max(0, Health - damage);
             if (Health != 0) return;
             Kind = ExpansionKind.Empty;
+            spec = default;
             NodeIndex = -1;
             ConstructionLeft = ProductionLeft = WorkClock = 0;
             PersonnelWaiting = false;

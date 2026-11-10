@@ -44,7 +44,7 @@ namespace OutpostLoop.Tests
                 GameObject.Find("PrimaryAction").GetComponent<Button>().onClick.Invoke();
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 architecture.GetModel<LocalizationModel>().SetLanguageCode("en");
-                Assert.AreEqual("Start session  →", GameObject.Find("PrimaryAction").GetComponentInChildren<Text>().text);
+                Assert.AreEqual("Defense trial  →", GameObject.Find("PrimaryAction").GetComponentInChildren<Text>().text);
                 architecture.GetSystem<DisplayPreviewTransaction>().BeginPreview("1280x720", FullScreenMode.Windowed);
                 ctrl.Hide();
                 Assert.IsFalse(architecture.GetSystem<DisplayPreviewTransaction>().IsActive);

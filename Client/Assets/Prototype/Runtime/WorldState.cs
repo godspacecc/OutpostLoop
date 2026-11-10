@@ -29,7 +29,7 @@ namespace OutpostLoop
     }
 
     /// <summary>统一推进网格占地、单位行动和波次，不依赖视图。</summary>
-    public sealed class WorldState
+    public sealed partial class WorldState
     {
         private const int ExpansionLimit = 4, TurretLimit = 4;
         private const float HeadquartersSight = 20;
@@ -45,7 +45,7 @@ namespace OutpostLoop
         public Vector2 CommanderPosition { get; private set; }
         public RectInt? Headquarters { get; private set; }
         public Vector2 BasePosition => Headquarters.HasValue ? BattleGrid.Center(Headquarters.Value) : CommanderPosition;
-        public int Wave => waves.Wave;
+        public int Wave => Expedition == null ? waves.Wave : expeditionWave;
         public int WaitingEnemies => waves.Waiting;
         public BattleVisibility Vision { get; }
         public IReadOnlyList<EnemySighting> Sightings { get; }
@@ -72,9 +72,13 @@ namespace OutpostLoop
 
         /// <summary>保留两侧候选区，矿点按种子生成，玩家不带建筑及生产人员进场。</summary>
         public WorldState(int seed, PrototypeConfig config = null, int startingFunds = PrototypeWallet.InitialFunds)
+            : this(seed, config, startingFunds, null) { }
+
+        private WorldState(int seed, PrototypeConfig config, int startingFunds, ExpeditionState expedition)
         {
             Seed = seed;
             Run = new RunState(config, startingFunds);
+            Expedition = expedition;
             var buildings = new ExpansionSite[ExpansionLimit + TurretLimit];
             for (int i = 0; i < buildings.Length; i++) buildings[i] = new ExpansionSite();
             Buildings = Array.AsReadOnly(buildings);
@@ -83,6 +87,12 @@ namespace OutpostLoop
             Sightings = sightings.AsReadOnly();
             var random = new System.Random(seed);
             waves = new WaveDirector(random);
+            if (Expedition != null)
+            {
+                InitializeExpedition(random);
+                RefreshVision();
+                return;
+            }
             var west = new RectInt(-5, -1, 3, 3);
             var east = new RectInt(3, -1, 3, 3);
             for (int i = 0; i < Rules.ResourceNodeCount; i++)
@@ -107,7 +117,17 @@ namespace OutpostLoop
         private void RefreshVision()
         {
             sightSources.Clear();
-            if (!Headquarters.HasValue) sightSources.Add(new SightSource(CommanderPosition, 16));
+            if (Expedition != null)
+            {
+                sightSources.Add(new SightSource(CommanderPosition, 16));
+                foreach (var site in Buildings)
+                {
+                    if (site.IsUnderConstruction) continue;
+                    if (site.Kind == ExpansionKind.Shelter) sightSources.Add(new SightSource(site.Position, 12));
+                    if (site.Kind == ExpansionKind.Turret) sightSources.Add(new SightSource(site.Position, Mathf.Max(16, TurretRange)));
+                }
+            }
+            else if (!Headquarters.HasValue) sightSources.Add(new SightSource(CommanderPosition, 16));
             else
             {
                 sightSources.Add(new SightSource(BasePosition, HeadquartersSight));
@@ -156,7 +176,7 @@ namespace OutpostLoop
         private void RefreshNavigation()
         {
             navigation.Rebuild(Buildings, Headquarters);
-            coreAttackRoute = navigation.Field(Headquarters.Value, Rules.AttackRadius);
+            if (Headquarters.HasValue) coreAttackRoute = navigation.Field(Headquarters.Value, Rules.AttackRadius);
             Array.Clear(buildingRoutes, 0, buildingRoutes.Length);
         }
 
@@ -227,11 +247,13 @@ namespace OutpostLoop
         public PlacementIssue PreviewPlacement(ExpansionKind kind, Vector2Int cell, bool rotated, int moving,
             out RectInt footprint, out int node)
         {
-            var spec = ExpansionSite.SpecFor(kind);
+            var spec = BuildingSpec(kind);
             var size = rotated && kind == ExpansionKind.Barricade ? new Vector2Int(spec.Size.y, spec.Size.x) : spec.Size;
             footprint = new RectInt(kind == ExpansionKind.Headquarters ? cell - Vector2Int.one : cell, size);
             node = -1;
             if (!Active || spec.Health == 0) return PlacementIssue.Inactive;
+            if (Expedition != null) return PreviewExpeditionPlacement(kind, footprint, moving, spec);
+            if (kind == ExpansionKind.Shelter) return PlacementIssue.Inactive;
             if (kind == ExpansionKind.Headquarters) return PreviewHeadquarters(cell, footprint);
             if (!Headquarters.HasValue) return PlacementIssue.Inactive;
             if (!Vision.Covers(footprint)) return PlacementIssue.NotVisible;
@@ -327,9 +349,9 @@ namespace OutpostLoop
                 RefreshVision();
                 return PlacementIssue.None;
             }
-            var spec = ExpansionSite.SpecFor(kind);
+            var spec = BuildingSpec(kind);
             if (!Run.TrySpend(spec.Cost)) return PlacementIssue.InsufficientStock;
-            Buildings[FreeSlot(kind)].Place(kind, footprint, node);
+            Buildings[FreeSlot(kind)].Place(kind, footprint, node, spec);
             RefreshNavigation();
             return PlacementIssue.None;
         }
@@ -457,7 +479,14 @@ namespace OutpostLoop
         {
             foreach (var site in Buildings)
             {
-                if (site.IsUnderConstruction) { site.AdvanceConstruction(dt); continue; }
+                if (site.IsUnderConstruction)
+                {
+                    if (Expedition != null && site.Kind == ExpansionKind.Turret && site.HealthLimit < 60 &&
+                        site.ConstructionLeft <= dt + .00001f && Expedition.Has(ExpeditionTech.Reinforcement))
+                        site.ReinforceTurret();
+                    site.AdvanceConstruction(dt);
+                    continue;
+                }
                 if (site.ProductionLeft > 0) site.AdvanceProduction(dt);
                 if (site.PersonnelWaiting) TryDeploy(site);
                 switch (site.Kind)
@@ -513,7 +542,9 @@ namespace OutpostLoop
                 closest = distance;
                 target = i;
             }
-            if (target < 0 && BattleGrid.DistanceTo(Headquarters.Value, enemy.Position) <= Rules.AttackRadius) target = -1;
+            if (target < 0 && (Expedition == null
+                ? BattleGrid.DistanceTo(Headquarters.Value, enemy.Position) <= Rules.AttackRadius
+                : (CommanderPosition - enemy.Position).sqrMagnitude <= 1.5f * 1.5f)) target = -1;
             if (enemy.AttackSite != target)
             {
                 enemy.AttackSite = target;
@@ -536,12 +567,13 @@ namespace OutpostLoop
                     LastDestroyedKind = kind;
                     LastDestroyedPosition = site.Position;
                     LastDestroyedAt = Run.Elapsed;
+                    if (Expedition != null && kind == ExpansionKind.Shelter) CancelResearch();
                     RefreshNavigation();
                 }
                 return;
             }
 
-            var field = coreAttackRoute;
+            var field = Expedition == null ? coreAttackRoute : CommanderAttackField();
             var cell = BattleGrid.Cell(enemy.Position);
             if (navigation.Distance(field, cell) < 0)
             {
@@ -562,7 +594,7 @@ namespace OutpostLoop
                 EnemyKind.Siege => 1f + .05f * enemy.Wave,
                 _ => Rules.EnemySpeed + enemy.Wave * Rules.EnemySpeedPerWave
             };
-            navigation.Follow(field, ref enemy.Position, enemy.Walker, speed * dt);
+            navigation.Follow(field, ref enemy.Position, enemy.Walker, speed * dt, finishSegment: Expedition != null);
         }
 
         /// <summary>单步有上限。终局同时检查活敌和待进场敌群。</summary>
@@ -570,6 +602,7 @@ namespace OutpostLoop
         {
             if (!Active || float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0) return;
             float dt = Mathf.Min(seconds, Rules.MaxStep);
+            if (Expedition != null) { StepExpedition(dt); return; }
             if (!Headquarters.HasValue)
             {
                 if (!commanderTarget.HasValue) return;
