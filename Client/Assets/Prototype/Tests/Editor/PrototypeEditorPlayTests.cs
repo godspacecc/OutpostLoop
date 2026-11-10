@@ -223,6 +223,11 @@ namespace OutpostLoop.Tests
             Assert.IsFalse(camera.orthographic);
             var home = camera.transform.position;
             var facing = camera.transform.rotation;
+            var inputSettings = InputSystem.settings;
+            var previousEditorBehavior = inputSettings.editorInputBehaviorInPlayMode;
+            var previousBackgroundBehavior = inputSettings.backgroundBehavior;
+            inputSettings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            inputSettings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
             var keyboard = InputSystem.AddDevice<Keyboard>();
             var mouse = InputSystem.AddDevice<Mouse>();
             try
@@ -243,6 +248,14 @@ namespace OutpostLoop.Tests
                 InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, 120) });
                 for (int i = 0; i < 3; i++) yield return null;
                 Assert.Less(camera.transform.position.y, height, "滚轮向前应拉近镜头");
+                float firstZoomHeight = camera.transform.position.y;
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, 120) });
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.Less(camera.transform.position.y, firstZoomHeight, "近景应支持继续拉近");
+                float closeHeight = camera.transform.position.y;
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, -120) });
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.Greater(camera.transform.position.y, closeHeight, "滚轮向后应拉远镜头");
 
                 var world = controller.World;
                 var node = world.Nodes[1];
@@ -287,6 +300,8 @@ namespace OutpostLoop.Tests
             {
                 InputSystem.RemoveDevice(keyboard);
                 InputSystem.RemoveDevice(mouse);
+                inputSettings.editorInputBehaviorInPlayMode = previousEditorBehavior;
+                inputSettings.backgroundBehavior = previousBackgroundBehavior;
             }
             yield return new ExitPlayMode();
         }

@@ -20,9 +20,9 @@ namespace OutpostLoop
         // 透视镜头绕地面焦点转动；拉到最远时重新收拢到基地中心以框住全图。
         private const float CameraPitch = 55f;
         private const float CameraFieldOfView = 40f;
-        private const float DefaultMapView = .34f;
-        private const float ClosestMapView = .24f;
-        private const float ZoomPerNotch = .1f;
+        private const float DefaultMapView = .23f;
+        private const float ClosestMapView = .16f;
+        private const float ZoomFactorPerNotch = 1.2f;
         private const float ScrollUnitsPerNotch = 120f;
         private const float CameraPanSpeed = 24f;
         private const float CameraTurnPerPixel = .25f;
@@ -400,9 +400,10 @@ namespace OutpostLoop
                 orbitingCamera |= pointerOnBattlefield && mouse.middleButton.wasPressedThisFrame;
                 if (orbitingCamera)
                     cameraYaw = Mathf.Repeat(cameraYaw + mouse.delta.x.ReadValue() * CameraTurnPerPixel / HudScale, 360f);
-                if (pointerOnBattlefield)
-                    mapView = Mathf.Clamp(mapView - mouse.scroll.y.ReadValue() / ScrollUnitsPerNotch * ZoomPerNotch,
-                        ClosestMapView, 1f);
+                // 按当前距离等比例缩放，让近景也能分多步拉近。
+                float wheelNotches = mouse.scroll.y.ReadValue() / ScrollUnitsPerNotch;
+                if (pointerOnBattlefield && wheelNotches != 0)
+                    mapView = Mathf.Clamp(mapView * Mathf.Pow(ZoomFactorPerNotch, -wheelNotches), ClosestMapView, 1f);
             }
 
             if (keyboard != null)
