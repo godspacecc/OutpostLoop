@@ -27,7 +27,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(0, left.Wave);
             Assert.AreEqual(PlacementIssue.Inactive, left.Build(ExpansionKind.Turret, new Vector2Int(1, 0)));
             Assert.AreEqual(PlacementIssue.Occupied, left.Build(ExpansionKind.Headquarters, Vector2Int.zero));
-            Assert.AreEqual(PlacementIssue.CommanderTooFar, left.Build(ExpansionKind.Headquarters, new Vector2Int(-10, 0)));
+            Assert.AreEqual(PlacementIssue.CommanderTooFar, left.Build(ExpansionKind.Headquarters, new Vector2Int(-6, -2)));
             BuildBase(left, -4);
             BuildBase(right, 4);
             Assert.AreEqual(new Vector2(-8, 0), left.BasePosition);
@@ -35,8 +35,8 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(100, left.Run.Health);
             Assert.AreEqual(800, left.Run.Funds);
             Assert.AreEqual(PlacementIssue.Limit, left.Build(ExpansionKind.Headquarters, new Vector2Int(4, 0)));
-            Assert.AreEqual(PlacementIssue.Outside, left.PreviewPlacement(ExpansionKind.Turret, new Vector2Int(9, 0), false, -1, out _, out _));
-            Assert.AreNotEqual(PlacementIssue.Outside, right.PreviewPlacement(ExpansionKind.Turret, new Vector2Int(9, 0), false, -1, out _, out _));
+            Assert.AreEqual(PlacementIssue.NotVisible, left.PreviewPlacement(ExpansionKind.Turret, new Vector2Int(9, 0), false, -1, out _, out _));
+            Assert.AreNotEqual(PlacementIssue.NotVisible, right.PreviewPlacement(ExpansionKind.Turret, new Vector2Int(9, 0), false, -1, out _, out _));
         }
 
         [Test]

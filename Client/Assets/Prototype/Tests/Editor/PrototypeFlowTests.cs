@@ -30,9 +30,9 @@ namespace OutpostLoop.Tests
                 var miningCell = FindMiningPlacement(world, center + (economy ? Vector2.up : Vector2.left) * 5);
                 Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Extractor, miningCell));
                 int station = world.FindBuilding(miningCell);
-                Debug.Log($"V07 {seed} {strategy} base={center} first={(economy ? "mine" : "turret")} station={world.Buildings[station].Position}");
+                Debug.Log($"V08 {seed} {strategy} base={center} first={(economy ? "mine" : "turret")} station={world.Buildings[station].Position}");
                 int support = -1;
-                float lastArrival = float.NegativeInfinity;
+                int sightingsRead = 0;
                 bool firstDelivery = false, firstClear = false, thirdClear = false;
                 for (int step = 0; step < 10000 && run.Outcome == 0; step++)
                 {
@@ -62,13 +62,10 @@ namespace OutpostLoop.Tests
                         }
                         if (support >= 0 && world.Buildings[support].CanProduce) world.Produce(support);
                     }
-                    if (world.LastArrival > lastArrival && world.Enemies.Count > 0)
+                    while (sightingsRead < world.Sightings.Count)
                     {
-                        lastArrival = world.LastArrival;
-                        var approach = world.Enemies[world.Enemies.Count - 1].Position - center;
-                        int sector = Mathf.Abs(approach.x) >= Mathf.Abs(approach.y)
-                            ? (approach.x < 0 ? 0 : 1) : (approach.y > 0 ? 2 : 3);
-                        if (!economy && support >= 0) world.DeploySquad(support, sector);
+                        var sighting = world.Sightings[sightingsRead++];
+                        if (!economy && support >= 0) world.DeploySquad(support, sighting.Sector);
                     }
                     if (!firstClear && world.Kills >= 10)
                     {
@@ -107,7 +104,8 @@ namespace OutpostLoop.Tests
                 var cell = new Vector2Int(x, y);
                 if (world.PreviewPlacement(ExpansionKind.Extractor, cell, false, -1, out var footprint, out int node) != PlacementIssue.None) continue;
                 var position = BattleGrid.Center(footprint);
-                int mineCount = world.Nodes.Count(mine => (mine.Position - position).sqrMagnitude <= 12 * 12);
+                int mineCount = world.Nodes.Where((mine, index) => world.KnownOreRemaining(index) > 0 &&
+                    (mine.Position - position).sqrMagnitude <= 12 * 12).Count();
                 float score = Mathf.Min(5, mineCount) * 6f - Vector2.Distance(position, preferred) -
                     .4f * Vector2.Distance(position, world.Nodes[node].Position);
                 if (score <= best) continue;
@@ -122,7 +120,7 @@ namespace OutpostLoop.Tests
         {
             var layout = string.Join(",", world.Buildings.Where(site => site.Kind != ExpansionKind.Empty)
                 .Select(site => $"{site.Kind}@{site.Footprint.min}"));
-            Debug.Log($"V07 {world.Seed} {strategy} {stage}: t={world.Run.Elapsed:F1} funds={world.Run.Funds} " +
+            Debug.Log($"V08 {world.Seed} {strategy} {stage}: t={world.Run.Elapsed:F1} funds={world.Run.Funds} " +
                 $"hp={world.Run.Health} kills={world.Kills} outcome={world.Run.Outcome} loss={world.LastDestroyedKind} layout={layout}");
         }
 

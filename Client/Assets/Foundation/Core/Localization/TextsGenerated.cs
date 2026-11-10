@@ -215,12 +215,12 @@ namespace Game
         /// </summary>
         public static string Headquartersbuilt => Loc.T("HeadquartersBuilt");
         /// <summary>
-        /// 右键移动指挥员。
+        /// 右键移动指挥员探索矿点。
         /// 按 V 选择主基地并落位。
         /// </summary>
         public static string Headquartersguide => Loc.T("HeadquartersGuide");
         /// <summary>
-        /// 此处缺少可用的采集站位置
+        /// 请先侦察附近矿点，并为采集站留出位置
         /// </summary>
         public static string Headquartersnomine => Loc.T("HeadquartersNoMine");
         /// <summary>
@@ -269,6 +269,10 @@ namespace Game
         /// </summary>
         public static string Mineremaining(object arg0) => Loc.T("MineRemaining", arg0);
         /// <summary>
+        /// 上次看到的矿点余量 {0}
+        /// </summary>
+        public static string Mineremembered(object arg0) => Loc.T("MineRemembered", arg0);
+        /// <summary>
         /// 无可用矿点
         /// </summary>
         public static string Mineunavailable => Loc.T("MineUnavailable");
@@ -316,6 +320,10 @@ namespace Game
         /// 可以在这里建造
         /// </summary>
         public static string Placementnone => Loc.T("PlacementNone");
+        /// <summary>
+        /// 该位置不在视野内
+        /// </summary>
+        public static string Placementnotvisible => Loc.T("PlacementNotVisible");
         /// <summary>
         /// 占地内有建筑、单位或资源
         /// </summary>
@@ -717,13 +725,13 @@ namespace Game
         /// </summary>
         public static string Victoryfinalwave => Loc.T("VictoryFinalWave");
         /// <summary>
-        /// 第 {0} 波敌人已入场
-        /// </summary>
-        public static string Wavearrived(object arg0) => Loc.T("WaveArrived", arg0);
-        /// <summary>
-        /// 已入场波次 {0}/{1}
+        /// 已发现波次 {0}/{1}
         /// </summary>
         public static string Waveprogress(object arg0, object arg1) => Loc.T("WaveProgress", arg0, arg1);
+        /// <summary>
+        /// {1}发现第 {0} 波敌军
+        /// </summary>
+        public static string Wavespotted(object arg0, object arg1) => Loc.T("WaveSpotted", arg0, arg1);
         /// <summary>
         /// 胜场保存失败，可以重试结算
         /// </summary>

@@ -385,7 +385,7 @@ namespace OutpostLoop
             {
                 string instruction = Loc.T(controller.PlacementKind == ExpansionKind.Barricade ? "PlacementRotate" : "PlacementControls");
                 if (controller.HoverIssue.HasValue) instruction += "\n" + controller.PlacementMessage(controller.HoverIssue.Value);
-                if (controller.HoverResource >= 0) instruction += "\n" + ResourceStatus(world.Nodes[controller.HoverResource]);
+                if (controller.HoverResource >= 0) instruction += "\n" + controller.ResourceStatus(controller.HoverResource);
                 SetText(constructionDetail, instruction);
                 return;
             }
@@ -399,7 +399,7 @@ namespace OutpostLoop
                 : site.PersonnelWaiting ? Loc.T("PersonnelExitBlocked")
                 : site.Kind switch
                 {
-                    ExpansionKind.Extractor => (site.NodeIndex < 0 ? Loc.T("MineUnavailable") : ResourceStatus(world.Nodes[site.NodeIndex])) +
+                    ExpansionKind.Extractor => (site.NodeIndex < 0 ? Loc.T("MineUnavailable") : controller.ResourceStatus(site.NodeIndex)) +
                         (site.Personnel != null ? "\n" + Loc.T("GathererCargo", site.Personnel.Cargo, run.Capacity) : ""),
                     ExpansionKind.Barracks => Loc.T(site.Personnel != null ? "ExpansionGarrisonReady" : "ExpansionGarrisonIdle"),
                     ExpansionKind.Barricade => Loc.T("ExpansionBarricadeHint"),
@@ -408,7 +408,6 @@ namespace OutpostLoop
             SetText(constructionDetail, Loc.T("ExpansionStatus", BuildingName(site.Kind), site.Health, site.HealthLimit, status));
         }
 
-        private static string ResourceStatus(ResourceNode node) => Loc.T("MineRemaining", node.Remaining);
 
         /// <summary>资金不足时禁用实际按钮，价格仍然可读。</summary>
         private static void SetAffordable(Text label, bool affordable)

@@ -13,12 +13,15 @@ namespace OutpostLoop
         public float Health;
         public EnemyKind Kind { get; }
         public int Wave { get; }
+        // 用于合并同一路的首次发现，同时让侧路独立报告。
+        internal int ArrivalGroup { get; }
         public float LastAttackTime { get; internal set; } = float.NegativeInfinity;
 
-        public EnemyState(EnemyKind kind = EnemyKind.Standard, int wave = 0)
+        public EnemyState(EnemyKind kind = EnemyKind.Standard, int wave = 0, int arrivalGroup = -1)
         {
             Kind = kind;
             Wave = wave;
+            ArrivalGroup = arrivalGroup;
         }
         internal readonly RouteWalker Walker = new RouteWalker();
         internal int AttackSite = -2;
@@ -39,7 +42,6 @@ namespace OutpostLoop
         private int lastDirection = -1;
         internal int Wave { get; private set; }
         internal int Waiting { get; private set; }
-        internal float LastArrival { get; private set; } = float.NegativeInfinity;
 
         internal WaveDirector(System.Random random) => this.random = random;
 
@@ -54,26 +56,21 @@ namespace OutpostLoop
                 lastDirection = direction;
                 var main = MainGroups[Mathf.Min(Wave, MainGroups.Length) - 1];
                 AddGroup(start, direction, main[0], main[1], main[2]);
-                if (Wave == 4) AddGroup(start + 5, direction ^ 1, 5, 2, 1);
-                if (Wave == 6) AddGroup(start + 5, direction ^ 1, 7, 3, 2);
+                if (Wave == 4) AddGroup(start + 5, direction ^ 1, 5, 2, 1, true);
+                if (Wave == 6) AddGroup(start + 5, direction ^ 1, 7, 3, 2, true);
             }
 
             for (int i = 0; i < groups.Count && enemies.Count < rules.MaxEnemies;)
             {
                 var group = groups[i];
                 if (group.Start > time) { i++; continue; }
-                if (!group.Arrived)
-                {
-                    group.Arrived = true;
-                    LastArrival = time;
-                }
                 while (group.Remaining > 0 && enemies.Count < rules.MaxEnemies)
                 {
                     var kind = group.Take();
                     var direction = Directions[group.Direction];
                     float angle = Mathf.Atan2(direction.y, direction.x) + ((float)random.NextDouble() - .5f) * rules.SpawnSpread;
                     float radius = Mathf.Min(rules.MapRadius - 2.5f, rules.SpawnRadius + (float)random.NextDouble() * rules.SpawnRadiusRange);
-                    enemies.Add(new EnemyState(kind, group.Wave)
+                    enemies.Add(new EnemyState(kind, group.Wave, group.Id)
                     {
                         Position = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius,
                         Health = kind switch
@@ -90,9 +87,9 @@ namespace OutpostLoop
             }
         }
 
-        private void AddGroup(float start, int direction, int standard, int fast, int siege)
+        private void AddGroup(float start, int direction, int standard, int fast, int siege, bool secondary = false)
         {
-            groups.Add(new Group(start, direction, Wave, standard, fast, siege));
+            groups.Add(new Group(start, direction, Wave, (Wave - 1) * 2 + (secondary ? 1 : 0), standard, fast, siege));
             Waiting += standard + fast + siege;
         }
 
@@ -100,16 +97,16 @@ namespace OutpostLoop
         private sealed class Group
         {
             internal readonly float Start;
-            internal readonly int Direction, Wave;
-            internal bool Arrived;
+            internal readonly int Direction, Wave, Id;
             private int standard, fast, siege;
             internal int Remaining => standard + fast + siege;
 
-            internal Group(float start, int direction, int wave, int standard, int fast, int siege)
+            internal Group(float start, int direction, int wave, int id, int standard, int fast, int siege)
             {
                 Start = start;
                 Direction = direction;
                 Wave = wave;
+                Id = id;
                 this.standard = standard;
                 this.fast = fast;
                 this.siege = siege;

@@ -6,12 +6,33 @@ using OutpostLoop.Config;
 namespace OutpostLoop
 {
     /// <summary>有限资源节点的规则状态。</summary>
-    public sealed class ResourceNode { public Vector2 Position; public int Remaining; }
+    public sealed class ResourceNode
+    {
+        public Vector2 Position;
+        public int Remaining;
+        // 负数表示尚未被侦察。
+        internal int ObservedRemaining = -1;
+    }
+
+    /// <summary>记录一路敌军被首次目击时的波次、相对基地的方向与局时。</summary>
+    public readonly struct EnemySighting
+    {
+        public readonly int Wave, Sector;
+        public readonly float Time;
+
+        internal EnemySighting(int wave, int sector, float time)
+        {
+            Wave = wave;
+            Sector = sector;
+            Time = time;
+        }
+    }
 
     /// <summary>统一推进网格占地、单位行动和波次，不依赖视图。</summary>
     public sealed class WorldState
     {
         private const int ExpansionLimit = 4, TurretLimit = 4;
+        private const float HeadquartersSight = 20;
         private static readonly Vector2[] Posts = { Vector2.left, Vector2.right, Vector2.up, Vector2.down };
         public RunState Run { get; }
         public int Seed { get; }
@@ -26,7 +47,9 @@ namespace OutpostLoop
         public Vector2 BasePosition => Headquarters.HasValue ? BattleGrid.Center(Headquarters.Value) : CommanderPosition;
         public int Wave => waves.Wave;
         public int WaitingEnemies => waves.Waiting;
-        public float LastArrival => waves.LastArrival;
+        public BattleVisibility Vision { get; }
+        public IReadOnlyList<EnemySighting> Sightings { get; }
+        public int DiscoveredWave { get; private set; }
         public int Kills { get; private set; }
         public float LastMineDepletedAt { get; private set; } = float.NegativeInfinity;
         public ExpansionKind LastDestroyedKind { get; private set; }
@@ -42,6 +65,10 @@ namespace OutpostLoop
         private readonly int[][] buildingRoutes = new int[ExpansionLimit + TurretLimit][];
         private Vector2Int? miningPreviewCell;
         private bool miningPreviewValid;
+        private readonly List<SightSource> sightSources = new List<SightSource>();
+        private readonly HashSet<int> seenGroups = new HashSet<int>();
+        private readonly List<EnemySighting> sightings = new List<EnemySighting>();
+        private float TurretRange => Rules.ShotRange + Run.Levels[1] * Rules.ShotRangePerLevel;
 
         /// <summary>保留两侧候选区，矿点按种子生成，玩家不带建筑及生产人员进场。</summary>
         public WorldState(int seed, PrototypeConfig config = null, int startingFunds = PrototypeWallet.InitialFunds)
@@ -52,6 +79,8 @@ namespace OutpostLoop
             for (int i = 0; i < buildings.Length; i++) buildings[i] = new ExpansionSite();
             Buildings = Array.AsReadOnly(buildings);
             navigation = new BattleNavigation(Rules.MapRadius);
+            Vision = new BattleVisibility(Rules.MapRadius);
+            Sightings = sightings.AsReadOnly();
             var random = new System.Random(seed);
             waves = new WaveDirector(random);
             var west = new RectInt(-5, -1, 3, 3);
@@ -70,6 +99,56 @@ namespace OutpostLoop
                     Nodes.Add(new ResourceNode { Position = position, Remaining = 480 });
                     break;
                 }
+            }
+            RefreshVision();
+        }
+
+        /// <summary>仅由实际在场的己方单位与完工建筑提供视野。</summary>
+        private void RefreshVision()
+        {
+            sightSources.Clear();
+            if (!Headquarters.HasValue) sightSources.Add(new SightSource(CommanderPosition, 16));
+            else
+            {
+                sightSources.Add(new SightSource(BasePosition, HeadquartersSight));
+                foreach (var site in Buildings)
+                {
+                    if (site.IsUnderConstruction) continue;
+                    if (site.Kind == ExpansionKind.Extractor || site.Kind == ExpansionKind.Barracks)
+                        sightSources.Add(new SightSource(site.Position, 10));
+                    if (site.Kind == ExpansionKind.Turret)
+                        sightSources.Add(new SightSource(site.Position, Mathf.Max(16, TurretRange)));
+                    if (site.Personnel != null)
+                        sightSources.Add(new SightSource(site.Personnel.Position, site.Kind == ExpansionKind.Extractor ? 12 : 14));
+                }
+            }
+            Vision.Observe(sightSources);
+            foreach (var node in Nodes)
+            {
+                if (!Vision.IsVisible(node.Position)) continue;
+                if ((node.ObservedRemaining > 0) != (node.Remaining > 0)) miningPreviewCell = null;
+                node.ObservedRemaining = node.Remaining;
+            }
+        }
+
+        /// <summary>未发现时返回负数，离开视野后只返回最后观测的余量。</summary>
+        public int KnownOreRemaining(int index)
+        {
+            var node = Nodes[index];
+            return Vision.IsVisible(node.Position) ? node.Remaining : node.ObservedRemaining;
+        }
+
+        /// <summary>以进入视野的实际位置相对于主基地计算来向，每路只发现一次。</summary>
+        private void RecordSightings(float time)
+        {
+            foreach (var enemy in Enemies)
+            {
+                if (enemy.Health <= 0 || enemy.ArrivalGroup < 0 || !Vision.IsVisible(enemy.Position) ||
+                    !seenGroups.Add(enemy.ArrivalGroup)) continue;
+                var offset = enemy.Position - BasePosition;
+                int sector = Mathf.Abs(offset.x) >= Mathf.Abs(offset.y) ? (offset.x < 0 ? 0 : 1) : (offset.y > 0 ? 2 : 3);
+                sightings.Add(new EnemySighting(enemy.Wave, sector, time));
+                DiscoveredWave = Mathf.Max(DiscoveredWave, enemy.Wave);
             }
         }
 
@@ -155,6 +234,7 @@ namespace OutpostLoop
             if (!Active || spec.Health == 0) return PlacementIssue.Inactive;
             if (kind == ExpansionKind.Headquarters) return PreviewHeadquarters(cell, footprint);
             if (!Headquarters.HasValue) return PlacementIssue.Inactive;
+            if (!Vision.Covers(footprint)) return PlacementIssue.NotVisible;
             if (moving >= 0 && (kind != ExpansionKind.Turret || moving >= Buildings.Count ||
                 Buildings[moving].Kind != ExpansionKind.Turret || Buildings[moving].IsUnderConstruction))
                 return PlacementIssue.MissingTurret;
@@ -179,6 +259,7 @@ namespace OutpostLoop
         private PlacementIssue PreviewHeadquarters(Vector2Int cell, RectInt footprint)
         {
             if (Headquarters.HasValue) return PlacementIssue.Limit;
+            if (!Vision.Covers(footprint)) return PlacementIssue.NotVisible;
             var center = BattleGrid.Center(cell);
             if (center.sqrMagnitude > 28 * 28 || !InBuildArea(footprint, center)) return PlacementIssue.Outside;
             if ((center - CommanderPosition).sqrMagnitude > 12 * 12) return PlacementIssue.CommanderTooFar;
@@ -198,10 +279,14 @@ namespace OutpostLoop
             var origin = BattleGrid.Cell(center);
             const int radius = BattleGrid.BuildRadius / BattleGrid.CellSize;
             var possible = new RectInt(origin - Vector2Int.one * radius, Vector2Int.one * (2 * radius + 1));
+            var futureSight = new SightSource(center, HeadquartersSight);
             foreach (var cell in possible.allPositionsWithin)
             {
                 var station = new RectInt(cell, size);
                 if (!InBuildArea(station, center) || station.Overlaps(headquarters) || MineralOccupies(station)) continue;
+                bool visible = true;
+                foreach (var part in station.allPositionsWithin) visible &= futureSight.Sees(BattleGrid.Center(part));
+                if (!visible) continue;
                 int node = FindResourceFor(BattleGrid.Center(station));
                 if (node < 0 || headquarters.Contains(BattleGrid.Cell(Nodes[node].Position))) continue;
                 // 选址阶段只有这两个小型占地，矿点和站点外侧都位于连通的地图圆盘内。
@@ -218,7 +303,7 @@ namespace OutpostLoop
             {
                 var node = Nodes[i];
                 float distance = (node.Position - position).sqrMagnitude;
-                if (node.Remaining <= 0 || distance > closest || (nearest >= 0 && distance == closest)) continue;
+                if (KnownOreRemaining(i) <= 0 || distance > closest || (nearest >= 0 && distance == closest)) continue;
                 bool bound = false;
                 foreach (var site in Buildings) bound |= site.NodeIndex == i;
                 if (bound) continue;
@@ -239,6 +324,7 @@ namespace OutpostLoop
                 commanderTarget = null;
                 Run.EstablishBase();
                 RefreshNavigation();
+                RefreshVision();
                 return PlacementIssue.None;
             }
             var spec = ExpansionSite.SpecFor(kind);
@@ -255,6 +341,8 @@ namespace OutpostLoop
             if (issue != PlacementIssue.None) return issue;
             Buildings[source].Relocate(footprint);
             RefreshNavigation();
+            RefreshVision();
+            RecordSightings(Run.Elapsed);
             return PlacementIssue.None;
         }
 
@@ -327,7 +415,7 @@ namespace OutpostLoop
             foreach (var enemy in Enemies)
             {
                 float distance = (enemy.Position - origin).sqrMagnitude;
-                if (enemy.Health <= 0 || distance >= closest) continue;
+                if (enemy.Health <= 0 || distance >= closest || !Vision.IsVisible(enemy.Position)) continue;
                 closest = distance;
                 target = enemy;
             }
@@ -349,7 +437,6 @@ namespace OutpostLoop
                 }
                 Follow(squad, Rules.MoveSpeed * dt);
             }
-            Fire(site, squad.Position, Rules.ShotRange * .75f, Rules.ShotDamage / 2f, dt);
         }
 
         /// <summary>生产完毕后，从设施的空闲相邻格出场。</summary>
@@ -376,19 +463,27 @@ namespace OutpostLoop
                 switch (site.Kind)
                 {
                     case ExpansionKind.Extractor:
-                        if (site.NodeIndex < 0 || Nodes[site.NodeIndex].Remaining <= 0)
+                        if (site.NodeIndex < 0 || KnownOreRemaining(site.NodeIndex) <= 0)
                             site.NodeIndex = FindResourceFor(site.Position);
                         StepGatherer(site, dt);
                         break;
                     case ExpansionKind.Barracks:
                         StepSquad(site, dt);
                         break;
-                    case ExpansionKind.Turret:
-                        int level = Run.Levels[1];
-                        Fire(site, site.Position, Rules.ShotRange + level * Rules.ShotRangePerLevel,
-                            (Rules.ShotDamage + level * Rules.ShotDamagePerLevel) / 2f, dt);
-                        break;
                 }
+            }
+        }
+
+        /// <summary>友军移动并刷新视野后，再按当前可见目标交战。</summary>
+        private void StepDefenders(float dt)
+        {
+            foreach (var site in Buildings)
+            {
+                if (site.IsUnderConstruction) continue;
+                if (site.Kind == ExpansionKind.Turret)
+                    Fire(site, site.Position, TurretRange, (Rules.ShotDamage + Run.Levels[1] * Rules.ShotDamagePerLevel) / 2f, dt);
+                if (site.Kind == ExpansionKind.Barracks && site.Personnel != null)
+                    Fire(site, site.Personnel.Position, Rules.ShotRange * .75f, Rules.ShotDamage / 2f, dt);
             }
         }
 
@@ -481,17 +576,24 @@ namespace OutpostLoop
                 var target = commanderTarget.Value;
                 CommanderPosition = Vector2.MoveTowards(CommanderPosition, target, Rules.MoveSpeed * dt);
                 if (CommanderPosition.Equals(target)) commanderTarget = null;
+                RefreshVision();
                 return;
             }
             waves.Step(Run.Elapsed + dt, Rules.WaveTimes, Enemies, Rules);
             StepBuildings(dt);
+            RefreshVision();
+            RecordSightings(Run.Elapsed + dt);
+            StepDefenders(dt);
             for (int i = Enemies.Count - 1; i >= 0; i--)
             {
                 var enemy = Enemies[i];
                 if (enemy.Health <= 0) { Enemies.RemoveAt(i); Kills++; continue; }
                 StepEnemy(enemy, dt);
-                if (Run.Outcome != 0) return;
+                if (Run.Outcome != 0) break;
             }
+            RefreshVision();
+            RecordSightings(Run.Elapsed + dt);
+            if (Run.Outcome != 0) return;
             Run.Tick(dt, Wave == Rules.WaveTimes.Count && Enemies.Count == 0 && waves.Waiting == 0);
         }
     }

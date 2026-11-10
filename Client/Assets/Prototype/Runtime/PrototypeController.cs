@@ -48,8 +48,11 @@ namespace OutpostLoop
         private readonly Renderer[] placementTiles = new Renderer[9];
         private Material validPlacement, invalidPlacement;
         private Material[] enemyMaterials;
+        private Material visibleOre, rememberedOre;
+        private BattleFogPreview fog;
+        private readonly List<Transform> boundaries = new List<Transform>();
         private readonly List<ExpansionPreview> expansionModels = new List<ExpansionPreview>();
-        private readonly List<Transform> resources = new List<Transform>();
+        private readonly List<Renderer> resources = new List<Renderer>();
         private readonly List<Transform> enemies = new List<Transform>();
         private readonly List<Material> materials = new List<Material>();
         private bool started, shop;
@@ -198,7 +201,8 @@ namespace OutpostLoop
             initialized=false;
             if(worldRoot!=null){worldRoot.gameObject.SetActive(false);Release(worldRoot.gameObject);}
             foreach(var material in materials)Release(material);
-            materials.Clear();resources.Clear();enemies.Clear();
+            materials.Clear();resources.Clear();enemies.Clear();boundaries.Clear();
+            ReleaseFog();
             expansionModels.Clear();
             CloseConstruction();
             ConfirmingRestart = false;
@@ -212,6 +216,9 @@ namespace OutpostLoop
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
             var cyan=Mat(new Color(0.15f,0.88f,0.84f));var rust=Mat(new Color(0.52f,0.24f,0.17f));
             Shape("Ground",worldRoot,PrimitiveType.Cube,new Vector3(0,-0.3f,0),new Vector3(96,0.5f,96),ground);
+            fog = new BattleFogPreview(worldRoot, World.Vision);
+            visibleOre = cyan;
+            rememberedOre = Mat(new Color(.34f, .45f, .43f));
             headquarters = new GameObject("Headquarters").transform;
             headquarters.SetParent(worldRoot, false);
             Shape("HomePad", headquarters, PrimitiveType.Cube, new Vector3(0, -.02f, 0), new Vector3(5.9f, .12f, 5.9f), dark);
@@ -236,7 +243,7 @@ namespace OutpostLoop
             {
                 var item = Shape("Mineral", worldRoot, PrimitiveType.Cylinder, At(node.Position, .6f),
                     new Vector3(1.6f, .6f, 1.6f), cyan);
-                resources.Add(item);
+                resources.Add(item.GetComponent<Renderer>());
             }
             for(int i=0;i<World.Run.Config.MaxEnemies;i++)
             {
@@ -247,7 +254,7 @@ namespace OutpostLoop
             for(int i=0;i<32;i++)
             {
                 float angle=i*Mathf.PI/16;var pos=new Vector3(Mathf.Cos(angle)*48,1.5f,Mathf.Sin(angle)*48);
-                Shape("Boundary",worldRoot,PrimitiveType.Cube,pos,new Vector3(2,3,2),stone);
+                boundaries.Add(Shape("Boundary",worldRoot,PrimitiveType.Cube,pos,new Vector3(2,3,2),stone));
             }
             feedback="";SyncView();initialized=true;
         }
@@ -880,12 +887,22 @@ namespace OutpostLoop
             headquarters.gameObject.SetActive(built);
             headquarters.position = At(World.BasePosition, 0);
             buildRange.position = At(World.BasePosition, 0);
-            for(int i=0;i<resources.Count;i++)resources[i].gameObject.SetActive(World.Nodes[i].Remaining>0);
+            fog.Sync(World.Vision);
+            for (int i = 0; i < resources.Count; i++)
+            {
+                var model = resources[i];
+                model.gameObject.SetActive(World.KnownOreRemaining(i) > 0);
+                if (model.gameObject.activeSelf)
+                    model.sharedMaterial = World.Vision.IsVisible(World.Nodes[i].Position) ? visibleOre : rememberedOre;
+            }
+            foreach (var boundary in boundaries)
+                boundary.gameObject.SetActive(World.Vision.IsExplored(new Vector2(boundary.position.x, boundary.position.z)));
             for (int i = 0; i < expansionModels.Count; i++)
                 expansionModels[i].Show(World.Buildings[i], World.Run.Elapsed);
             for(int i=0;i<enemies.Count;i++)
             {
-                bool active=i<World.Enemies.Count;enemies[i].gameObject.SetActive(active);
+                bool active = i < World.Enemies.Count && EnemyVisible(World.Enemies[i]);
+                enemies[i].gameObject.SetActive(active);
                 if (!active) continue;
                 var state = World.Enemies[i];
                 var model = enemies[i];
@@ -903,6 +920,8 @@ namespace OutpostLoop
             }
         }
 
+        private bool EnemyVisible(EnemyState enemy) => enemy.Health > 0 && World.Vision.IsVisible(enemy.Position);
+
         private static Vector3 At(Vector2 point, float height) => new Vector3(point.x, height, point.y);
 
         private void OnGUI()
@@ -919,7 +938,7 @@ namespace OutpostLoop
             GUI.Label(new Rect(30,61,300,28),Game.Loc.T("FundsStock", s.Funds));
             if (World.Headquarters.HasValue)
             {
-                GUI.Label(new Rect(30,92,300,28),Game.Loc.T("WaveProgress", World.Wave, s.Config.WaveTimes.Count));
+                GUI.Label(new Rect(30,92,300,28),Game.Loc.T("WaveProgress", World.DiscoveredWave, s.Config.WaveTimes.Count));
                 GUI.Label(new Rect(30,122,300,28),Game.Loc.T("HudHealth", s.Health, World.Kills));
             }
             else GUI.Label(new Rect(30,92,300,62),Game.Loc.T("HeadquartersGuide"));
@@ -969,7 +988,7 @@ namespace OutpostLoop
             int target = -1;
             for (int i = 0; i < World.Nodes.Count; i++)
             {
-                if (World.Nodes[i].Remaining <= 0) continue;
+                if (World.KnownOreRemaining(i) <= 0) continue;
                 Vector2 center = onMap ? MapPoint(World.Nodes[i].Position) : ResourceScreenPoint(i);
                 float distance = (center - cursor).sqrMagnitude;
                 if (distance >= closest) continue;
@@ -981,7 +1000,7 @@ namespace OutpostLoop
 
         private Vector2 ResourceScreenPoint(int index)
         {
-            var point = gameCamera.WorldToScreenPoint(resources[index].position);
+            var point = gameCamera.WorldToScreenPoint(resources[index].transform.position);
             return new Vector2(point.x, Screen.height - point.y) / HudScale;
         }
 
@@ -990,9 +1009,8 @@ namespace OutpostLoop
         {
             int index = PickResource(screenPoint);
             if (index < 0) return;
-            var target = World.Nodes[index];
-            string title = Game.Loc.T("MineRemaining", target.Remaining);
-            const float width = 250, height = 30;
+            string title = ResourceStatus(index);
+            const float width = 300, height = 30;
             var cursor = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
             float x = Mathf.Clamp(cursor.x - width * .5f, 0, Screen.width / HudScale - width);
             float y = Mathf.Max(0, cursor.y - height - 12);
@@ -1005,13 +1023,20 @@ namespace OutpostLoop
             GUI.backgroundColor = oldTint;
         }
 
+        internal string ResourceStatus(int index) =>
+            Game.Loc.T(World.Vision.IsVisible(World.Nodes[index].Position) ? "MineRemaining" : "MineRemembered",
+                World.KnownOreRemaining(index));
+
         private void DrawBattleFeedback()
         {
             float time = World.Run.Elapsed;
             float y = 188;
-            if (time - World.LastArrival < 5)
+            for (int i = World.Sightings.Count - 1; i >= 0; i--)
             {
-                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T("WaveArrived", World.Wave));
+                var sighting = World.Sightings[i];
+                if (time - sighting.Time >= 5) break;
+                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T("WaveSpotted", sighting.Wave,
+                    Game.Loc.T(PrototypeOverlayView.SectorNames[sighting.Sector])));
                 y += 34;
             }
             if (time - World.LastDestroyedAt < 5)
@@ -1043,13 +1068,16 @@ namespace OutpostLoop
         private void DrawMap()
         {
             var old=GUI.color;GUI.Box(MapRect,Game.Loc.T("HudMap"));
+            float span = World.Vision.Span * 2;
+            GUI.DrawTexture(new Rect(MapCenter.x - span, MapCenter.y - span, span * 2, span * 2), fog.Texture);
             for (int i = 0; i < World.Nodes.Count; i++)
             {
                 var node = World.Nodes[i];
-                if (node.Remaining > 0) Dot(node.Position, Color.cyan, 4);
+                if (World.KnownOreRemaining(i) > 0)
+                    Dot(node.Position, World.Vision.IsVisible(node.Position) ? Color.cyan : new Color(.34f, .54f, .52f), 4);
             }
             foreach (var enemy in World.Enemies)
-                Dot(enemy.Position, enemy.Kind == EnemyKind.Fast ? new Color(1, .61f, .13f) : Color.red,
+                if (EnemyVisible(enemy)) Dot(enemy.Position, enemy.Kind == EnemyKind.Fast ? new Color(1, .61f, .13f) : Color.red,
                     enemy.Kind == EnemyKind.Siege ? 7 : 5);
             foreach (var site in World.Buildings)
                 if (site.Kind != ExpansionKind.Empty) Dot(site.Position, site.Kind switch
@@ -1073,8 +1101,18 @@ namespace OutpostLoop
             GUI.DrawTexture(new Rect(center.x - size / 2, center.y - size / 2, size, size), Texture2D.whiteTexture);
             GUI.color = Color.white;
         }
+        private void ReleaseFog()
+        {
+            if (fog == null) return;
+            Release(fog.Texture);
+            Release(fog.Mesh);
+            Release(fog.Material);
+            fog = null;
+        }
+
         private void OnDestroy()
         {
+            ReleaseFog();
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Detach(this);
             hud?.Detach(this);

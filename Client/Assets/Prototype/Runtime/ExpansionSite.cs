@@ -5,7 +5,7 @@ namespace OutpostLoop
     public enum ExpansionKind { Empty, Extractor, Barracks, Barricade, Turret, Headquarters }
 
     /// <summary>预览与提交共用同一组拒绝原因。</summary>
-    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar }
+    public enum PlacementIssue { None, Inactive, Outside, Occupied, Limit, NoResource, InsufficientStock, MissingTurret, CommanderTooFar, NotVisible }
 
     /// <summary>建造侧栏与扣费规则共用的设施参数。</summary>
     public readonly struct ExpansionSpec

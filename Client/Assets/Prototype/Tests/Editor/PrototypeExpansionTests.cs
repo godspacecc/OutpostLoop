@@ -21,7 +21,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(PlacementIssue.InsufficientStock, world.Build(ExpansionKind.Barracks, free));
             Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Barricade, world.Headquarters.Value.min));
             Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Barricade, mine));
-            Assert.AreEqual(PlacementIssue.Outside, world.Build(ExpansionKind.Barricade, new Vector2Int(12, 0)));
+            Assert.AreEqual(PlacementIssue.NotVisible, world.Build(ExpansionKind.Barricade, new Vector2Int(12, 0)));
             world.Run.Paused = true;
             Assert.AreEqual(PlacementIssue.Inactive, world.Build(ExpansionKind.Barricade, free));
             Assert.AreEqual(100, world.Run.Funds);
@@ -162,21 +162,21 @@ namespace OutpostLoop.Tests
         {
             var world = WithBase(12);
             world.Nodes.Clear();
-            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(-1, 8), true));
-            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(0, 9)));
-            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(1, 7), true));
-            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(-1, 7)));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(-1, 7), true));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(0, 8)));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(1, 6), true));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(-1, 6)));
             Advance(world, 3.3f);
-            var enemy = new EnemyState(EnemyKind.Siege) { Position = Vector2.up * 16, Health = 1000 };
+            var enemy = new EnemyState(EnemyKind.Siege) { Position = Vector2.up * 14, Health = 1000 };
             world.Enemies.Add(enemy);
             Advance(world, 1.2f);
             Assert.AreEqual(145, world.Buildings[0].Health);
-            Assert.AreEqual(Vector2.up * 16, enemy.Position);
+            Assert.AreEqual(Vector2.up * 14, enemy.Position);
             Advance(world, 30);
             Assert.AreEqual(ExpansionKind.Empty, world.Buildings[0].Kind);
             Assert.AreEqual(ExpansionKind.Barricade, world.LastDestroyedKind);
             Advance(world, 95);
-            Assert.Less(enemy.Position.y, 12);
+            Assert.Less(enemy.Position.y, 10);
         }
     }
 }
