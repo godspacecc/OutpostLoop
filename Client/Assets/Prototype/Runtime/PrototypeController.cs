@@ -20,8 +20,8 @@ namespace OutpostLoop
         // 透视镜头绕地面焦点转动；拉到最远时重新收拢到基地中心以框住全图。
         private const float CameraPitch = 55f;
         private const float CameraFieldOfView = 40f;
-        private const float DefaultMapView = .6f;
-        private const float ClosestMapView = .45f;
+        private const float DefaultMapView = .34f;
+        private const float ClosestMapView = .24f;
         private const float ZoomPerNotch = .1f;
         private const float ScrollUnitsPerNotch = 120f;
         private const float CameraPanSpeed = 24f;
