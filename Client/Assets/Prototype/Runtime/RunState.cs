@@ -60,10 +60,14 @@ namespace OutpostLoop
             if (route == 2) Health = System.Math.Min(Config.InitialHealth + Levels[2] * Config.HealthPerLevel, Health + Config.UpgradeRepair);
             return true;
         }
+        /// <summary>建造按钮、落位校验和扣费使用相同的双资源库存条件。</summary>
+        internal bool CanAfford(int scrap, int energy) =>
+            scrap >= 0 && energy >= 0 && Scrap >= scrap && Energy >= energy;
+
         /// <summary>在调用方校验操作状态后，原子扣除两种基地库存。</summary>
         internal bool TrySpend(int scrap, int energy)
         {
-            if (Outcome != 0 || scrap < 0 || energy < 0 || Scrap < scrap || Energy < energy) return false;
+            if (Outcome != 0 || !CanAfford(scrap, energy)) return false;
             Scrap -= scrap;
             Energy -= energy;
             return true;

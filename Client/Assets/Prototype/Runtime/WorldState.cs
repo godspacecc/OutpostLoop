@@ -141,7 +141,7 @@ namespace OutpostLoop
                 node = FindResourceFor(BattleGrid.Center(footprint));
                 if (node < 0) return PlacementIssue.NoResource;
             }
-            return Run.Scrap < spec.Scrap || Run.Energy < spec.Energy ? PlacementIssue.InsufficientStock : PlacementIssue.None;
+            return Run.CanAfford(spec.Scrap, spec.Energy) ? PlacementIssue.None : PlacementIssue.InsufficientStock;
         }
 
         private int FindResourceFor(Vector2 position)

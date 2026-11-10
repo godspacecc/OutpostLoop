@@ -73,7 +73,7 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             var walletDirectory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
-                "../../Backup/Artifacts/FirstPlayableV05-20261110/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
+                "../../Backup/Artifacts/ConstructionAffordability-20261110/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
             var wallet = new PrototypeWallet(walletDirectory);
             Game.Game.Interface.RegisterUtility(wallet);
             var run = controller.World.Run;
@@ -132,23 +132,32 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(ClickCell(controller, target));
             Assert.AreEqual(-1, world.FindBuilding(original));
             Assert.AreEqual(4, world.FindBuilding(target));
+            var turretButton = GameObject.Find("BuildTurret").GetComponent<Button>();
+            Assert.IsFalse(turretButton.interactable);
+            Assert.AreEqual(turretButton.image.color.r, turretButton.image.color.g, "库存不足时按钮底色应为灰色");
             Click("BuildTurret");
-            Assert.IsFalse(ClickCell(controller, Vector2Int.zero));
+            yield return null;
+            Assert.IsNull(GameObject.Find("BuildRange"), "点击禁用按钮不应进入选址");
             Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
-            Click("CloseConstruction");
             Assert.IsFalse(run.Paused);
 
             var turretSpec = ExpansionSite.SpecFor(ExpansionKind.Turret);
             int scrap = turretSpec.Scrap - run.Scrap;
             int energy = turretSpec.Energy - run.Energy;
-            for (int i = 0; i < scrap + energy; i++)
+            for (int i = 0; i < scrap + energy - 1; i++)
             {
                 if (run.CargoScrap + run.CargoEnergy == run.Capacity) run.Deposit();
                 Assert.IsTrue(run.Gather(i >= scrap));
             }
             run.Deposit();
             yield return null;
-            Click("OpenConstruction");
+            Assert.AreEqual(turretSpec.Scrap, run.Scrap);
+            Assert.IsFalse(turretButton.interactable, "废料足够但缺一单位能源时仍不可点击");
+            Assert.IsTrue(run.Gather(true));
+            run.Deposit();
+            yield return null;
+            Assert.IsTrue(turretButton.interactable, "库存足够后，无需重开侧栏即可建造");
+            Assert.AreNotEqual(turretButton.image.color.r, turretButton.image.color.g, "恢复可建时恢复原色");
             Click("BuildTurret");
             Assert.AreEqual(turretSpec.Scrap, run.Scrap, "选类型不会扣费");
             Assert.IsTrue(ClickCell(controller, FindPlacement(world, ExpansionKind.Turret)));
@@ -158,6 +167,8 @@ namespace OutpostLoop.Tests
             Assert.IsFalse(model.Find("Turret").gameObject.activeInHierarchy);
             Assert.AreEqual(0, run.Scrap);
             Assert.AreEqual(0, run.Energy);
+            foreach (string kind in new[] { "Extractor", "Barracks", "Barricade", "Turret" })
+                Assert.IsFalse(GameObject.Find("Build" + kind).GetComponent<Button>().interactable, kind);
             Click("CloseConstruction");
             for (int i = 0; i < 62; i++) world.Step(.1f);
             yield return null;

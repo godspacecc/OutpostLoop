@@ -137,6 +137,8 @@ namespace OutpostLoop
     /// <summary>临时玩法窗口复用同一套视图工具，展示逻辑不修改玩法状态。</summary>
     internal sealed class PrototypeOverlayView : BaseUI
     {
+        private static readonly Color ButtonColor = new Color(.23f, .38f, .38f);
+        private static readonly Color LabelColor = new Color(.92f, .97f, .97f);
         private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
         private Text heading, details, actionLabel, feedback, startBriefing;
@@ -350,7 +352,15 @@ namespace OutpostLoop
                 var spec = ExpansionSite.SpecFor(kind);
                 string label = Loc.T("BuildingOption", BuildingName(kind), Loc.T("PreviewCost", spec.Scrap, spec.Energy), spec.BuildSeconds);
                 bool selected = controller.PlacementKind == kind && controller.MovingTurret < 0;
-                SetText(constructionOptions[i], selected ? Loc.T("ExpansionSelected", label) : label);
+                var option = constructionOptions[i];
+                SetText(option, selected ? Loc.T("ExpansionSelected", label) : label);
+                // 保留价格可读，任一种资源不足都用 UGUI 禁用按钮。
+                var button = option.GetComponentInParent<Button>();
+                bool affordable = run.CanAfford(spec.Scrap, spec.Energy);
+                if (button.interactable == affordable) continue;
+                button.interactable = affordable;
+                button.image.color = affordable ? ButtonColor : new Color(.36f, .36f, .36f);
+                option.color = affordable ? LabelColor : new Color(.65f, .65f, .65f);
             }
 
             var site = controller.SelectedBuilding < 0 ? null : world.Buildings[controller.SelectedBuilding];
@@ -507,7 +517,7 @@ namespace OutpostLoop
             label.font = font;
             label.fontSize = fontSize;
             label.alignment = TextAnchor.MiddleCenter;
-            label.color = new Color(.92f,.97f,.97f);
+            label.color = LabelColor;
             label.raycastTarget = false;
             return label;
         }
@@ -517,7 +527,7 @@ namespace OutpostLoop
         {
             var rect = Rect(name, parent, anchor, size, offset);
             var image = rect.gameObject.AddComponent<Image>();
-            image.color = new Color(.23f,.38f,.38f);
+            image.color = ButtonColor;
             var button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.onClick.AddListener(onClick);

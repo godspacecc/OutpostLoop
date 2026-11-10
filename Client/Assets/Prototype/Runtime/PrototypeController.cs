@@ -500,6 +500,8 @@ namespace OutpostLoop
         internal void SelectPlacement(ExpansionKind kind)
         {
             if (!CanBuild || !ConstructionOpen) return;
+            var spec = ExpansionSite.SpecFor(kind);
+            if (!World.Run.CanAfford(spec.Scrap, spec.Energy)) return;
             CancelPlacement();
             SelectedBuilding = -1;
             PlacementKind = kind;
