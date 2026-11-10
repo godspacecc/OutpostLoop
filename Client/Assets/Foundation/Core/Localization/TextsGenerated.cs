@@ -163,8 +163,9 @@ namespace Game
         /// </summary>
         public static string Hudcargo(object arg0, object arg1) => Loc.T("HudCargo", arg0, arg1);
         /// <summary>
-        /// 点击场景或小地图资源点派工 · 滚轮缩放
-        /// 四向按钮调防 · V 建造 · B 升级 · ESC 暂停
+        /// 点击资源点派工 · 四向按钮调防
+        /// 方向键平移 · 中键拖动旋转 · 滚轮缩放 · H 回基地
+        /// V 建造 · B 升级 · ESC 暂停
         /// </summary>
         public static string Hudcontrols => Loc.T("HudControls");
         /// <summary>

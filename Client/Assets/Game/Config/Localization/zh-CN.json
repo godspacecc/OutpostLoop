@@ -78,7 +78,7 @@
   "HudHealth": "基地 {0}   击退 {1}",
   "HudStock": "库存：废料 {0}  能源 {1}",
   "HudCargo": "工人载货 {0} / {1}",
-  "HudControls": "点击场景或小地图资源点派工 · 滚轮缩放\n四向按钮调防 · V 建造 · B 升级 · ESC 暂停",
+  "HudControls": "点击资源点派工 · 四向按钮调防\n方向键平移 · 中键拖动旋转 · 滚轮缩放 · H 回基地\nV 建造 · B 升级 · ESC 暂停",
   "HudMap": "区域地图",
   "ResourceMarkerScrap": "废料",
   "ResourceMarkerEnergy": "能源",

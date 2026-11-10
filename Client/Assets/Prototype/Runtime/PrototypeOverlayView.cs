@@ -249,8 +249,8 @@ namespace OutpostLoop
                 new Vector2(-180,62), new Vector2(1,0), controller.ToggleUpgrade);
             Button(transform, font, "OpenConstruction", Loc.T("ConstructionOpen"), new Vector2(240,64),
                 new Vector2(-460,62), new Vector2(1,0), controller.ToggleConstruction);
-            var guideSize = new Vector2(652, 80);
-            var guide = Rect("CommandGuide", transform, Vector2.zero, guideSize, new Vector2(348, 62));
+            var guideSize = new Vector2(652, 94);
+            var guide = Rect("CommandGuide", transform, Vector2.zero, guideSize, new Vector2(348, 60));
             guide.gameObject.AddComponent<Image>().color = new Color(.08f, .13f, .14f, .9f);
             var guideText = Label(guide, font, "Controls", guideSize, Vector2.zero, 24).gameObject.AddComponent<LocalizedText>();
             guideText.Key = "HudControls";

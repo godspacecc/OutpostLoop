@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using QFramework;
 
 namespace OutpostLoop
@@ -16,11 +17,19 @@ namespace OutpostLoop
         private Transform worldRoot, worker, squad, resourceOrderMark;
         private LineRenderer squadShot;
         private Camera gameCamera;
-        // 镜头始终对准基地，开局突出布防区域，滚轮可拉远到整张地图。
+        // 透视镜头绕地面焦点转动；拉到最远时重新收拢到基地中心以框住全图。
+        private const float CameraPitch = 55f;
+        private const float CameraFieldOfView = 40f;
         private const float DefaultMapView = .6f;
         private const float ClosestMapView = .45f;
         private const float ZoomPerNotch = .1f;
+        private const float ScrollUnitsPerNotch = 120f;
+        private const float CameraPanSpeed = 24f;
+        private const float CameraTurnPerPixel = .25f;
+        private Vector2 cameraFocus;
+        private float cameraYaw;
         private float mapView = DefaultMapView;
+        private bool orbitingCamera;
         // 指挥视图和小地图共用同一套屏幕命中区域。
         private static readonly Rect StatusRect = new Rect(16, 16, 330, 165);
         private static readonly Rect MapRect = new Rect(1050, 18, 210, 235);
@@ -144,10 +153,10 @@ namespace OutpostLoop
             font=Font.CreateDynamicFontFromOSFont("Microsoft YaHei",18);
             var cameraObject=new GameObject("PreviewCamera"); cameraObject.transform.SetParent(transform);
             cameraObject.AddComponent<AudioListener>();
-            gameCamera=cameraObject.AddComponent<Camera>(); gameCamera.orthographic=true;
-            gameCamera.transform.SetPositionAndRotation(new Vector3(0, 32, -14.92f), Quaternion.Euler(65, 0, 0));
+            gameCamera=cameraObject.AddComponent<Camera>();
+            gameCamera.fieldOfView=CameraFieldOfView;
             gameCamera.backgroundColor=groundColor; gameCamera.clearFlags=CameraClearFlags.SolidColor;
-            gameCamera.nearClipPlane=0.1f; gameCamera.farClipPlane=160;
+            gameCamera.nearClipPlane=0.3f;
             var lightObject=new GameObject("PreviewSun"); lightObject.transform.SetParent(transform);
             var light=lightObject.AddComponent<Light>(); light.type=LightType.Directional; light.intensity=1.2f;
             light.transform.rotation=Quaternion.Euler(50,-35,0);
@@ -178,8 +187,9 @@ namespace OutpostLoop
             CloseConstruction();
             WantScrapPack = WantEnergyPack = false;
             SupplyError = null;
-            mapView = DefaultMapView;
             World=session.Begin(++seed,begin); started=begin;shop=false;startupError=null;
+            ResetBattleCamera();
+            UpdateBattleCamera();
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
             var ground=Mat(groundColor);var stone=Mat(new Color(0.37f,0.40f,0.40f));
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
@@ -346,6 +356,7 @@ namespace OutpostLoop
             if(!initialized)return;
             if (UtilityWindowOpen)
             {
+                orbitingCamera = false;
                 CloseConstruction();
                 return;
             }
@@ -357,20 +368,94 @@ namespace OutpostLoop
                 else if (PlacementKind == ExpansionKind.Barricade && Input.GetKeyDown(KeyCode.R)) rotatedPlacement = !rotatedPlacement;
             }
             bool overUI = EventSystem.current?.IsPointerOverGameObject() == true;
-            if (Overlay == PrototypeOverlay.None && !overUI)
-            {
-                if (Input.GetMouseButtonDown(0)) ActOnBattlefield(Input.mousePosition);
-                ChangeMapZoom(Input.mouseScrollDelta.y);
-            }
+            bool playing = Overlay == PrototypeOverlay.None;
+            var mousePosition = (Vector2)Input.mousePosition;
+            if (playing) PollBattleCamera(overUI);
+            else orbitingCamera = false;
+            UpdateBattleCamera();
+            if (playing && !overUI && !orbitingCamera && Input.GetMouseButtonDown(0))
+                ActOnBattlefield(mousePosition);
             SyncView();
-            UpdatePlacementPreview(Input.mousePosition, overUI);
+            UpdatePlacementPreview(mousePosition, overUI);
             RefreshOverlay();
         }
 
-        /// <summary>向前滚动拉近，向后滚动可看到地图全貌。</summary>
-        private void ChangeMapZoom(float wheelDelta)
+        /// <summary>键盘相对当前镜头平移；中键只从战场内开始旋转，松开立即结束。</summary>
+        private void PollBattleCamera(bool overUI)
         {
-            mapView = Mathf.Clamp(mapView - wheelDelta * ZoomPerNotch, ClosestMapView, 1f);
+            var keyboard = Keyboard.current;
+            var mouse = Mouse.current;
+            orbitingCamera = mouse?.middleButton.isPressed == true && orbitingCamera;
+            if (keyboard?.hKey.wasPressedThisFrame == true)
+            {
+                ResetBattleCamera();
+                return;
+            }
+            if (mouse != null)
+            {
+                var position = mouse.position.ReadValue();
+                var hudPoint = new Vector2(position.x, Screen.height - position.y) / HudScale;
+                bool pointerOnBattlefield = !overUI && gameCamera.pixelRect.Contains(position) &&
+                    !MapRect.Contains(hudPoint) && !StatusRect.Contains(hudPoint);
+                orbitingCamera |= pointerOnBattlefield && mouse.middleButton.wasPressedThisFrame;
+                if (orbitingCamera)
+                    cameraYaw = Mathf.Repeat(cameraYaw + mouse.delta.x.ReadValue() * CameraTurnPerPixel / HudScale, 360f);
+                if (pointerOnBattlefield)
+                    mapView = Mathf.Clamp(mapView - mouse.scroll.y.ReadValue() / ScrollUnitsPerNotch * ZoomPerNotch,
+                        ClosestMapView, 1f);
+            }
+
+            if (keyboard != null)
+            {
+                float x = (keyboard.rightArrowKey.isPressed ? 1f : 0f) - (keyboard.leftArrowKey.isPressed ? 1f : 0f);
+                float z = (keyboard.upArrowKey.isPressed ? 1f : 0f) - (keyboard.downArrowKey.isPressed ? 1f : 0f);
+                var movement = Quaternion.Euler(0, cameraYaw, 0) * Vector3.ClampMagnitude(new Vector3(x, 0, z), 1f);
+                cameraFocus += new Vector2(movement.x, movement.z) * (CameraPanSpeed * Time.unscaledDeltaTime);
+            }
+            float panRadius = World.Run.Config.MapRadius * Mathf.InverseLerp(1f, DefaultMapView, mapView);
+            cameraFocus = Vector2.ClampMagnitude(cameraFocus, panRadius);
+        }
+
+        /// <summary>开新局或按 H 时恢复基地中心、默认朝向和缩放。</summary>
+        private void ResetBattleCamera()
+        {
+            cameraFocus = Vector2.zero;
+            cameraYaw = 0;
+            mapView = DefaultMapView;
+            orbitingCamera = false;
+        }
+
+        /// <summary>以基地附近为默认取景，远景按当前朝向框住整个地面。</summary>
+        private void UpdateBattleCamera()
+        {
+            float pitch = CameraPitch * Mathf.Deg2Rad;
+            float tanHalfFov = Mathf.Tan(CameraFieldOfView * .5f * Mathf.Deg2Rad);
+            float tanHalfHorizontalFov = tanHalfFov * gameCamera.aspect;
+            float cosPitch = Mathf.Cos(pitch);
+            float verticalFit = cosPitch + Mathf.Sin(pitch) / tanHalfFov;
+            float horizontalFit = 1f / tanHalfHorizontalFov;
+            horizontalFit = Mathf.Sqrt(horizontalFit * horizontalFit + cosPitch * cosPitch);
+            float radius = World.Run.Config.MapRadius + 2f;
+            float baseDistance = radius * Mathf.Max(verticalFit, horizontalFit);
+            var rotation = Quaternion.Euler(CameraPitch, cameraYaw, 0);
+            float distance = baseDistance * mapView;
+            if (mapView > DefaultMapView)
+            {
+                var worldToView = Quaternion.Inverse(rotation);
+                float fullDistance = baseDistance;
+                float edge = radius + 2f;
+                // 四角在相机空间的深度各不相同，逐角计算进入视锥所需的距离。
+                for (int x = -1; x <= 1; x += 2)
+                for (int z = -1; z <= 1; z += 2)
+                {
+                    var corner = worldToView * new Vector3(x * edge, 0, z * edge);
+                    float requiredDepth = Mathf.Max(Mathf.Abs(corner.x) / tanHalfHorizontalFov, Mathf.Abs(corner.y) / tanHalfFov);
+                    fullDistance = Mathf.Max(fullDistance, requiredDepth - corner.z);
+                }
+                distance += (fullDistance - baseDistance) * Mathf.InverseLerp(DefaultMapView, 1f, mapView);
+            }
+            gameCamera.transform.SetPositionAndRotation(At(cameraFocus, 0) - rotation * Vector3.forward * distance, rotation);
+            gameCamera.farClipPlane = distance + 2f * radius;
         }
 
         /// <summary>主视图或小地图点选同一资源，空白处不改变工人任务。</summary>
@@ -700,7 +785,6 @@ namespace OutpostLoop
                 model.localScale = size + new Vector3(.16f, -.1f, .16f) * (attack * (state.Kind == EnemyKind.Siege ? 2 : 1));
                 model.GetComponent<Renderer>().sharedMaterial = enemyMaterials[(int)state.Kind];
             }
-            gameCamera.orthographicSize = (World.Run.Config.MapRadius + 2) * mapView / Mathf.Min(1, gameCamera.aspect);
         }
 
         private static Vector3 At(Vector2 point, float height) => new Vector3(point.x, height, point.y);

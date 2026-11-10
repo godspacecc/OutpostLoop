@@ -4,6 +4,8 @@ using QFramework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -205,6 +207,87 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(0, new PrototypeWallet(walletDirectory).Coins, "购买后保存剩余余额");
             Assert.AreEqual(PrototypeWallet.ScrapPack, controller.World.Run.Scrap);
             Assert.AreEqual(PrototypeWallet.EnergyPack, controller.World.Run.Energy);
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>从 Boot 通过输入事件移动透视镜头，验证取景、落位投影和暂停门禁。</summary>
+        [UnityTest]
+        public IEnumerator BootBattleCameraOrbitsFramesMapAndPreservesPicking()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            Click("PrimaryAction");
+            var camera = controller.GetComponentInChildren<Camera>();
+            Assert.IsFalse(camera.orthographic);
+            var home = camera.transform.position;
+            var facing = camera.transform.rotation;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var mouse = InputSystem.AddDevice<Mouse>();
+            try
+            {
+                keyboard.MakeCurrent();
+                mouse.MakeCurrent();
+                var center = camera.pixelRect.center;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
+                for (int i = 0; i < 5; i++) yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                Assert.Greater(camera.transform.position.x, home.x, "方向键应平移镜头");
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center }.WithButton(MouseButton.Middle));
+                yield return null;
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, delta = new Vector2(75, 0) }.WithButton(MouseButton.Middle));
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.Greater(Quaternion.Angle(camera.transform.rotation, facing), 1f, "中键横拖应旋转镜头");
+                float height = camera.transform.position.y;
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, 120) });
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.Less(camera.transform.position.y, height, "滚轮向前应拉近镜头");
+
+                var world = controller.World;
+                var node = world.Nodes[1];
+                var resource = new Vector3(node.Position.x, .6f, node.Position.y);
+                Assert.IsTrue(controller.OrderResourceAt(camera.WorldToScreenPoint(resource)));
+                Assert.AreEqual(1, world.ResourceOrder, "旋转后应点中同一个资源节点");
+                for (int i = 0; i < 400 && world.Run.Scrap == 0; i++) world.Step(.1f);
+                Click("OpenConstruction");
+                Click("BuildExtractor");
+                var cell = FindPlacement(world, ExpansionKind.Extractor);
+                Assert.IsTrue(ClickCell(controller, cell), "移动、旋转和缩放后应落在正确地格");
+                Assert.AreEqual(ExpansionKind.Extractor, world.Buildings[world.FindBuilding(cell)].Kind);
+
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, -1200) });
+                for (int i = 0; i < 3; i++) yield return null;
+                float edge = world.Run.Config.MapRadius + 2f;
+                for (int x = -1; x <= 1; x += 2)
+                for (int z = -1; z <= 1; z += 2)
+                {
+                    var corner = camera.WorldToViewportPoint(new Vector3(x * edge, 0, z * edge));
+                    Assert.That(corner.x, Is.InRange(0f, 1f));
+                    Assert.That(corner.y, Is.InRange(0f, 1f));
+                    Assert.Greater(corner.z, 0f);
+                }
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.H));
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.Less(Vector3.Distance(home, camera.transform.position), .001f);
+                Assert.Less(Quaternion.Angle(facing, camera.transform.rotation), .01f);
+
+                Click("OpenPause");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftArrow));
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = center, scroll = new Vector2(0, -120) });
+                for (int i = 0; i < 5; i++) yield return null;
+                Assert.Less(Vector3.Distance(home, camera.transform.position), .001f, "暂停时不能移动或缩放镜头");
+                Click("PrimaryAction");
+                for (int i = 0; i < 5; i++) yield return null;
+                Assert.Less(camera.transform.position.x, home.x);
+                controller.Restart(false);
+                Assert.Less(Vector3.Distance(home, camera.transform.position), .001f, "新局恢复默认镜头");
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                InputSystem.RemoveDevice(mouse);
+            }
             yield return new ExitPlayMode();
         }
 

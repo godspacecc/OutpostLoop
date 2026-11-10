@@ -5,7 +5,8 @@
     "Boot",
     "YooAsset",
     "Unity.ugui",
-    "UniTask"
+    "UniTask",
+    "Unity.InputSystem"
   ],
   "overrideReferences": true,
   "precompiledReferences": ["Newtonsoft.Json.dll"],
