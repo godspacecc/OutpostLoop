@@ -10,46 +10,112 @@ namespace OutpostLoop.Tests
 
         [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
 
-        [Test] public void TwoSeedsCanWinByAssigningWorkersAndSquad()
+        [Test] public void EconomyAndDefenseOpeningsCanWinOnTheSameTwoSeeds()
         {
-            foreach(int seed in new[]{732,733})
+            foreach (int seed in new[] { 732, 733 })
+            foreach (bool economy in new[] { true, false })
             {
-                var w=new WorldState(seed); int purchases=0;
-                int observedWave = 0;
-                for(int step=0;step<7201&&w.Run.Outcome==0;step++)
+                var world = new WorldState(seed);
+                var run = world.Run;
+                bool firstPurchase = false, supportBuilt = false;
+                int extraTurrets = 0, loggedClear = 0;
+                float observedArrival = float.NegativeInfinity;
+                string strategy = economy ? "economy" : "defense";
+                for (int step = 0; step < 7300 && run.Outcome == 0; step++)
                 {
-                    var s = w.Run;
-                    int route = s.Levels[0] == 0 ? 0 : s.Levels[1] < 3 ? 1 : s.Levels[2] < 3 ? 2 : 0;
-                    if (s.Upgrade(route)) purchases++;
-                    if (w.ResourceOrder < 0 && !w.WorkerReturning && s.Levels[route] < 3)
+                    if (!firstPurchase)
                     {
-                        bool needEnergy = s.Energy < s.EnergyCost(route);
-                        int nearest = -1;
-                        float distance = float.PositiveInfinity;
-                        for (int i = 0; i < w.Nodes.Count; i++)
-                        {
-                            var node = w.Nodes[i];
-                            if (node.Remaining <= 0 || node.Energy != needEnergy || node.Position.sqrMagnitude >= distance) continue;
-                            distance = node.Position.sqrMagnitude;
-                            nearest = i;
-                        }
-                        if (nearest >= 0) Assert.IsTrue(w.AssignResource(nearest));
+                        firstPurchase = economy ? TryBuild(world, ExpansionKind.Extractor, Vector2.zero) : run.Upgrade(1);
+                        if (firstPurchase)
+                            Debug.Log($"V05 seed={seed} strategy={strategy} first={(economy ? "extractor" : "firepower")} time={run.Elapsed:F1}");
                     }
-                    if (w.Wave != observedWave && w.Enemies.Count > 0)
+                    if (firstPurchase)
                     {
-                        // 只读取已经进场的敌人，按主要方向反应调防。
-                        observedWave = w.Wave;
-                        var approach = Vector2.zero;
-                        foreach (var enemy in w.Enemies) approach += enemy.Position;
+                        if (run.Levels[1] < 3) run.Upgrade(1);
+                        if (run.Levels[1] >= 2 && !supportBuilt)
+                            supportBuilt = TryBuild(world, economy ? ExpansionKind.Barracks : ExpansionKind.Barricade,
+                                economy ? new Vector2(0, -7) : new Vector2(0, 8));
+                        if (supportBuilt && economy)
+                            for (int i = 0; i < world.Buildings.Count; i++)
+                                if (world.Buildings[i].CanTrain) world.TrainGarrison(i);
+                        if (run.Levels[1] >= 2 && extraTurrets < 2 &&
+                            TryBuild(world, ExpansionKind.Turret, new Vector2(0, extraTurrets == 0 ? 5 : -5))) extraTurrets++;
+                        if (run.Levels[1] == 3 && (run.Health < 75 || extraTurrets >= 2)) run.Upgrade(2);
+                    }
+                    if (world.ResourceOrder < 0 && !world.WorkerReturning)
+                    {
+                        bool needEnergy = firstPurchase && run.Energy < (run.Levels[1] < 3 ? run.EnergyCost(1) : 5);
+                        int nearest = FindNode(world, needEnergy);
+                        if (nearest < 0) nearest = FindNode(world, !needEnergy);
+                        if (nearest >= 0) Assert.IsTrue(world.AssignResource(nearest));
+                    }
+                    if (world.LastArrival > observedArrival && world.Enemies.Count > 0)
+                    {
+                        observedArrival = world.LastArrival;
+                        var approach = world.Enemies[world.Enemies.Count - 1].Position;
                         int sector = Mathf.Abs(approach.x) >= Mathf.Abs(approach.y)
                             ? (approach.x < 0 ? 0 : 1) : (approach.y > 0 ? 2 : 3);
-                        Assert.IsTrue(w.DeploySquad(sector));
+                        Assert.IsTrue(world.DeploySquad(sector));
                     }
-                    w.Step(.1f);
+                    if (loggedClear == 0 && world.Kills >= 10)
+                    {
+                        LogState(world, strategy, "after1");
+                        loggedClear = 1;
+                    }
+                    if (loggedClear == 1 && world.Kills >= 42)
+                    {
+                        LogState(world, strategy, "after3");
+                        loggedClear = 3;
+                    }
+                    world.Step(.1f);
                 }
-                Debug.Log("BALANCE seed="+seed+" outcome="+w.Run.Outcome+" time="+w.Run.Elapsed+" hp="+w.Run.Health+" purchases="+purchases+" kills="+w.Kills);
-                Assert.AreEqual(1,w.Run.Outcome,"seed="+seed);Assert.GreaterOrEqual(purchases,3);
+                LogState(world, strategy, "result");
+                Assert.IsTrue(firstPurchase && supportBuilt, $"seed={seed}, {strategy}");
+                Assert.AreEqual(1, run.Outcome, $"seed={seed}, {strategy}");
+                Assert.AreEqual(120, world.Kills);
             }
+        }
+
+        private static void LogState(WorldState world, string strategy, string stage)
+        {
+            var layout = string.Join(",", System.Linq.Enumerable.Select(
+                System.Linq.Enumerable.Where(world.Buildings, b => b.Kind != ExpansionKind.Empty), b => $"{b.Kind}@{b.Footprint.min}"));
+            Debug.Log($"V05 seed={world.Seed} strategy={strategy} {stage} t={world.Run.Elapsed:F1} " +
+                $"stock={world.Run.Scrap}/{world.Run.Energy} hp={world.Run.Health} kills={world.Kills} " +
+                $"outcome={world.Run.Outcome} lastLoss={world.LastDestroyedKind} layout={layout}");
+        }
+
+        private static int FindNode(WorldState world, bool energy)
+        {
+            int nearest = -1;
+            float distance = float.PositiveInfinity;
+            for (int i = 0; i < world.Nodes.Count; i++)
+            {
+                var node = world.Nodes[i];
+                if (node.Remaining <= 0 || node.Energy != energy || node.Position.sqrMagnitude >= distance) continue;
+                distance = node.Position.sqrMagnitude;
+                nearest = i;
+            }
+            return nearest;
+        }
+
+        private static bool TryBuild(WorldState world, ExpansionKind kind, Vector2 preference)
+        {
+            var spec = ExpansionSite.SpecFor(kind);
+            if (world.Run.Scrap < spec.Scrap || world.Run.Energy < spec.Energy) return false;
+            float best = float.PositiveInfinity;
+            var target = Vector2Int.zero;
+            for (int x = -8; x <= 8; x++)
+            for (int y = -8; y <= 8; y++)
+            {
+                var cell = new Vector2Int(x, y);
+                float distance = (BattleGrid.Center(cell) - preference).sqrMagnitude;
+                if (distance >= best || world.PreviewPlacement(kind, cell, false, -1, out _, out int node) != PlacementIssue.None) continue;
+                if (kind == ExpansionKind.Extractor && world.Nodes[node].Energy) continue;
+                target = cell;
+                best = distance;
+            }
+            return !float.IsPositiveInfinity(best) && world.Build(kind, target) == PlacementIssue.None;
         }
         [Test] public void ControllerRestartReplacesWorldAndKeepsBoundedPool()
         {

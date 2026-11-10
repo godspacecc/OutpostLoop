@@ -7,8 +7,6 @@ namespace OutpostLoop
 {
     /// <summary>临时玩法界面从当前会话推导的显示状态。</summary>
     internal enum PrototypeOverlay { None, Start, Paused, Upgrade, Result }
-    /// <summary>独立建造面板的显示状态。</summary>
-    internal enum ConstructionTab { Closed, Expansion, Turrets }
 
     /// <summary>独立原型表现入口：向玩法系统提交输入、同步临时画面。无旧项目资源。</summary>
     public sealed class PrototypeController : MonoBehaviour
@@ -28,10 +26,11 @@ namespace OutpostLoop
         private static readonly Rect MapRect = new Rect(1050, 18, 210, 235);
         private static readonly Vector2 MapCenter = new Vector2(1155, 140);
         private static float HudScale => Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
-        private readonly List<LineRenderer> turretShots = new List<LineRenderer>();
-        private readonly List<Transform> turretModels = new List<Transform>();
-        private readonly List<Transform> turretWorksites = new List<Transform>();
-        // 每块地复用预建的临时模型，重建时切换显示即可。
+        // 临时选址标记和敌种材质仅属于视图。
+        private Transform placementGhost, bindingMark, buildRange;
+        private readonly Renderer[] placementTiles = new Renderer[4];
+        private Material validPlacement, invalidPlacement;
+        private Material[] enemyMaterials;
         private readonly List<ExpansionPreview> expansionModels = new List<ExpansionPreview>();
         private readonly List<Transform> resources = new List<Transform>();
         private readonly List<Transform> enemies = new List<Transform>();
@@ -43,9 +42,16 @@ namespace OutpostLoop
         internal int SupplyCoins => session.SupplyCoins;
         internal bool VictoryRewardRecorded => session.VictoryRewardRecorded;
         // 面板选中状态与本局建筑所有权分离。
-        internal ConstructionTab BuildTab { get; private set; }
-        internal int SelectedTurretSlot { get; private set; } = -1;
-        internal int SelectedExpansionSite { get; private set; }
+        internal bool ConstructionOpen { get; private set; }
+        internal ExpansionKind PlacementKind { get; private set; }
+        internal int SelectedBuilding { get; private set; } = -1;
+        internal int MovingTurret { get; private set; } = -1;
+        internal bool HasPlacement => PlacementKind != ExpansionKind.Empty;
+        internal PlacementIssue? HoverIssue { get; private set; }
+        internal int HoverResource { get; private set; } = -1;
+        private bool rotatedPlacement;
+        // 避免同一次 Escape 在原型输入和基础热键中各触发一次。
+        private int cancelPlacementFrame = -1;
         private int seed = 731;
         private Font font;
         private string feedback = "";
@@ -116,8 +122,8 @@ namespace OutpostLoop
                 ActionId = Game.HotKeyActionIds.TogglePause,
                 Context = Game.HotKeyContext.Gameplay,
                 Priority = 10,
-                CanExecute = CanTogglePause,
-                Execute = TogglePause
+                CanExecute = () => CanTogglePause() && cancelPlacementFrame != Time.frameCount,
+                Execute = () => { if (HasPlacement) CancelPlacementFromInput(); else TogglePause(); }
             });
 
 
@@ -168,12 +174,8 @@ namespace OutpostLoop
             if(worldRoot!=null){worldRoot.gameObject.SetActive(false);Release(worldRoot.gameObject);}
             foreach(var material in materials)Release(material);
             materials.Clear();resources.Clear();enemies.Clear();
-            turretModels.Clear();
-            turretShots.Clear();
-            turretWorksites.Clear();
             expansionModels.Clear();
             CloseConstruction();
-            SelectedExpansionSite = 0;
             WantScrapPack = WantEnergyPack = false;
             SupplyError = null;
             mapView = DefaultMapView;
@@ -187,27 +189,6 @@ namespace OutpostLoop
             Shape("Shelter",worldRoot,PrimitiveType.Cube,new Vector3(0,1.15f,0),new Vector3(3.6f,2.3f,3),stone);
             Shape("Roof",worldRoot,PrimitiveType.Cube,new Vector3(0,2.5f,0),new Vector3(4,0.5f,3.5f),dark);
             Shape("Door",worldRoot,PrimitiveType.Cube,new Vector3(0,0.8f,-1.55f),new Vector3(0.9f,1.6f,0.1f),amber);
-            for (int i = 0; i < World.Turrets.Count; i++)
-            {
-                var position = World.Turrets[i].Position;
-                var turret = new GameObject("Turret" + i).transform;
-                turret.SetParent(worldRoot, false);
-                turret.localPosition = new Vector3(position.x, 0, position.y);
-                turret.localRotation = Quaternion.LookRotation(new Vector3(position.x, 0, position.y));
-                Shape("Mount", turret, PrimitiveType.Cylinder, new Vector3(0,.5f,0), new Vector3(1.5f,.5f,1.5f), stone);
-                Shape("Head", turret, PrimitiveType.Cube, new Vector3(0,1.3f,0), new Vector3(.8f,.7f,.8f), dark);
-                Shape("Barrel", turret, PrimitiveType.Cube, new Vector3(0,1.3f,.7f), new Vector3(.2f,.2f,1), amber);
-                var shot = turret.gameObject.AddComponent<LineRenderer>();
-                shot.sharedMaterial = amber;
-                shot.positionCount = 2;
-                shot.startWidth = .1f;
-                shot.endWidth = .04f;
-                shot.enabled = false;
-                turretModels.Add(turret);
-                turretShots.Add(shot);
-                turretWorksites.Add(Shape("TurretWorksite" + i, worldRoot, PrimitiveType.Cube, At(position, .16f),
-                    new Vector3(1.55f, .24f, 1.55f), amber));
-            }
             worker = Shape("Worker", worldRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(1.1f, .9f, 1.1f), amber);
             squad = new GameObject("DefenseSquad").transform;
             squad.SetParent(worldRoot, false);
@@ -223,6 +204,17 @@ namespace OutpostLoop
             resourceOrderMark = Shape("ResourceOrder", worldRoot, PrimitiveType.Cylinder, Vector3.zero,
                 new Vector3(2.6f, .08f, 2.6f), amber);
             CreateExpansionModels(stone, cyan, blue, rust, amber);
+            validPlacement = Mat(new Color(.23f, .91f, .35f));
+            invalidPlacement = Mat(new Color(.94f, .26f, .20f));
+            placementGhost = new GameObject("PlacementFootprint").transform;
+            placementGhost.SetParent(worldRoot, false);
+            for (int i = 0; i < placementTiles.Length; i++)
+                placementTiles[i] = Shape("GridCell", placementGhost, PrimitiveType.Cube, Vector3.zero,
+                    new Vector3(1.88f, .13f, 1.88f), validPlacement).GetComponent<Renderer>();
+            bindingMark = Shape("PlacementResource", worldRoot, PrimitiveType.Cylinder, Vector3.zero, new Vector3(3, .06f, 3), cyan);
+            buildRange = CreateBuildRange(cyan);
+            CancelPlacement();
+            enemyMaterials = new[] { rust, amber, Mat(new Color(.62f, .17f, .31f)) };
             foreach(var node in World.Nodes)
             {
                 var item=Shape(node.Energy?"Energy":"Scrap",worldRoot,node.Energy?PrimitiveType.Cube:PrimitiveType.Cylinder,
@@ -244,63 +236,90 @@ namespace OutpostLoop
             feedback="";SyncView();initialized=true;
         }
 
-        /// <summary>外围建筑用独立临时几何体区分功能，炮位仍走原有表现。</summary>
+        /// <summary>每座建筑复用按用途区分的临时几何体。</summary>
         private void CreateExpansionModels(Material pad, Material extractor, Material barracks, Material barricade, Material worksite)
         {
-            for (int i = 0; i < World.ExpansionSites.Count; i++)
+            for (int i = 0; i < World.Buildings.Count; i++)
             {
-                var root = new GameObject("ExpansionSite" + i).transform;
+                var root = new GameObject("Building" + i).transform;
                 root.SetParent(worldRoot, false);
-                root.localPosition = At(World.ExpansionSites[i].Position, 0);
-                root.localRotation = Quaternion.LookRotation(root.localPosition);
-                Shape("Plot", root, PrimitiveType.Cube, new Vector3(0, .05f, 0), new Vector3(4, .2f, 4), pad);
-                var foundation = Shape("ExpansionWorksite", root, PrimitiveType.Cube, new Vector3(0, .24f, 0),
-                    new Vector3(3f, .24f, 2.3f), worksite);
-                var station = Shape("Extractor", root, PrimitiveType.Cylinder, new Vector3(0, 1.1f, 0),
-                    new Vector3(2.25f, 1, 2.25f), extractor);
-                var quarters = Shape("Barracks", root, PrimitiveType.Cube, new Vector3(0, 1.15f, 0),
-                    new Vector3(2.8f, 2.2f, 1.8f), barracks);
-                var wall = Shape("Barricade", root, PrimitiveType.Cube, new Vector3(0, .95f, .25f),
-                    new Vector3(3.6f, 1.8f, .65f), barricade);
-                var guard = Shape("Garrison", root, PrimitiveType.Capsule, new Vector3(1.35f, .8f, -1.65f),
-                    new Vector3(.85f, .8f, .85f), barracks);
+                var foundation = Shape("Worksite", root, PrimitiveType.Cube, new Vector3(0, .24f, 0), Vector3.one, worksite);
+                var station = Shape("Extractor", root, PrimitiveType.Cylinder, new Vector3(0, 1.1f, 0), new Vector3(2.25f, 1, 2.25f), extractor);
+                var quarters = Shape("Barracks", root, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(2.8f, 2.2f, 1.8f), barracks);
+                var wall = Shape("Barricade", root, PrimitiveType.Cube, new Vector3(0, .95f, 0), Vector3.one, barricade);
+                var turret = new GameObject("Turret").transform;
+                turret.SetParent(root, false);
+                Shape("Mount", turret, PrimitiveType.Cylinder, new Vector3(0, .4f, 0), new Vector3(1.5f, .4f, 1.5f), pad);
+                Shape("Head", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(.8f, .6f, .8f), pad);
+                Shape("Barrel", turret, PrimitiveType.Cube, new Vector3(0, 1.15f, .7f), new Vector3(.2f, .2f, 1), worksite);
+                var guard = Shape("Garrison", root, PrimitiveType.Capsule, Vector3.zero, new Vector3(.85f, .8f, .85f), barracks);
                 var shot = root.gameObject.AddComponent<LineRenderer>();
-                shot.sharedMaterial = barracks;
+                shot.sharedMaterial = worksite;
                 shot.positionCount = 2;
                 shot.startWidth = .13f;
                 shot.endWidth = .05f;
-                expansionModels.Add(new ExpansionPreview(foundation, station, quarters, wall, guard, shot));
+                expansionModels.Add(new ExpansionPreview(root, foundation, station, quarters, wall, turret, guard, shot));
             }
         }
 
-        /// <summary>把单块地的建筑、训练状态与射击反馈映射到预建对象。</summary>
+        /// <summary>选址时显示中央基地周围的施工范围。</summary>
+        private Transform CreateBuildRange(Material material)
+        {
+            var ring = new GameObject("BuildRange").transform;
+            ring.SetParent(worldRoot, false);
+            var line = ring.gameObject.AddComponent<LineRenderer>();
+            line.sharedMaterial = material;
+            line.loop = true;
+            line.positionCount = 96;
+            line.startWidth = line.endWidth = .09f;
+            for (int i = 0; i < line.positionCount; i++)
+            {
+                float angle = i * Mathf.PI * 2 / line.positionCount;
+                line.SetPosition(i, At(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * BattleGrid.BuildRadius, .04f));
+            }
+            return ring;
+        }
+
         private sealed class ExpansionPreview
         {
-            private readonly Transform worksite, extractor, barracks, barricade, garrison;
+            private readonly Transform root, worksite, extractor, barracks, barricade, turret, garrison;
             private readonly LineRenderer shot;
 
-            internal ExpansionPreview(Transform worksite, Transform extractor, Transform barracks, Transform barricade, Transform garrison,
-                LineRenderer shot)
+            internal ExpansionPreview(Transform root, Transform worksite, Transform extractor, Transform barracks,
+                Transform barricade, Transform turret, Transform garrison, LineRenderer shot)
             {
+                this.root = root;
                 this.worksite = worksite;
                 this.extractor = extractor;
                 this.barracks = barracks;
                 this.barricade = barricade;
+                this.turret = turret;
                 this.garrison = garrison;
                 this.shot = shot;
             }
 
             internal void Show(ExpansionSite site, float time)
             {
+                root.gameObject.SetActive(site.Kind != ExpansionKind.Empty);
+                if (site.Kind == ExpansionKind.Empty) return;
+                root.localPosition = At(site.Position, 0);
                 bool building = site.IsUnderConstruction;
+                var width = (Vector2)site.Footprint.size * BattleGrid.CellSize;
+                worksite.localScale = new Vector3(width.x - .18f, .24f, width.y - .18f);
+                barricade.localScale = new Vector3(width.x - .2f, 1.8f, width.y - .2f);
                 worksite.gameObject.SetActive(building);
                 extractor.gameObject.SetActive(!building && site.Kind == ExpansionKind.Extractor);
                 barracks.gameObject.SetActive(!building && site.Kind == ExpansionKind.Barracks);
                 barricade.gameObject.SetActive(!building && site.Kind == ExpansionKind.Barricade);
+                bool isTurret = !building && site.Kind == ExpansionKind.Turret;
+                turret.gameObject.SetActive(isTurret);
                 garrison.gameObject.SetActive(site.HasGarrison);
+                if (site.HasGarrison) garrison.position = At(site.GarrisonPosition, .8f);
                 shot.enabled = time - site.LastShotTime < .12f;
                 if (!shot.enabled) return;
-                shot.SetPosition(0, garrison.position);
+                var direction = site.LastShotTarget - site.Position;
+                if (isTurret && direction.sqrMagnitude > 0) turret.localRotation = Quaternion.LookRotation(At(direction, 0));
+                shot.SetPosition(0, isTurret ? turret.position + Vector3.up * 1.15f + turret.forward : garrison.position);
                 shot.SetPosition(1, At(site.LastShotTarget, .8f));
             }
         }
@@ -332,12 +351,19 @@ namespace OutpostLoop
             }
             if(Input.GetKeyDown(KeyCode.B)) ToggleUpgrade();
             if (Input.GetKeyDown(KeyCode.V)) ToggleConstruction();
-            if (Overlay == PrototypeOverlay.None && EventSystem.current?.IsPointerOverGameObject() != true)
+            if (HasPlacement)
             {
-                if (Input.GetMouseButtonDown(0)) OrderResourceAt(Input.mousePosition);
+                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)) CancelPlacementFromInput();
+                else if (PlacementKind == ExpansionKind.Barricade && Input.GetKeyDown(KeyCode.R)) rotatedPlacement = !rotatedPlacement;
+            }
+            bool overUI = EventSystem.current?.IsPointerOverGameObject() == true;
+            if (Overlay == PrototypeOverlay.None && !overUI)
+            {
+                if (Input.GetMouseButtonDown(0)) ActOnBattlefield(Input.mousePosition);
                 ChangeMapZoom(Input.mouseScrollDelta.y);
             }
             SyncView();
+            UpdatePlacementPreview(Input.mousePosition, overUI);
             RefreshOverlay();
         }
 
@@ -460,101 +486,152 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        /// <summary>建造入口与暂停升级独立，并保留玩家本局最后选择的地块。</summary>
+        private bool CanBuild => initialized && Overlay == PrototypeOverlay.None && !UtilityWindowOpen;
+
         internal void ToggleConstruction()
         {
             if (!CanBuild) return;
-            if (BuildTab != ConstructionTab.Closed)
-            {
-                CloseConstruction();
-                return;
-            }
-            BuildTab = ConstructionTab.Expansion;
+            if (ConstructionOpen) CloseConstruction();
+            else ConstructionOpen = true;
+            RefreshOverlay();
+        }
+
+        /// <summary>侧栏选择只进入选址，地图左键才提交订单。</summary>
+        internal void SelectPlacement(ExpansionKind kind)
+        {
+            if (!CanBuild || !ConstructionOpen) return;
+            CancelPlacement();
+            SelectedBuilding = -1;
+            PlacementKind = kind;
+            RefreshOverlay();
+        }
+
+        internal void BeginTurretMove()
+        {
+            if (!CanBuild || SelectedBuilding < 0) return;
+            var site = World.Buildings[SelectedBuilding];
+            if (site.Kind != ExpansionKind.Turret || site.IsUnderConstruction) return;
+            CancelPlacement();
+            MovingTurret = SelectedBuilding;
+            PlacementKind = ExpansionKind.Turret;
+            RefreshOverlay();
+        }
+
+        private void CancelPlacementFromInput()
+        {
+            cancelPlacementFrame = Time.frameCount;
+            CancelPlacement();
+        }
+
+        private void CancelPlacement()
+        {
+            PlacementKind = ExpansionKind.Empty;
+            MovingTurret = -1;
+            rotatedPlacement = false;
+            HoverIssue = null;
+            HoverResource = -1;
             feedback = "";
-            RefreshOverlay();
+            if (placementGhost != null) placementGhost.gameObject.SetActive(false);
+            if (bindingMark != null) bindingMark.gameObject.SetActive(false);
+            if (buildRange != null) buildRange.gameObject.SetActive(false);
         }
 
-        private bool CanBuild => initialized && Overlay == PrototypeOverlay.None && !UtilityWindowOpen;
-
-        /// <summary>在建造面板内切换设施和炮位，取消上一个炮位的迁移选中。</summary>
-        internal void SelectConstructionTab(ConstructionTab tab)
-        {
-            if (!CanBuild || BuildTab == ConstructionTab.Closed || BuildTab == tab) return;
-            BuildTab = tab;
-            SelectedTurretSlot = -1;
-            feedback = "";
-            RefreshOverlay();
-        }
-
-        /// <summary>点已有炮塔选作迁移来源，点空位时迁移或建造。</summary>
-        internal void ActOnTurretSlot(int index)
-        {
-            if (!CanBuild || BuildTab != ConstructionTab.Turrets) return;
-            if (index < 0 || index >= World.Turrets.Count) return;
-            if (World.Turrets[index].IsUnderConstruction) return;
-            if (World.Turrets[index].Occupied)
-            {
-                SelectedTurretSlot = SelectedTurretSlot == index ? -1 : index;
-                feedback = "";
-            }
-            else
-            {
-                bool moving = SelectedTurretSlot >= 0;
-                bool success = moving ? session.MoveTurret(SelectedTurretSlot, index) : session.BuildTurret(index);
-                feedback = Game.Loc.T(success ? (moving ? "TurretMoved" : "ConstructionStarted") : "TurretUnavailable");
-                feedbackUntil = Time.realtimeSinceStartup + 2;
-                if (success)
-                {
-                    SelectedTurretSlot = -1;
-                    SyncView();
-                }
-            }
-            RefreshOverlay();
-        }
-
-        /// <summary>选中一块外围地块，继续显示它的可建项目或建筑状态。</summary>
-        internal void SelectExpansionSite(int sector)
-        {
-            if (!CanBuild || BuildTab != ConstructionTab.Expansion ||
-                sector < 0 || sector >= World.ExpansionSites.Count) return;
-            SelectedExpansionSite = sector;
-            feedback = "";
-            RefreshOverlay();
-        }
-
-        /// <summary>将选中地块和建筑类型交给规则层扣费，成功后立即刷新模型。</summary>
-        internal void PurchaseExpansion(ExpansionKind kind)
-        {
-            if (!CanBuild || BuildTab != ConstructionTab.Expansion) return;
-            bool built = session.BuildExpansion(SelectedExpansionSite, kind);
-            feedback = Game.Loc.T(built ? "ConstructionStarted" : "ExpansionUnavailable");
-            feedbackUntil = Time.realtimeSinceStartup + 2;
-            if (built) SyncView();
-            RefreshOverlay();
-        }
-
-        /// <summary>从当前兵营下独立订单，库存不足时显示缺口。</summary>
-        internal void OrderGarrison()
-        {
-            if (!CanBuild || BuildTab != ConstructionTab.Expansion || !World.ExpansionSites[SelectedExpansionSite].CanTrain) return;
-            if (session.TrainGarrison(SelectedExpansionSite))
-                feedback = Game.Loc.T("GarrisonTrainingStarted");
-            else
-                feedback = Game.Loc.T("GarrisonTrainingShortfall",
-                    Mathf.Max(0, ExpansionSite.TrainingScrap - World.Run.Scrap),
-                    Mathf.Max(0, ExpansionSite.TrainingEnergy - World.Run.Energy));
-            feedbackUntil = Time.realtimeSinceStartup + 2;
-            RefreshOverlay();
-        }
-
-        /// <summary>关闭侧栏时结束炮位迁移选择，保留本局选中的扩建地块。</summary>
         internal void CloseConstruction()
         {
-            if (BuildTab == ConstructionTab.Closed) return;
-            BuildTab = ConstructionTab.Closed;
-            SelectedTurretSlot = -1;
-            feedback = "";
+            if (!ConstructionOpen && !HasPlacement) return;
+            CancelPlacement();
+            SelectedBuilding = -1;
+            ConstructionOpen = false;
             construction?.Hide();
+        }
+
+        /// <summary>由屏幕投影确定落格，排除小地图和状态栏。</summary>
+        private bool TryBattlefieldCell(Vector2 screenPoint, out Vector2Int cell)
+        {
+            cell = default;
+            var hudPoint = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
+            if (MapRect.Contains(hudPoint) || StatusRect.Contains(hudPoint)) return false;
+            var ray = gameCamera.ScreenPointToRay(screenPoint);
+            if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float distance)) return false;
+            var point = ray.GetPoint(distance);
+            cell = BattleGrid.Cell(new Vector2(point.x, point.z));
+            return true;
+        }
+
+        /// <summary>真实左键入口。选址时提交落位，平时点选建筑或派工。</summary>
+        public bool ActOnBattlefield(Vector2 screenPoint)
+        {
+            if (!CanBuild) return false;
+            if (!TryBattlefieldCell(screenPoint, out var cell)) return !HasPlacement && OrderResourceAt(screenPoint);
+            if (HasPlacement)
+            {
+                bool moving = MovingTurret >= 0;
+                var issue = moving ? session.MoveTurret(MovingTurret, cell) : session.Build(PlacementKind, cell, rotatedPlacement);
+                if (issue != PlacementIssue.None)
+                {
+                    ShowFeedback(PlacementMessage(issue));
+                    return false;
+                }
+                CancelPlacement();
+                SelectedBuilding = World.FindBuilding(cell);
+                ShowFeedback(Game.Loc.T(moving ? "TurretMoved" : "ConstructionStarted"));
+                SyncView();
+                RefreshOverlay();
+                return true;
+            }
+            int index = World.FindBuilding(cell);
+            if (index < 0) return OrderResourceAt(screenPoint);
+            SelectedBuilding = index;
+            ConstructionOpen = true;
+            feedback = "";
+            RefreshOverlay();
+            return true;
+        }
+
+        private void UpdatePlacementPreview(Vector2 screenPoint, bool overUI)
+        {
+            buildRange.gameObject.SetActive(HasPlacement);
+            placementGhost.gameObject.SetActive(false);
+            bindingMark.gameObject.SetActive(false);
+            HoverIssue = null;
+            HoverResource = -1;
+            if (!HasPlacement || overUI || !TryBattlefieldCell(screenPoint, out var cell)) return;
+            var issue = World.PreviewPlacement(PlacementKind, cell, rotatedPlacement, MovingTurret, out var footprint, out int node);
+            HoverIssue = issue;
+            HoverResource = node;
+            placementGhost.gameObject.SetActive(true);
+            var material = issue == PlacementIssue.None ? validPlacement : invalidPlacement;
+            int index = 0;
+            foreach (var part in footprint.allPositionsWithin)
+            {
+                var tile = placementTiles[index++];
+                tile.transform.position = At(BattleGrid.Center(part), .13f);
+                tile.sharedMaterial = material;
+                tile.gameObject.SetActive(true);
+            }
+            for (; index < placementTiles.Length; index++) placementTiles[index].gameObject.SetActive(false);
+            if (node < 0) return;
+            bindingMark.position = At(World.Nodes[node].Position, .08f);
+            bindingMark.gameObject.SetActive(true);
+        }
+
+        internal static string PlacementMessage(PlacementIssue issue) => Game.Loc.T("Placement" + issue);
+
+        private void ShowFeedback(string message)
+        {
+            feedback = message;
+            feedbackUntil = Time.realtimeSinceStartup + 2;
+        }
+
+        /// <summary>只为选中的完工兵营提交独立的付费训练订单。</summary>
+        internal void OrderGarrison()
+        {
+            if (!CanBuild || HasPlacement || SelectedBuilding < 0 || !World.Buildings[SelectedBuilding].CanTrain) return;
+            if (session.TrainGarrison(SelectedBuilding)) ShowFeedback(Game.Loc.T("GarrisonTrainingStarted"));
+            else ShowFeedback(Game.Loc.T("GarrisonTrainingShortfall",
+                Mathf.Max(0, ExpansionSite.TrainingScrap - World.Run.Scrap),
+                Mathf.Max(0, ExpansionSite.TrainingEnergy - World.Run.Energy)));
+            RefreshOverlay();
         }
 
         /// <summary>仅在基础会话就绪时显示窗口，退出后不重新生成 UI。</summary>
@@ -576,7 +653,7 @@ namespace OutpostLoop
                 if (hud?.IsShow() != true) hud = Game.UIHelper.ShowUI<PrototypeHudCtrl>();
                 hud.Bind(this, font);
                 hud.Refresh(World.SquadSector);
-                if (BuildTab != ConstructionTab.Closed)
+                if (ConstructionOpen)
                 {
                     if (construction?.IsShow() != true) construction = Game.UIHelper.ShowUI<PrototypeConstructionCtrl>();
                     construction.Bind(this, font);
@@ -602,29 +679,26 @@ namespace OutpostLoop
             if (World.ResourceOrder >= 0) resourceOrderMark.position = At(World.Nodes[World.ResourceOrder].Position, .04f);
             for(int i=0;i<resources.Count;i++)resources[i].gameObject.SetActive(World.Nodes[i].Remaining>0);
             for (int i = 0; i < expansionModels.Count; i++)
-                expansionModels[i].Show(World.ExpansionSites[i], World.Run.Elapsed);
+                expansionModels[i].Show(World.Buildings[i], World.Run.Elapsed);
             for(int i=0;i<enemies.Count;i++)
             {
                 bool active=i<World.Enemies.Count;enemies[i].gameObject.SetActive(active);
-                if(active){var p=World.Enemies[i].Position;enemies[i].position=new Vector3(p.x,0.8f,p.y);}
+                if (!active) continue;
+                var state = World.Enemies[i];
+                var model = enemies[i];
+                model.position = At(state.Position, state.Kind == EnemyKind.Siege ? 1.05f : .8f);
+                Vector3 size = state.Kind switch
+                {
+                    EnemyKind.Fast => new Vector3(.48f, .78f, .48f),
+                    EnemyKind.Siege => new Vector3(1.08f, 1.1f, 1.08f),
+                    _ => new Vector3(.65f, .8f, .65f)
+                };
+                // 攻击落下时短促前冲，攻坚敌人的冲击幅度更大。
+                float attack = Mathf.Clamp01(1 - (World.Run.Elapsed - state.LastAttackTime) / .18f);
+                model.localScale = size + new Vector3(.16f, -.1f, .16f) * (attack * (state.Kind == EnemyKind.Siege ? 2 : 1));
+                model.GetComponent<Renderer>().sharedMaterial = enemyMaterials[(int)state.Kind];
             }
             gameCamera.orthographicSize = (World.Run.Config.MapRadius + 2) * mapView / Mathf.Min(1, gameCamera.aspect);
-            for (int i = 0; i < turretModels.Count; i++)
-            {
-                var state = World.Turrets[i];
-                var model = turretModels[i];
-                var shot = turretShots[i];
-                model.gameObject.SetActive(state.Occupied);
-                turretWorksites[i].gameObject.SetActive(state.IsUnderConstruction);
-                shot.enabled = state.Occupied && World.Run.Elapsed - state.LastShotTime < .12f;
-                if (!shot.enabled) continue;
-                var target = state.LastShotTarget;
-                var direction = target - state.Position;
-                if (direction.sqrMagnitude > 0)
-                    model.localRotation = Quaternion.LookRotation(new Vector3(direction.x, 0, direction.y));
-                shot.SetPosition(0, model.position + Vector3.up * 1.3f + model.forward);
-                shot.SetPosition(1, new Vector3(target.x, .8f, target.y));
-            }
         }
 
         private static Vector3 At(Vector2 point, float height) => new Vector3(point.x, height, point.y);
@@ -647,7 +721,8 @@ namespace OutpostLoop
             // 对话框的设置入口占用右上角，小地图仅在指挥状态显示和接收点选。
             if (Overlay != PrototypeOverlay.None || UtilityWindowOpen) return;
             DrawMap();
-            if (Event.current.type == EventType.Repaint && EventSystem.current?.IsPointerOverGameObject() != true)
+            DrawBattleFeedback();
+            if (!HasPlacement && Event.current.type == EventType.Repaint && EventSystem.current?.IsPointerOverGameObject() != true)
                 DrawResourceHint(Input.mousePosition);
         }
 
@@ -655,12 +730,13 @@ namespace OutpostLoop
         private void DrawWorksiteProgress(float scale)
         {
             var color = GUI.color;
-            foreach (var site in World.ExpansionSites)
+            foreach (var site in World.Buildings)
+            {
                 if (site.IsUnderConstruction)
                     DrawWorksiteBar(site.Position, site.ConstructionLeft, ExpansionSite.SpecFor(site.Kind).BuildSeconds, scale);
-            foreach (var turret in World.Turrets)
-                if (turret.IsUnderConstruction)
-                    DrawWorksiteBar(turret.Position, turret.ConstructionLeft, TurretSlot.BuildSeconds, scale);
+                else if (site.TrainingLeft > 0)
+                    DrawWorksiteBar(site.Position, site.TrainingLeft, ExpansionSite.TrainingSeconds, scale);
+            }
             GUI.color = color;
         }
 
@@ -726,6 +802,32 @@ namespace OutpostLoop
             GUI.backgroundColor = oldTint;
         }
 
+        private void DrawBattleFeedback()
+        {
+            float time = World.Run.Elapsed;
+            float y = 188;
+            if (time - World.LastArrival < 5)
+            {
+                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T("WaveArrived", World.Wave));
+                y += 34;
+            }
+            if (time - World.LastDestroyedAt < 5)
+            {
+                var position = World.LastDestroyedPosition;
+                int side = Mathf.Abs(position.x) >= Mathf.Abs(position.y) ? (position.x < 0 ? 0 : 1) : (position.y > 0 ? 2 : 3);
+                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T("BuildingLost", Game.Loc.T(PrototypeOverlayView.SectorNames[side]),
+                    PrototypeOverlayView.BuildingName(World.LastDestroyedKind)));
+                y += 34;
+            }
+            if (World.WorkerBlocked || World.SquadBlocked)
+            {
+                GUI.Box(new Rect(16, y, 330, 30), Game.Loc.T(World.WorkerBlocked ? "WorkerBlocked" : "SquadBlocked"));
+                y += 34;
+            }
+            if (time < 60 && World.ResourceOrder < 0 && World.Run.Scrap == 0 && World.Run.Energy == 0)
+                GUI.Box(new Rect(16, y, 330, 54), Game.Loc.T("FirstRunGather"));
+        }
+
         private void DrawMap()
         {
             var old=GUI.color;GUI.Box(MapRect,Game.Loc.T("HudMap"));
@@ -735,15 +837,17 @@ namespace OutpostLoop
                 if (node.Remaining > 0) Dot(node.Position, node.Energy ? Color.cyan : new Color(.8f, .5f, .2f),
                     i == World.ResourceOrder ? 9 : 4);
             }
-            foreach(var enemy in World.Enemies)Dot(enemy.Position,Color.red,5);
-            foreach (var site in World.ExpansionSites)
-                Dot(site.Position, site.Kind switch
+            foreach (var enemy in World.Enemies)
+                Dot(enemy.Position, enemy.Kind == EnemyKind.Fast ? new Color(1, .61f, .13f) : Color.red,
+                    enemy.Kind == EnemyKind.Siege ? 7 : 5);
+            foreach (var site in World.Buildings)
+                if (site.Kind != ExpansionKind.Empty) Dot(site.Position, site.Kind switch
                 {
                     ExpansionKind.Extractor => new Color(.2f, 1, .65f),
                     ExpansionKind.Barracks => new Color(.32f, .58f, 1),
                     ExpansionKind.Barricade => new Color(.85f, .38f, .22f),
                     _ => Color.gray
-                }, site.Kind == ExpansionKind.Empty ? 4 : 8);
+                }, 8);
             Dot(Vector2.zero, Color.white, 9);
             Dot(World.SquadPosition, new Color(.32f, .58f, 1), 7);
             Dot(World.WorkerPosition, Color.yellow, 7);

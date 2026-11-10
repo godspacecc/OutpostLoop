@@ -4,6 +4,18 @@ namespace Game
     public static class Texts
     {
         /// <summary>
+        /// {0}侧的{1}已被摧毁
+        /// </summary>
+        public static string Buildinglost(object arg0, object arg1) => Loc.T("BuildingLost", arg0, arg1);
+        /// <summary>
+        /// {0} · {1} · 施工 {2} 秒
+        /// </summary>
+        public static string Buildingoption(object arg0, object arg1, object arg2) => Loc.T("BuildingOption", arg0, arg1, arg2);
+        /// <summary>
+        /// 炮塔
+        /// </summary>
+        public static string Buildingturret => Loc.T("BuildingTurret");
+        /// <summary>
         /// 返回
         /// </summary>
         public static string Commonback => Loc.T("CommonBack");
@@ -43,6 +55,14 @@ namespace Game
         /// 建造
         /// </summary>
         public static string Constructiontitle => Loc.T("ConstructionTitle");
+        /// <summary>
+        /// 失败原因 · 中央基地失守
+        /// </summary>
+        public static string Defeatbaselost => Loc.T("DefeatBaseLost");
+        /// <summary>
+        /// 失败原因 · 时间耗尽，敌群未清空
+        /// </summary>
+        public static string Defeatenemiesremain => Loc.T("DefeatEnemiesRemain");
         /// <summary>
         /// 兵营
         /// </summary>
@@ -118,6 +138,15 @@ namespace Game
         /// </summary>
         public static string Expansionunavailable => Loc.T("ExpansionUnavailable");
         /// <summary>
+        /// 左键资源派工，V 打开建造。
+        /// 看小地图来敌，用四向按钮调防。
+        /// </summary>
+        public static string Firstrungather => Loc.T("FirstRunGather");
+        /// <summary>
+        /// 出入口被堵，守军等待部署
+        /// </summary>
+        public static string Garrisonexitblocked => Loc.T("GarrisonExitBlocked");
+        /// <summary>
         /// 训练守军 · 废料 {0} / 能源 {1} · {2} 秒
         /// </summary>
         public static string Garrisontrain(object arg0, object arg1, object arg2) => Loc.T("GarrisonTrain", arg0, arg1, arg2);
@@ -162,6 +191,54 @@ namespace Game
         /// OUTPOST LOOP · 独立可玩预览
         /// </summary>
         public static string Hudtitle => Loc.T("HudTitle");
+        /// <summary>
+        /// 迁移炮塔 · 免费
+        /// </summary>
+        public static string Moveselectedturret => Loc.T("MoveSelectedTurret");
+        /// <summary>
+        /// 左键落位 · 右键或 Esc 取消
+        /// </summary>
+        public static string Placementcontrols => Loc.T("PlacementControls");
+        /// <summary>
+        /// 选择建筑后在战场落位。点击已有建筑查看状态。
+        /// </summary>
+        public static string Placementguide => Loc.T("PlacementGuide");
+        /// <summary>
+        /// 当前无法建造
+        /// </summary>
+        public static string Placementinactive => Loc.T("PlacementInactive");
+        /// <summary>
+        /// 基地库存不足
+        /// </summary>
+        public static string Placementinsufficientstock => Loc.T("PlacementInsufficientStock");
+        /// <summary>
+        /// 已达到该类建筑数量上限
+        /// </summary>
+        public static string Placementlimit => Loc.T("PlacementLimit");
+        /// <summary>
+        /// 这座炮塔已无法迁移
+        /// </summary>
+        public static string Placementmissingturret => Loc.T("PlacementMissingTurret");
+        /// <summary>
+        /// 12 米内没有可绑定的资源点
+        /// </summary>
+        public static string Placementnoresource => Loc.T("PlacementNoResource");
+        /// <summary>
+        /// 可以在这里建造
+        /// </summary>
+        public static string Placementnone => Loc.T("PlacementNone");
+        /// <summary>
+        /// 占地内有建筑、单位或资源
+        /// </summary>
+        public static string Placementoccupied => Loc.T("PlacementOccupied");
+        /// <summary>
+        /// 超出基地 24 米建造范围
+        /// </summary>
+        public static string Placementoutside => Loc.T("PlacementOutside");
+        /// <summary>
+        /// 左键落位 · R 旋转 · 右键或 Esc 取消
+        /// </summary>
+        public static string Placementrotate => Loc.T("PlacementRotate");
         /// <summary>
         /// 派工人回收废料与能源，调守军强化防线。
         /// 守住 {0:0.#} 分钟内的最后一波进攻。
@@ -361,6 +438,10 @@ namespace Game
         /// </summary>
         public static string Settingsupdateavailable => Loc.T("SettingsUpdateAvailable");
         /// <summary>
+        /// 机动小队路线受阻，正在等待
+        /// </summary>
+        public static string Squadblocked => Loc.T("SquadBlocked");
+        /// <summary>
         /// 调防 · {0}
         /// </summary>
         public static string Strategydeploy(object arg0) => Loc.T("StrategyDeploy", arg0);
@@ -451,6 +532,10 @@ namespace Game
         /// </summary>
         public static string Turretoccupied(object arg0) => Loc.T("TurretOccupied", arg0);
         /// <summary>
+        /// 自动攻击射程内最近的敌人
+        /// </summary>
+        public static string Turretoperational => Loc.T("TurretOperational");
+        /// <summary>
         /// {0} · 已选中
         /// </summary>
         public static string Turretselected(object arg0) => Loc.T("TurretSelected", arg0);
@@ -514,6 +599,14 @@ namespace Game
         /// 当前资源版本：未知
         /// </summary>
         public static string Updateversionunknown => Loc.T("UpdateVersionUnknown");
+        /// <summary>
+        /// 第 {0} 波敌人已入场
+        /// </summary>
+        public static string Wavearrived(object arg0) => Loc.T("WaveArrived", arg0);
+        /// <summary>
+        /// 工人路线受阻，等待通路恢复
+        /// </summary>
+        public static string Workerblocked => Loc.T("WorkerBlocked");
         /// <summary>
         /// 请手动重新启动应用。
         /// </summary>

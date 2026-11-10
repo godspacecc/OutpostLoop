@@ -139,21 +139,16 @@ namespace OutpostLoop
     {
         private static string[] Routes => new[] { Loc.T("PreviewText15"), Loc.T("PreviewText16"), Loc.T("PreviewText17") };
         private readonly Text[] routeLabels = new Text[Routes.Length];
-        private Text heading, details, actionLabel, feedback, startBriefing, turretHint;
-        private GameObject purchaseRows, turretRows;
-        private readonly Text[] turretLabels = new Text[4];
-        // 扩建面板先选方位，再显示该地块的产出预览或现有建筑状态。
-        private GameObject expansionRows, expansionChoices;
-        private Text constructionStock, constructionFeedback, expansionDetail, trainGarrison;
-        private Button expansionTab, turretTab;
-        private readonly Text[] expansionPlots = new Text[4];
-        private readonly Text[] expansionOptions = new Text[3];
+        private Text heading, details, actionLabel, feedback, startBriefing;
+        private GameObject purchaseRows;
+        private Text constructionStock, constructionFeedback, constructionDetail, trainGarrison, moveTurret;
+        private readonly Text[] constructionOptions = new Text[4];
         private static readonly ExpansionKind[] ExpansionOptions =
-            { ExpansionKind.Extractor, ExpansionKind.Barracks, ExpansionKind.Barricade };
+            { ExpansionKind.Extractor, ExpansionKind.Barracks, ExpansionKind.Barricade, ExpansionKind.Turret };
         private static readonly string[] ExpansionNames =
-            { "ExpansionEmpty", "ExpansionExtractor", "ExpansionBarracks", "ExpansionBarricade" };
-        private static readonly string[] ExpansionHints =
-            { "ExpansionExtractorHint", "ExpansionBarracksHint", "ExpansionBarricadeHint" };
+            { "ExpansionEmpty", "ExpansionExtractor", "ExpansionBarracks", "ExpansionBarricade", "BuildingTurret" };
+
+        internal static string BuildingName(ExpansionKind kind) => Loc.T(ExpansionNames[(int)kind]);
         internal static readonly string[] SectorNames = { "TurretWest", "TurretEast", "TurretNorth", "TurretSouth" };
         // 开始页拥有独立构图，局内弹窗保留紧凑的原型布局。
         private RectTransform startStage, sessionPanel;
@@ -226,53 +221,21 @@ namespace OutpostLoop
             var close = Button(panel, font, "CloseConstruction", Loc.T("ConstructionClose"), new Vector2(84, 34),
                 new Vector2(192, 187), new Vector2(.5f, .5f), controller.CloseConstruction);
             close.fontSize = 18;
-            expansionTab = Button(panel, font, "ConstructionExpansionTab", Loc.T("ExpansionManage"), new Vector2(225, 39),
-                new Vector2(-119, 141), new Vector2(.5f, .5f), () => controller.SelectConstructionTab(ConstructionTab.Expansion))
-                .GetComponentInParent<Button>();
-            turretTab = Button(panel, font, "ConstructionTurretTab", Loc.T("TurretManage"), new Vector2(225, 39),
-                new Vector2(119, 141), new Vector2(.5f, .5f), () => controller.SelectConstructionTab(ConstructionTab.Turrets))
-                .GetComponentInParent<Button>();
-            expansionTab.GetComponentInChildren<Text>().fontSize = 21;
-            turretTab.GetComponentInChildren<Text>().fontSize = 21;
-            constructionStock = Label(panel, font, "ConstructionStock", new Vector2(480, 30), new Vector2(0, 106), 20);
-            constructionFeedback = Label(panel, font, "ConstructionFeedback", new Vector2(480, 30), new Vector2(0, -185), 19);
-            turretRows = Rect("TurretRows", panel, new Vector2(.5f,.5f), new Vector2(480,260), Vector2.zero).gameObject;
-            turretHint = Label(turretRows.transform, font, "TurretHint", new Vector2(480,44), new Vector2(0,71), 17);
-            // 炮位按方位摆放，和场景中的四个位置对应。
-            var positions = new[] { new Vector2(-118,-38), new Vector2(118,-38), new Vector2(0,15), new Vector2(0,-91) };
-            for (int i = 0; i < turretLabels.Length; i++)
-            {
-                int slot = i;
-                turretLabels[i] = Button(turretRows.transform, font, "TurretSlot" + i, "", new Vector2(218,48),
-                    positions[i], new Vector2(.5f,.5f), () => controller.ActOnTurretSlot(slot));
-                turretLabels[i].fontSize = 18;
-            }
-            BuildExpansionRows(panel, font, controller);
-        }
-
-        /// <summary>建造侧栏按方位显示四个地块，再列出可建项目。</summary>
-        private void BuildExpansionRows(Transform panel, Font font, PrototypeController controller)
-        {
-            expansionRows = Rect("ExpansionRows", panel, new Vector2(.5f, .5f), new Vector2(480, 285), Vector2.zero).gameObject;
-            for (int i = 0; i < expansionPlots.Length; i++)
-            {
-                int sector = i;
-                expansionPlots[i] = Button(expansionRows.transform, font, "ExpansionPlotButton" + i, "", new Vector2(110, 40),
-                    new Vector2(-177 + 118 * i, 68), new Vector2(.5f, .5f), () => controller.SelectExpansionSite(sector));
-                expansionPlots[i].fontSize = 16;
-            }
-            expansionDetail = Label(expansionRows.transform, font, "ExpansionDetail", new Vector2(475, 48), new Vector2(0, 21), 18);
-            trainGarrison = Button(expansionRows.transform, font, "TrainGarrison", "", new Vector2(468, 46),
-                new Vector2(0, -28), new Vector2(.5f, .5f), controller.OrderGarrison);
-            trainGarrison.fontSize = 18;
-            expansionChoices = Rect("ExpansionChoices", expansionRows.transform, new Vector2(.5f, .5f), new Vector2(475, 170), Vector2.zero).gameObject;
-            for (int i = 0; i < expansionOptions.Length; i++)
+            constructionStock = Label(panel, font, "ConstructionStock", new Vector2(480, 28), new Vector2(0, 148), 20);
+            for (int i = 0; i < constructionOptions.Length; i++)
             {
                 var kind = ExpansionOptions[i];
-                expansionOptions[i] = Button(expansionChoices.transform, font, "Build" + kind, "", new Vector2(468, 46),
-                    new Vector2(0, -28 - i * 51), new Vector2(.5f, .5f), () => controller.PurchaseExpansion(kind));
-                expansionOptions[i].fontSize = 17;
+                constructionOptions[i] = Button(panel, font, "Build" + kind, "", new Vector2(468, 39),
+                    new Vector2(0, 110 - i * 44), new Vector2(.5f, .5f), () => controller.SelectPlacement(kind));
+                constructionOptions[i].fontSize = 18;
             }
+            constructionDetail = Label(panel, font, "ConstructionDetail", new Vector2(478, 66), new Vector2(0, -86), 18);
+            trainGarrison = Button(panel, font, "TrainGarrison", "", new Vector2(468, 38),
+                new Vector2(0, -143), new Vector2(.5f, .5f), controller.OrderGarrison);
+            moveTurret = Button(panel, font, "MoveSelectedTurret", "", new Vector2(468, 38),
+                new Vector2(0, -143), new Vector2(.5f, .5f), controller.BeginTurretMove);
+            trainGarrison.fontSize = moveTurret.fontSize = 18;
+            constructionFeedback = Label(panel, font, "ConstructionFeedback", new Vector2(478, 32), new Vector2(0, -186), 19);
         }
 
         /// <summary>在安全区内摆放指挥按钮，防线按钮按下后立即派队。</summary>
@@ -361,6 +324,7 @@ namespace OutpostLoop
                     if (run.Outcome > 0)
                         result += "\n" + (pendingReward ? Loc.T("SupplyRewardPending")
                             : Loc.T("SupplyReward", PrototypeWallet.VictoryCoins, controller.SupplyCoins));
+                    if (run.Outcome < 0) result += "\n" + Loc.T(run.Health == 0 ? "DefeatBaseLost" : "DefeatEnemiesRemain");
                     SetText(details, result);
                     SetText(actionLabel, Loc.T(pendingReward ? "SupplyRetryReward" : "SupplyNextRun"));
                     break;
@@ -373,92 +337,61 @@ namespace OutpostLoop
             return selected ? Loc.T("SupplySelected", label) : label;
         }
 
-        /// <summary>持续显示实时库存和建筑状态，不冻结战斗或采运。</summary>
+        /// <summary>侧栏显示实时库存、鼠标落位原因及选中建筑的生产状态。</summary>
         internal void PresentConstruction(PrototypeController controller)
         {
-            var run = controller.World.Run;
-            bool turrets = controller.BuildTab == ConstructionTab.Turrets;
-            expansionTab.interactable = turrets;
-            turretTab.interactable = !turrets;
-            turretRows.SetActive(turrets);
-            expansionRows.SetActive(!turrets);
+            var world = controller.World;
+            var run = world.Run;
             SetText(constructionStock, Loc.T("HudStock", run.Scrap, run.Energy));
             SetText(constructionFeedback, controller.ActionFeedback);
-            if (turrets) PresentTurrets(controller);
-            else PresentExpansion(controller);
-        }
-
-        /// <summary>按炮位占用和选择状态刷新建造或迁移文案。</summary>
-        private void PresentTurrets(PrototypeController controller)
-        {
-            var world = controller.World;
-            bool moving = controller.SelectedTurretSlot >= 0;
-            SetText(turretHint, Loc.T(moving ? "TurretChooseEmpty" : "TurretInstructions"));
-            for (int i = 0; i < turretLabels.Length; i++)
-            {
-                var turret = world.Turrets[i];
-                var direction = Loc.T(SectorNames[i]);
-                if (turret.IsUnderConstruction)
-                {
-                    SetText(turretLabels[i], Loc.T("TurretConstructing", direction, Mathf.CeilToInt(turret.ConstructionLeft)));
-                    continue;
-                }
-                var key = turret.Occupied
-                    ? (controller.SelectedTurretSlot == i ? "TurretSelected" : "TurretOccupied")
-                    : (moving ? "TurretMoveHere" : "TurretBuildHere");
-                SetText(turretLabels[i], Loc.T(key, direction, world.TurretScrapCost, world.TurretEnergyCost, TurretSlot.BuildSeconds));
-            }
-        }
-
-        /// <summary>预览最近可用资源、建造价格以及已建建筑的运行状态。</summary>
-        private void PresentExpansion(PrototypeController controller)
-        {
-            var world = controller.World;
-            int selected = controller.SelectedExpansionSite;
-            var site = world.ExpansionSites[selected];
-            bool vacant = site.Kind == ExpansionKind.Empty;
-            for (int i = 0; i < expansionPlots.Length; i++)
-            {
-                string name = Loc.T(ExpansionNames[(int)world.ExpansionSites[i].Kind]);
-                string plot = Loc.T("ExpansionPlot", Loc.T(SectorNames[i]), name);
-                SetText(expansionPlots[i], i == selected ? Loc.T("ExpansionSelected", plot) : plot);
-            }
-            expansionChoices.SetActive(vacant);
-            trainGarrison.transform.parent.gameObject.SetActive(site.CanTrain);
-            if (site.CanTrain)
-                SetText(trainGarrison, Loc.T("GarrisonTrain", ExpansionSite.TrainingScrap, ExpansionSite.TrainingEnergy,
-                    ExpansionSite.TrainingSeconds));
-            int node = vacant ? world.FindExpansionResource(selected) : site.NodeIndex;
-            string resource = node >= 0
-                ? Loc.T("ResourceMarkerRemaining", Loc.T(world.Nodes[node].Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap"),
-                    world.Nodes[node].Remaining)
-                : Loc.T("ExpansionNoResource");
-            if (!vacant)
-            {
-                string status = site.IsUnderConstruction ? Loc.T("ConstructionRemaining", Mathf.CeilToInt(site.ConstructionLeft))
-                    : site.Kind switch
-                    {
-                        ExpansionKind.Extractor => resource,
-                        ExpansionKind.Barracks when site.TrainingLeft > 0
-                            => Loc.T("ExpansionTraining", Mathf.CeilToInt(site.TrainingLeft)),
-                        ExpansionKind.Barracks when site.HasGarrison => Loc.T("ExpansionGarrisonReady"),
-                        ExpansionKind.Barracks => Loc.T("ExpansionGarrisonIdle"),
-                        _ => Loc.T("ExpansionBarricadeHint")
-                    };
-                SetText(expansionDetail, Loc.T("ExpansionStatus", Loc.T(ExpansionNames[(int)site.Kind]), site.Health,
-                    site.HealthLimit, status));
-                return;
-            }
-            SetText(expansionDetail, Loc.T("ExpansionResourcePreview", resource));
-            for (int i = 0; i < expansionOptions.Length; i++)
+            for (int i = 0; i < constructionOptions.Length; i++)
             {
                 var kind = ExpansionOptions[i];
                 var spec = ExpansionSite.SpecFor(kind);
-                SetText(expansionOptions[i], Loc.T("ExpansionBuildOption", Loc.T(ExpansionNames[(int)kind]),
-                    Loc.T("PreviewCost", spec.Scrap, spec.Energy), spec.BuildSeconds, Loc.T(ExpansionHints[i], spec.Cycle)));
-                expansionOptions[i].GetComponentInParent<Button>().interactable = kind != ExpansionKind.Extractor || node >= 0;
+                string label = Loc.T("BuildingOption", BuildingName(kind), Loc.T("PreviewCost", spec.Scrap, spec.Energy), spec.BuildSeconds);
+                bool selected = controller.PlacementKind == kind && controller.MovingTurret < 0;
+                SetText(constructionOptions[i], selected ? Loc.T("ExpansionSelected", label) : label);
             }
+
+            var site = controller.SelectedBuilding < 0 ? null : world.Buildings[controller.SelectedBuilding];
+            bool selectedSite = !controller.HasPlacement && site != null && site.Kind != ExpansionKind.Empty;
+            bool canTrain = selectedSite && site.CanTrain;
+            bool canMove = selectedSite && site.Kind == ExpansionKind.Turret && !site.IsUnderConstruction;
+            trainGarrison.transform.parent.gameObject.SetActive(canTrain);
+            moveTurret.transform.parent.gameObject.SetActive(canMove);
+            if (canTrain)
+                SetText(trainGarrison, Loc.T("GarrisonTrain", ExpansionSite.TrainingScrap, ExpansionSite.TrainingEnergy, ExpansionSite.TrainingSeconds));
+            if (canMove) SetText(moveTurret, Loc.T("MoveSelectedTurret"));
+
+            if (controller.HasPlacement)
+            {
+                string instruction = Loc.T(controller.PlacementKind == ExpansionKind.Barricade ? "PlacementRotate" : "PlacementControls");
+                if (controller.HoverIssue.HasValue) instruction += "\n" + PrototypeController.PlacementMessage(controller.HoverIssue.Value);
+                if (controller.HoverResource >= 0) instruction += "\n" + ResourceStatus(world.Nodes[controller.HoverResource]);
+                SetText(constructionDetail, instruction);
+                return;
+            }
+            if (!selectedSite)
+            {
+                SetText(constructionDetail, Loc.T("PlacementGuide"));
+                return;
+            }
+            string status = site.IsUnderConstruction ? Loc.T("ConstructionRemaining", Mathf.CeilToInt(site.ConstructionLeft))
+                : site.Kind switch
+                {
+                    ExpansionKind.Extractor => ResourceStatus(world.Nodes[site.NodeIndex]),
+                    ExpansionKind.Barracks when site.TrainingLeft > 0 => Loc.T("ExpansionTraining", Mathf.CeilToInt(site.TrainingLeft)),
+                    ExpansionKind.Barracks when site.GarrisonWaiting => Loc.T("GarrisonExitBlocked"),
+                    ExpansionKind.Barracks when site.HasGarrison => Loc.T("ExpansionGarrisonReady"),
+                    ExpansionKind.Barracks => Loc.T("ExpansionGarrisonIdle"),
+                    ExpansionKind.Barricade => Loc.T("ExpansionBarricadeHint"),
+                    _ => Loc.T("TurretOperational")
+                };
+            SetText(constructionDetail, Loc.T("ExpansionStatus", BuildingName(site.Kind), site.Health, site.HealthLimit, status));
         }
+
+        private static string ResourceStatus(ResourceNode node) =>
+            Loc.T("ResourceMarkerRemaining", Loc.T(node.Energy ? "ResourceMarkerEnergy" : "ResourceMarkerScrap"), node.Remaining);
 
         /// <summary>复用设置窗口的公告与重启交互，打开时直接定位更新检查。</summary>
         private static void OpenUpdateCheck()

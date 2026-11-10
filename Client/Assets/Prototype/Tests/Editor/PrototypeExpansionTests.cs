@@ -3,197 +3,181 @@ using UnityEngine;
 
 namespace OutpostLoop.Tests
 {
-    /// <summary>限定验证扩建扣费、有限资源、训练及外围拦截。</summary>
+    /// <summary>覆盖网格选址、生产和建筑参与战斗的边界。</summary>
     public sealed class PrototypeExpansionTests
     {
-        [SetUp] public void PrepareFoundation() => Game.FoundationRuntime.Initialize();
-        [TearDown] public void CloseFoundation() => Game.FoundationRuntime.Shutdown();
+        [SetUp] public void Prepare() => Game.FoundationRuntime.Initialize();
+        [TearDown] public void Close() => Game.FoundationRuntime.Shutdown();
 
         [Test]
-        public void FailedOrdersDoNotSpendAndOccupiedPlotCannotBeOverwritten()
+        public void PlacementRejectsObstaclesAndStockWithoutSpending()
         {
-            var world = new WorldState(732);
-            AddStock(world.Run, 20, 0);
-            Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Barracks), "缺能源不应扣除废料");
-            Assert.IsFalse(world.BuildExpansion(-1, ExpansionKind.Barricade));
-            Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Empty));
-            Assert.AreEqual(20, world.Run.Scrap);
+            var world = EmptyMap();
+            var free = new Vector2Int(-6, 2);
+            Fund(world, 20, 0);
+            world.Nodes.Add(new ResourceNode { Position = new Vector2(-8, 0), Remaining = 4 });
+            Assert.AreEqual(PlacementIssue.InsufficientStock, world.Build(ExpansionKind.Barracks, free));
+            Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Barricade, Vector2Int.zero));
+            Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Barricade, new Vector2Int(0, -2)));
+            Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Barricade, new Vector2Int(-4, 0)));
+            Assert.AreEqual(PlacementIssue.Outside, world.Build(ExpansionKind.Barricade, new Vector2Int(12, 0)));
             world.Run.Paused = true;
-            Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Barricade), "真正暂停期间不接受建造");
+            Assert.AreEqual(PlacementIssue.Inactive, world.Build(ExpansionKind.Barricade, free));
             Assert.AreEqual(20, world.Run.Scrap);
             world.Run.Paused = false;
-            Assert.IsTrue(world.BuildExpansion(0, ExpansionKind.Barricade));
-            Assert.IsFalse(world.BuildExpansion(0, ExpansionKind.Extractor));
-            Assert.AreEqual(20 - ExpansionSite.SpecFor(ExpansionKind.Barricade).Scrap, world.Run.Scrap);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, free, true));
+            Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Barricade, free + Vector2Int.up));
+            Assert.AreEqual(new Vector2Int(1, 2), world.Buildings[0].Footprint.size);
+            Assert.AreEqual(10, world.Run.Scrap);
         }
 
         [Test]
-        public void WorkerAndExtractorShareFiniteNodeAndDeliverLastUnitExactlyOnce()
+        public void ExtractorBindsNearestUnclaimedNodeAndProducesOnlyAfterCompletion()
         {
-            var world = new WorldState(732);
-            var run = world.Run;
-            var spec = ExpansionSite.SpecFor(ExpansionKind.Extractor);
-            int nodeIndex = world.FindExpansionResource(0);
-            Assert.GreaterOrEqual(nodeIndex, 0);
-            var node = world.Nodes[nodeIndex];
-            int original = node.Remaining;
-            AddStock(run, spec.Scrap, 0);
-            Assert.IsTrue(world.BuildExpansion(0, ExpansionKind.Extractor));
-            var site = world.ExpansionSites[0];
-            Assert.AreEqual(nodeIndex, site.NodeIndex);
-            Assert.AreEqual(spec.BuildSeconds, site.ConstructionLeft);
-            for (int i = 0; i < 30; i++) world.Step(.1f);
-            Assert.AreEqual(original, node.Remaining, "施工中不得开采");
-            Assert.IsTrue(world.AssignResource(nodeIndex));
-            var remaining = site.ConstructionLeft;
-            run.Paused = true;
-            world.Step(.1f);
-            Assert.AreEqual(remaining, site.ConstructionLeft);
-            Assert.AreEqual(original, node.Remaining);
-            run.Paused = false;
-            for (int i = 0; i < 650; i++) world.Step(.1f);
-            Assert.AreEqual(original, run.Scrap + run.Energy);
-            Assert.AreEqual(0, run.CargoScrap + run.CargoEnergy);
-            Assert.AreEqual(0, node.Remaining);
-            Assert.AreEqual(-1, world.ResourceOrder);
-            Assert.IsFalse(world.WorkerReturning);
+            var world = EmptyMap();
+            world.Nodes.Add(new ResourceNode { Position = new Vector2(-12, 8), Remaining = 3 });
+            world.Nodes.Add(new ResourceNode { Position = new Vector2(-12, 12), Remaining = 3, Energy = true });
+            Fund(world, 24, 0);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Extractor, new Vector2Int(-6, 2)));
+            Assert.AreEqual(0, world.Buildings[0].NodeIndex);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Extractor, new Vector2Int(-8, 3)));
+            Assert.AreEqual(1, world.Buildings[1].NodeIndex);
+            Assert.AreEqual(PlacementIssue.NoResource, world.Build(ExpansionKind.Extractor, new Vector2Int(-5, 6)));
+            Advance(world, 49);
+            Assert.AreEqual(8, world.Run.Scrap);
+            Assert.AreEqual(0, world.Run.Energy);
+            Advance(world, 100);
+            Assert.AreEqual(11, world.Run.Scrap);
+            Assert.AreEqual(3, world.Run.Energy);
         }
 
         [Test]
-        public void CompletedBarracksRequiresPaidOrderAndTrainingBeforeAttacking()
+        public void BarracksWaitsForOrderAndStopsTrainingWhenDestroyed()
         {
-            var world = new WorldState(732);
-            var spec = ExpansionSite.SpecFor(ExpansionKind.Barracks);
-            AddStock(world.Run, spec.Scrap + ExpansionSite.TrainingScrap, spec.Energy);
-            Assert.IsTrue(world.BuildExpansion(2, ExpansionKind.Barracks));
-            var site = world.ExpansionSites[2];
-            Assert.IsFalse(world.TrainGarrison(2), "工地不能训练");
-            Advance(world, spec.BuildSeconds + .2f);
+            var world = EmptyMap();
+            Fund(world, 20, 3);
+            var cell = new Vector2Int(0, 8);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barracks, cell));
+            Assert.IsFalse(world.TrainGarrison(0));
+            Advance(world, 205);
+            var site = world.Buildings[0];
             Assert.IsTrue(site.CanTrain);
-            Advance(world, ExpansionSite.TrainingSeconds + .2f);
-            Assert.IsFalse(site.HasGarrison, "完工后不自动出兵");
-            Assert.IsFalse(world.TrainGarrison(2), "缺少能源不应开始训练");
-            Assert.AreEqual(ExpansionSite.TrainingScrap, world.Run.Scrap);
-            AddStock(world.Run, 0, ExpansionSite.TrainingEnergy);
-            Assert.IsTrue(world.TrainGarrison(2));
+            Assert.IsFalse(site.HasGarrison);
+            Assert.IsFalse(world.TrainGarrison(0));
+            Assert.AreEqual(6, world.Run.Scrap);
+            Fund(world, 0, 2);
+            Assert.IsTrue(world.TrainGarrison(0));
+            Assert.IsFalse(world.TrainGarrison(0));
             Assert.AreEqual(0, world.Run.Scrap);
             Assert.AreEqual(0, world.Run.Energy);
-            Assert.IsFalse(world.TrainGarrison(2));
-            world.Run.Paused = true;
-            world.Step(.1f);
-            Assert.AreEqual(ExpansionSite.TrainingSeconds, site.TrainingLeft);
-            world.Run.Paused = false;
-            var enemy = new EnemyState { Position = site.Position + Vector2.up * 4f, Health = 100 };
-            world.Enemies.Add(enemy);
-            for (int i = 0; i < 20; i++) world.Step(.1f);
-            Assert.AreEqual(100, enemy.Health, "尚在训练，且敌人在基础炮塔覆盖之外");
-            for (int i = 0; i < 120; i++) world.Step(.1f);
-            Assert.AreEqual(0, site.TrainingLeft);
-            Assert.IsTrue(site.HasGarrison);
-            Assert.IsFalse(world.TrainGarrison(2));
-            Assert.Less(enemy.Health, 100);
-            Assert.Greater(site.LastShotTime, 0);
-
-            AddStock(world.Run, spec.Scrap + ExpansionSite.TrainingScrap, spec.Energy + ExpansionSite.TrainingEnergy);
-            Assert.IsTrue(world.BuildExpansion(3, ExpansionKind.Barracks));
-            Advance(world, spec.BuildSeconds + .2f);
-            Assert.IsTrue(world.TrainGarrison(3));
-            var threatened = world.ExpansionSites[3];
-            world.Enemies.Clear();
-            for (int i = 0; i < 40; i++)
-                world.Enemies.Add(new EnemyState { Position = threatened.Position + Vector2.down, Health = 10000 });
-            Advance(world, 2);
-            Assert.AreEqual(ExpansionKind.Empty, threatened.Kind);
-            Assert.AreEqual(0, threatened.TrainingLeft);
-            Assert.IsFalse(threatened.HasGarrison);
-            Assert.AreEqual(0, world.Run.Scrap, "摧毁后不退训练费");
-            Assert.AreEqual(0, world.Run.Energy);
-        }
-
-        [Test]
-        public void BarricadeInterceptsAndDestroyedPlotCanBeRebuilt()
-        {
-            var world = new WorldState(732);
-            var spec = ExpansionSite.SpecFor(ExpansionKind.Barricade);
-            AddStock(world.Run, spec.Scrap * 2, 0);
-            Assert.IsTrue(world.BuildExpansion(2, ExpansionKind.Barricade));
-            var site = world.ExpansionSites[2];
-            var enemy = new EnemyState { Position = site.Position + Vector2.up, Health = 10000 };
-            world.Enemies.Add(enemy);
-            for (int i = 0; i < 20; i++) world.Step(.1f);
-            Assert.IsTrue(site.IsUnderConstruction);
-            Assert.Less(site.Health, spec.Health / 2);
-            int damagedHealth = site.Health;
-            world.Enemies.Clear();
-            Advance(world, spec.BuildSeconds);
-            Assert.AreEqual(damagedHealth + spec.Health / 2, site.Health, "完工保留工地损伤");
-            world.Enemies.Add(enemy);
-            Assert.AreEqual(world.Run.Config.InitialHealth, world.Run.Health);
-            for (int i = 0; i < 900 && site.Kind != ExpansionKind.Empty; i++) world.Step(.1f);
+            for (int i = 0; i < 15; i++)
+                world.Enemies.Add(new EnemyState(EnemyKind.Siege) { Position = site.Position + Vector2.up * 3, Health = 1000 });
+            Advance(world, 12);
             Assert.AreEqual(ExpansionKind.Empty, site.Kind);
-            for (int i = 0; i < 200 && world.Run.Health == world.Run.Config.InitialHealth; i++) world.Step(.1f);
-            Assert.Less(world.Run.Health, world.Run.Config.InitialHealth, "路障被摧毁后敌人应继续攻击基地");
-            Assert.IsTrue(world.BuildExpansion(2, ExpansionKind.Barricade));
-            Assert.AreEqual(spec.Health / 2, site.Health);
+            Assert.AreEqual(0, site.TrainingLeft);
+            Assert.IsFalse(site.HasGarrison);
+            Assert.AreEqual(-1, world.FindBuilding(cell));
         }
 
         [Test]
-        public void TurretWorksiteReservesSlotAndCompletesAlongsideExpansion()
+        public void WorksiteKeepsDamageAndMovingTurretPreservesHealth()
         {
-            var world = new WorldState(732);
-            AddStock(world.Run, world.TurretScrapCost + ExpansionSite.SpecFor(ExpansionKind.Barricade).Scrap, world.TurretEnergyCost);
-            Assert.IsTrue(world.BuildTurret(2));
-            Assert.IsTrue(world.BuildExpansion(3, ExpansionKind.Barricade));
-            Assert.IsFalse(world.BuildTurret(2));
-            Assert.IsFalse(world.MoveTurret(2, 3));
-            Assert.IsFalse(world.MoveTurret(0, 2));
-            Advance(world, 3.2f);
-            Assert.IsFalse(world.ExpansionSites[3].IsUnderConstruction);
-            Assert.IsFalse(world.Turrets[2].Occupied);
-            Assert.IsTrue(world.Turrets[2].IsUnderConstruction);
-            Advance(world, 3.2f);
-            Assert.IsTrue(world.Turrets[2].Occupied);
-            Assert.IsFalse(world.Turrets[2].IsUnderConstruction);
-            Assert.AreEqual(0, world.Run.Scrap);
-            Assert.AreEqual(0, world.Run.Energy);
-        }
-
-        [Test]
-        public void DepletedNodeAndDestroyedWorksiteNeverProduceResources()
-        {
-            var world = new WorldState(732);
-            var spec = ExpansionSite.SpecFor(ExpansionKind.Extractor);
-            AddStock(world.Run, spec.Scrap * 2, 0);
-            Assert.IsTrue(world.BuildExpansion(0, ExpansionKind.Extractor));
-            Assert.IsTrue(world.BuildExpansion(2, ExpansionKind.Extractor));
-            var emptySource = world.ExpansionSites[0];
-            var attacked = world.ExpansionSites[2];
-            world.Nodes[emptySource.NodeIndex].Remaining = 0;
-            for (int i = 0; i < 20; i++)
-                world.Enemies.Add(new EnemyState { Position = attacked.Position + Vector2.up, Health = 10000 });
-            Advance(world, 2);
-            Assert.AreEqual(ExpansionKind.Empty, attacked.Kind);
+            var world = EmptyMap();
+            Fund(world, 16, 3);
+            var initial = new Vector2Int(0, 7);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Turret, initial));
+            var site = world.Buildings[6];
+            Assert.AreEqual(45, site.Health);
+            Assert.AreEqual(PlacementIssue.MissingTurret, world.MoveTurret(6, new Vector2Int(1, 8)));
+            var enemy = new EnemyState(EnemyKind.Siege) { Position = site.Position + Vector2.up * 2, Health = 1000 };
+            world.Enemies.Add(enemy);
+            Advance(world, 11);
             world.Enemies.Clear();
-            Advance(world, spec.BuildSeconds + spec.Cycle);
-            Assert.AreEqual(ExpansionKind.Extractor, emptySource.Kind);
-            Assert.IsFalse(emptySource.IsUnderConstruction);
+            Assert.AreEqual(40, site.Health);
+            Advance(world, 52);
+            Assert.AreEqual(85, site.Health);
+            var destination = new Vector2Int(1, 8);
+            Assert.AreEqual(PlacementIssue.None, world.MoveTurret(6, destination));
+            Assert.AreEqual(85, site.Health);
+            Assert.AreEqual(-1, world.FindBuilding(initial));
+            Assert.AreEqual(6, world.FindBuilding(destination));
             Assert.AreEqual(0, world.Run.Scrap);
-            Assert.AreEqual(0, world.Run.Energy);
         }
 
-        private static void Advance(WorldState world, float seconds)
+        [Test]
+        public void ExpansionAndTurretLimitsAreIndependent()
         {
-            for (int i = 0; i < Mathf.CeilToInt(seconds * 10); i++) world.Step(.1f);
+            var world = EmptyMap();
+            Fund(world, 82, 6);
+            for (int i = 0; i < 4; i++)
+                Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(i * 2 - 4, 6)));
+            Assert.AreEqual(PlacementIssue.Limit, world.Build(ExpansionKind.Barricade, new Vector2Int(0, 7)));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Turret, new Vector2Int(0, 7)));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Turret, new Vector2Int(1, 7)));
+            Assert.AreEqual(PlacementIssue.Limit, world.Build(ExpansionKind.Turret, new Vector2Int(2, 7)));
+            Assert.AreEqual(10, world.Run.Scrap);
         }
 
-        private static void AddStock(RunState run, int scrap, int energy)
+        [Test]
+        public void WorkerRoutesAroundConstructionAndDeposits()
+        {
+            var world = EmptyMap();
+            Fund(world, 10, 0);
+            var cell = new Vector2Int(-1, -4);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, cell));
+            world.Nodes.Add(new ResourceNode { Position = new Vector2(0, -16), Remaining = 4 });
+            Assert.IsTrue(world.AssignResource(0));
+            for (int i = 0; i < 400 && world.Run.Scrap < 4; i++)
+            {
+                world.Step(.1f);
+                Assert.IsFalse(world.Buildings[0].Footprint.Contains(BattleGrid.Cell(world.WorkerPosition)));
+            }
+            Assert.AreEqual(4, world.Run.Scrap);
+        }
+
+        [Test]
+        public void SealedEnemyAttacksRoadblockAndWalksThroughTheOpenedRoute()
+        {
+            var world = EmptyMap();
+            Fund(world, 40, 0);
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(-1, 8), true));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(0, 9)));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(1, 7), true));
+            Assert.AreEqual(PlacementIssue.None, world.Build(ExpansionKind.Barricade, new Vector2Int(-1, 7)));
+            Advance(world, 33);
+            var enemy = new EnemyState(EnemyKind.Siege) { Position = Vector2.up * 16, Health = 1000 };
+            world.Enemies.Add(enemy);
+            Advance(world, 12);
+            Assert.AreEqual(145, world.Buildings[0].Health);
+            Assert.AreEqual(Vector2.up * 16, enemy.Position);
+            Advance(world, 300);
+            Assert.AreEqual(ExpansionKind.Empty, world.Buildings[0].Kind);
+            Assert.AreEqual(ExpansionKind.Barricade, world.LastDestroyedKind);
+            // 缺口仍可能让敌人先接触第二块路障，最终会穿过恢复的路线。
+            Advance(world, 950);
+            Assert.Less(enemy.Position.y, 12);
+        }
+
+        private static WorldState EmptyMap()
+        {
+            var world = new WorldState(12);
+            world.Nodes.Clear();
+            return world;
+        }
+
+        private static void Advance(WorldState world, int steps)
+        {
+            for (int i = 0; i < steps; i++) world.Step(.1f);
+        }
+
+        private static void Fund(WorldState world, int scrap, int energy)
         {
             for (int i = 0; i < scrap + energy; i++)
             {
-                if (run.CargoScrap + run.CargoEnergy == run.Capacity) run.Deposit();
-                Assert.IsTrue(run.Gather(i >= scrap));
+                if (world.Run.CargoScrap + world.Run.CargoEnergy == world.Run.Capacity) world.Run.Deposit();
+                Assert.IsTrue(world.Run.Gather(i >= scrap));
             }
-            run.Deposit();
+            world.Run.Deposit();
         }
     }
 }

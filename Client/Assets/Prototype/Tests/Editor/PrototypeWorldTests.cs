@@ -9,17 +9,19 @@ namespace OutpostLoop.Tests
 
         [SetUp] public void PrepareFoundation() { Game.FoundationRuntime.Initialize(); }
 
-        [Test] public void ExtremeWaveConfigurationStillSpawnsWithinPoolLimit()
+        [Test] public void EnemiesWaitForAvailableCapacity()
         {
-            var config = PrototypeServices.LoadConfig();
-            // 构造独立极值快照，不修改权威CSV或生成产物。
-            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-            typeof(OutpostLoop.Config.PrototypeConfig).GetField("<WaveCountBase>k__BackingField", flags).SetValue(config, int.MaxValue);
-            typeof(OutpostLoop.Config.PrototypeConfig).GetField("<WaveCountStep>k__BackingField", flags).SetValue(config, int.MaxValue);
-            var world = new WorldState(12, config);
+            var world = new WorldState(12);
+            var config = world.Run.Config;
+            for (int i = 0; i < config.MaxEnemies; i++)
+                world.Enemies.Add(new EnemyState { Position = Vector2.up * 42, Health = 1000 });
             world.Run.Tick(config.WaveTimes[0], 0);
-            world.Step(0.01f);
+            world.Step(.01f);
+            Assert.AreEqual(10, world.WaitingEnemies);
+            world.Enemies.RemoveRange(0, 5);
+            world.Step(.01f);
             Assert.AreEqual(config.MaxEnemies, world.Enemies.Count);
+            Assert.AreEqual(5, world.WaitingEnemies);
         }
         [Test] public void SeedProducesBoundedRepeatableMap()
         {
@@ -27,10 +29,12 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(36, a.Nodes.Count); Assert.AreEqual(a.Nodes[5].Position, b.Nodes[5].Position);
             Assert.AreNotEqual(a.Nodes[5].Position, c.Nodes[5].Position);
             foreach (var node in a.Nodes) { Assert.LessOrEqual(node.Position.magnitude, 47); Assert.Greater(node.Position.magnitude, 5); }
-            var opening = new WorldState(732);
-            foreach (var node in opening.Nodes)
-                foreach (var site in opening.ExpansionSites)
-                    Assert.Greater(Vector2.Distance(node.Position, site.Position), 3.7f, "资源应留出建筑地块");
+            foreach (var node in a.Nodes)
+            {
+                var cell = BattleGrid.Cell(node.Position);
+                Assert.IsFalse(BattleGrid.Base.Contains(cell));
+                Assert.AreEqual(-1, a.FindBuilding(cell));
+            }
         }
         [Test] public void WorkerOrdersRespectPauseAndRejectInvalidTargets()
         {
@@ -92,8 +96,8 @@ namespace OutpostLoop.Tests
         {
             var west = new WorldState(1);
             var north = new WorldState(1);
-            Assert.IsFalse(north.MoveTurret(0, 1), "不能覆盖已占用炮位");
-            Assert.IsTrue(north.MoveTurret(0, 2));
+            Assert.AreEqual(PlacementIssue.Occupied, north.MoveTurret(4, new Vector2Int(2, 0)));
+            Assert.AreEqual(PlacementIssue.None, north.MoveTurret(4, new Vector2Int(0, 2)));
             Assert.AreEqual(0, north.Run.Scrap, "迁移不扣费");
             float distance = west.Run.Config.ShotRange + 2;
             var westEnemy = new EnemyState { Position = Vector2.left * distance, Health = 100 };
@@ -113,9 +117,9 @@ namespace OutpostLoop.Tests
         {
             var w = new WorldState(1);
             const int sector = 2;
-            Vector2 approach = w.Turrets[sector].Position.normalized;
+            Vector2 approach = Vector2.up;
             Assert.IsTrue(w.DeploySquad(sector));
-            for (int i = 0; i < 50; i++) w.Step(.1f);
+            for (int i = 0; i < 80; i++) w.Step(.1f);
             Assert.AreEqual(approach * 12, w.SquadPosition);
             var enemy = new EnemyState { Position = approach * 21, Health = 100 };
             w.Enemies.Add(enemy);
@@ -124,16 +128,25 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(0, w.Run.Scrap, "调防不扣费");
         }
 
-        [Test] public void FullyPreparedBaseWinsCompleteRun()
+        [Test] public void FourthWaveReleasesSecondLaneAfterFiveSeconds()
         {
-            foreach(int seed in new[]{11,22})
-            {
-                var w = new WorldState(seed);
-                for(int n=0;n<50;n++){for(int j=0;j<12;j++)w.Run.Gather(j%3==0); w.Run.Deposit();}
-                for(int route=0;route<3;route++)for(int level=0;level<3;level++)Assert.IsTrue(w.Run.Upgrade(route));
-                for(int i=0;i<7201;i++)w.Step(0.1f);
-                Assert.AreEqual(1,w.Run.Outcome,"seed="+seed); Assert.AreEqual(6,w.Wave); Assert.Greater(w.Kills,0);
-            }
+            var world = new WorldState(11);
+            float start = world.Run.Config.WaveTimes[3];
+            world.Run.Tick(start, 0);
+            world.Step(.01f);
+            Assert.AreEqual(4, world.Wave);
+            Assert.AreEqual(10 + 14 + 18 + 14 - 8, world.Enemies.Count);
+            Assert.AreEqual(16, world.WaitingEnemies);
+            world.Enemies.Clear();
+            world.Run.Tick(4.8f, 0);
+            world.Step(.01f);
+            Assert.AreEqual(8, world.Enemies.Count);
+            world.Enemies.Clear();
+            world.Run.Tick(.2f, 0);
+            world.Step(.01f);
+            Assert.AreEqual(8, world.Enemies.Count);
+            Assert.AreEqual(1, world.Enemies.FindAll(enemy => enemy.Kind == EnemyKind.Siege).Count);
+            Assert.AreEqual(0, world.WaitingEnemies);
         }
         [Test] public void LargeFrameDoesNotSkipEntireWaves()
         {

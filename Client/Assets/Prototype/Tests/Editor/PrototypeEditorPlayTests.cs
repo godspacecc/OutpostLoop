@@ -73,7 +73,7 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             var walletDirectory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
-                "../../Backup/Artifacts/VictorySupplies-20261108/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
+                "../../Backup/Artifacts/FirstPlayableV05-20261110/PlayWallet-" + System.Guid.NewGuid().ToString("N")));
             var wallet = new PrototypeWallet(walletDirectory);
             Game.Game.Interface.RegisterUtility(wallet);
             var run = controller.World.Run;
@@ -123,19 +123,24 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(1, run.Levels[1], "资源不足时按钮不能改变升级等级");
             Click("PrimaryAction");
             Click("OpenConstruction");
-            Click("ConstructionTurretTab");
-            Click("TurretSlot0");
-            Click("TurretSlot2");
-            Assert.IsNull(GameObject.Find("Turret0"), "迁出后原炮位应为空");
-            Assert.IsNotNull(GameObject.Find("Turret2"), "迁入后目标炮位应出现炮塔");
-            Click("TurretSlot3");
-            Assert.IsNull(GameObject.Find("Turret3"), "库存不足时不能建造");
+            var world = controller.World;
+            var original = new Vector2Int(-2, 0);
+            Assert.IsTrue(ClickCell(controller, original));
+            Click("MoveSelectedTurret");
+            Assert.IsFalse(ClickCell(controller, new Vector2Int(2, 0)), "不应覆盖已有炮塔");
+            var target = FindPlacement(world, ExpansionKind.Turret, 4);
+            Assert.IsTrue(ClickCell(controller, target));
+            Assert.AreEqual(-1, world.FindBuilding(original));
+            Assert.AreEqual(4, world.FindBuilding(target));
+            Click("BuildTurret");
+            Assert.IsFalse(ClickCell(controller, Vector2Int.zero));
             Assert.AreEqual(beforeUpgrade - cost, run.Scrap);
             Click("CloseConstruction");
             Assert.IsFalse(run.Paused);
 
-            int scrap = run.Config.ScrapCostBase * 2 - run.Scrap;
-            int energy = run.Config.EnergyCostPerLevel - run.Energy;
+            var turretSpec = ExpansionSite.SpecFor(ExpansionKind.Turret);
+            int scrap = turretSpec.Scrap - run.Scrap;
+            int energy = turretSpec.Energy - run.Energy;
             for (int i = 0; i < scrap + energy; i++)
             {
                 if (run.CargoScrap + run.CargoEnergy == run.Capacity) run.Deposit();
@@ -144,18 +149,20 @@ namespace OutpostLoop.Tests
             run.Deposit();
             yield return null;
             Click("OpenConstruction");
-            Click("ConstructionTurretTab");
-            Click("TurretSlot3");
-            Assert.IsTrue(controller.World.Turrets[3].IsUnderConstruction);
-            Assert.IsNotNull(GameObject.Find("TurretWorksite3"));
-            Assert.IsNull(GameObject.Find("Turret3"), "施工中不得出现可开火的炮塔");
+            Click("BuildTurret");
+            Assert.AreEqual(turretSpec.Scrap, run.Scrap, "选类型不会扣费");
+            Assert.IsTrue(ClickCell(controller, FindPlacement(world, ExpansionKind.Turret)));
+            Assert.IsTrue(world.Buildings[6].IsUnderConstruction);
+            var model = GameObject.Find("Building6").transform;
+            Assert.IsTrue(model.Find("Worksite").gameObject.activeInHierarchy);
+            Assert.IsFalse(model.Find("Turret").gameObject.activeInHierarchy);
             Assert.AreEqual(0, run.Scrap);
             Assert.AreEqual(0, run.Energy);
             Click("CloseConstruction");
-            for (int i = 0; i < 62; i++) controller.World.Step(.1f);
+            for (int i = 0; i < 62; i++) world.Step(.1f);
             yield return null;
-            Assert.IsNotNull(GameObject.Find("Turret3"), "关闭侧栏后也应按时完工");
-            Assert.IsNull(GameObject.Find("TurretWorksite3"));
+            Assert.IsTrue(model.Find("Turret").gameObject.activeInHierarchy);
+            Assert.IsFalse(model.Find("Worksite").gameObject.activeInHierarchy);
 
             Assert.IsFalse(run.Paused);
             run.Damage(run.Health);
@@ -207,22 +214,22 @@ namespace OutpostLoop.Tests
             int before = world.Run.Scrap;
             var spec = ExpansionSite.SpecFor(ExpansionKind.Extractor);
             Assert.GreaterOrEqual(before, spec.Scrap);
-            int sector = 0;
-            while (sector < world.ExpansionSites.Count && world.FindExpansionResource(sector) < 0) sector++;
-            Assert.Less(sector, world.ExpansionSites.Count);
             Click("OpenConstruction");
-            Assert.IsTrue(GameObject.Find("ExpansionPlotButton0").GetComponentInChildren<Text>().text.StartsWith("✓"),
-                "初次打开固定选中西侧");
             Assert.IsFalse(world.Run.Paused, "建造侧栏应保持战斗实时推进");
             Assert.IsFalse(Game.UIHelper.HasUIOpen, "建造不应登记为阻断玩法的窗口");
-            Click("ExpansionPlotButton" + sector);
             Click("BuildExtractor");
-            var site = world.ExpansionSites[sector];
+            Assert.AreEqual(before, world.Run.Scrap);
+            Assert.IsFalse(ClickCell(controller, Vector2Int.zero));
+            Assert.AreEqual(before, world.Run.Scrap);
+            var location = FindPlacement(world, ExpansionKind.Extractor);
+            Assert.IsTrue(ClickCell(controller, location));
+            int index = world.FindBuilding(location);
+            var site = world.Buildings[index];
             Assert.AreEqual(ExpansionKind.Extractor, site.Kind);
             Assert.AreEqual(before - spec.Scrap, world.Run.Scrap);
-            var plot = GameObject.Find("ExpansionSite" + sector).transform;
+            var plot = GameObject.Find("Building" + index).transform;
             var model = plot.Find("Extractor").gameObject;
-            Assert.IsTrue(plot.Find("ExpansionWorksite").gameObject.activeInHierarchy);
+            Assert.IsTrue(plot.Find("Worksite").gameObject.activeInHierarchy);
             Assert.IsFalse(model.activeInHierarchy);
             var source = world.Nodes[site.NodeIndex];
             int beforeRemaining = source.Remaining;
@@ -239,7 +246,7 @@ namespace OutpostLoop.Tests
             for (int i = 0; i < 80; i++) world.Step(.1f);
             yield return null;
             Assert.IsTrue(model.activeInHierarchy);
-            Assert.IsFalse(plot.Find("ExpansionWorksite").gameObject.activeInHierarchy);
+            Assert.IsFalse(plot.Find("Worksite").gameObject.activeInHierarchy);
             Assert.Less(source.Remaining, beforeRemaining);
             Assert.Greater(world.Run.Scrap + world.Run.Energy, before - spec.Scrap);
 
@@ -248,18 +255,17 @@ namespace OutpostLoop.Tests
                 Assert.IsTrue(world.AssignResource(resource));
                 for (int i = 0; i < 600 && (world.ResourceOrder >= 0 || world.WorkerReturning); i++) world.Step(.1f);
             }
-            int barracksSector = (sector + 1) % world.ExpansionSites.Count;
             Click("OpenConstruction");
-            Click("ExpansionPlotButton" + barracksSector);
             Click("BuildBarracks");
-            var barracks = world.ExpansionSites[barracksSector];
+            var barracksLocation = FindPlacement(world, ExpansionKind.Barracks);
+            Assert.IsTrue(ClickCell(controller, barracksLocation));
+            int barracksIndex = world.FindBuilding(barracksLocation);
+            var barracks = world.Buildings[barracksIndex];
             Assert.AreEqual(ExpansionKind.Barracks, barracks.Kind);
             Assert.IsNull(GameObject.Find("TrainGarrison"));
             Click("CloseConstruction");
             for (int i = 0; i < 85; i++) world.Step(.1f);
-            Click("OpenConstruction");
-            Assert.IsTrue(GameObject.Find("ExpansionPlotButton" + barracksSector).GetComponentInChildren<Text>().text.StartsWith("✓"),
-                "重新打开时记住玩家选中的地块");
+            Assert.IsTrue(ClickCell(controller, barracksLocation));
             Assert.IsFalse(barracks.HasGarrison);
             int beforeTrainingScrap = world.Run.Scrap;
             int beforeTrainingEnergy = world.Run.Energy;
@@ -271,15 +277,35 @@ namespace OutpostLoop.Tests
             for (int i = 0; i < 125; i++) world.Step(.1f);
             yield return null;
             Assert.IsTrue(barracks.HasGarrison);
-            var garrison = GameObject.Find("ExpansionSite" + barracksSector).transform.Find("Garrison").gameObject;
+            var garrison = GameObject.Find("Building" + barracksIndex).transform.Find("Garrison").gameObject;
             Assert.IsTrue(garrison.activeInHierarchy);
             for (int i = 0; i < 40; i++)
-                world.Enemies.Add(new EnemyState { Position = barracks.Position * 1.05f, Health = 10000 });
+                world.Enemies.Add(new EnemyState { Position = barracks.Position, Health = 10000 });
             for (int i = 0; i < 20; i++) world.Step(.1f);
             yield return null;
             Assert.AreEqual(ExpansionKind.Empty, barracks.Kind);
             Assert.IsFalse(garrison.activeInHierarchy, "兵营被毁时移除已部署守军");
             yield return new ExitPlayMode();
+        }
+
+        private static Vector2Int FindPlacement(WorldState world, ExpansionKind kind, int moving = -1)
+        {
+            for (int x = -5; x <= -2; x++)
+                for (int y = 1; y <= 6; y++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (world.PreviewPlacement(kind, cell, false, moving, out _, out _) == PlacementIssue.None)
+                        return cell;
+                }
+            Assert.Fail("找不到可见的合法落位");
+            return default;
+        }
+
+        private static bool ClickCell(PrototypeController controller, Vector2Int cell)
+        {
+            var point = BattleGrid.Center(cell);
+            var camera = controller.GetComponentInChildren<Camera>();
+            return controller.ActOnBattlefield(camera.WorldToScreenPoint(new Vector3(point.x, 0, point.y)));
         }
 
         /// <summary>通过活动 EventSystem 分发 UGUI 左键事件，不绕过按钮监听器调用玩法。</summary>

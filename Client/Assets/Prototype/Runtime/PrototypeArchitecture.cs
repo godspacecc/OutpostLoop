@@ -87,13 +87,12 @@ namespace OutpostLoop
             try{run.Paused=false;return run.Upgrade(route);}finally{run.Paused=paused;}
         }
 
-        /// <summary>将基地炮位操作转发给本局规则。</summary>
-        public bool BuildTurret(int slot) => model.World?.BuildTurret(slot) == true;
-        public bool MoveTurret(int source, int destination) => model.World?.MoveTurret(source, destination) == true;
+        /// <summary>转发地图落位和迁移命令，界面无法直接扣费或改占地。</summary>
+        public PlacementIssue Build(ExpansionKind kind, Vector2Int cell, bool rotated) =>
+            awaitingStart ? PlacementIssue.Inactive : model.World?.Build(kind, cell, rotated) ?? PlacementIssue.Inactive;
 
-        /// <summary>将外围建设订单转发给运行中的本局规则。</summary>
-        public bool BuildExpansion(int sector, ExpansionKind kind) =>
-            !awaitingStart && model.World?.BuildExpansion(sector, kind) == true;
+        public PlacementIssue MoveTurret(int source, Vector2Int cell) =>
+            awaitingStart ? PlacementIssue.Inactive : model.World?.MoveTurret(source, cell) ?? PlacementIssue.Inactive;
 
         /// <summary>转发兵营独立的付费训练订单。</summary>
         public bool TrainGarrison(int sector) => !awaitingStart && model.World?.TrainGarrison(sector) == true;
