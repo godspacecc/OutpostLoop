@@ -24,6 +24,8 @@
   "SettingsReset": "Restore defaults",
   "SettingsCheck": "Check for updates",
   "SettingsRestart": "Restart and update",
+  "SettingsRestartRunWarning": "Restarting ends the current battle and discards unsaved progress. Cancel to finish this run before updating.",
+  "SettingsRestartSaveFailed": "Settings could not be saved. Try again before updating.",
   "SettingsUpdateAvailable": "Update available. Restart to update.",
   "SettingsUpToDate": "You are up to date",
   "UpdateVersionUnknown": "Current resource version: unknown",

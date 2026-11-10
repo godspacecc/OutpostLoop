@@ -55,6 +55,8 @@ namespace OutpostLoop
         private FullScreenMode mode;
         private string message = "";
         private bool checking;
+        // 确认只在本次设置窗口及本次更新结果内有效。
+        private bool restartPending;
         private int generation;
         // 保存结构化结果，切换语言后按当前语言重新显示。
         private ResourceUpdateCheckWithNoticeResult? lastUpdate;
@@ -66,6 +68,7 @@ namespace OutpostLoop
         internal void Open()
         {
             showUpdateFirst = false;
+            restartPending = false;
             lastUpdate = null;
             message = "";
             scroll = Vector2.zero;
@@ -90,6 +93,7 @@ namespace OutpostLoop
         {
             generation++;
             checking = false;
+            restartPending = false;
             Architecture.GetSystem<DisplayPreviewTransaction>().Cancel();
             Architecture.GetSystem<HotKeySystem>().CancelRebind();
             Architecture.GetSystem<SettingsSystem>().Flush();
@@ -196,11 +200,42 @@ namespace OutpostLoop
             if (!string.IsNullOrEmpty(message)) GUILayout.Label(message);
             bool canRestart = lastUpdate is { } update &&
                               (update.Snapshot.Status == ResourceUpdateStatus.UpdateAvailable || update.ApplicationUpdate != null);
-            if (!checking && canRestart && GUILayout.Button(Loc.T("SettingsRestart")))
+            if (!checking && canRestart && restartPending)
             {
-                Architecture.GetSystem<SettingsSystem>().Flush();
-                if (!Architecture.GetUtility<IApplicationRestartUtility>().TryRestart(out var error)) message = error;
+                GUILayout.Label(Loc.T("SettingsRestartRunWarning"));
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(Loc.T("SettingsRestart"))) ConfirmUpdateRestart();
+                if (GUILayout.Button(Loc.T("CommonCancel"))) restartPending = false;
+                GUILayout.EndHorizontal();
             }
+            else if (!checking && canRestart && GUILayout.Button(Loc.T("SettingsRestart"))) RequestUpdateRestart();
+        }
+
+        /// <summary>有未保存战局时先显示确认，开始页仍可直接更新。</summary>
+        private void RequestUpdateRestart()
+        {
+            if (Architecture.GetSystem<PrototypeSystem>()?.HasUnsavedRun == true)
+                restartPending = true;
+            else
+                RestartForUpdate();
+        }
+
+        private void ConfirmUpdateRestart()
+        {
+            if (!restartPending) return;
+            restartPending = false;
+            RestartForUpdate();
+        }
+
+        /// <summary>设置写盘成功后才交给平台重启，失败时保留当前窗口与战局。</summary>
+        private void RestartForUpdate()
+        {
+            if (!Architecture.GetSystem<SettingsSystem>().Flush())
+            {
+                message = Loc.T("SettingsRestartSaveFailed");
+                return;
+            }
+            message = Architecture.GetUtility<IApplicationRestartUtility>().TryRestart(out var error) ? "" : error;
         }
 
         internal void ReleaseFont()
@@ -233,6 +268,7 @@ namespace OutpostLoop
         {
             int request = ++generation;
             checking = true;
+            restartPending = false;
             lastUpdate = null;
             message = "";
             try

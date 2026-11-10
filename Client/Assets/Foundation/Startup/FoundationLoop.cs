@@ -23,7 +23,20 @@ namespace Game
                 if (Application.isPlaying) { if (persistAcrossScenes) Destroy(gameObject); else Destroy(this); } else DestroyImmediate(this);
                 return;
             }
-            FoundationRuntime.Initialize();
+            try
+            {
+                FoundationRuntime.Initialize();
+            }
+            catch (System.Exception error)
+            {
+                Log.Error("[FoundationLoop] 基础初始化失败：" + error);
+                Boot.BootHost.ReportFailure(new System.Collections.Generic.Dictionary<string, string>
+                {
+                    ["mainPhase"] = "FoundationInitialization",
+                    ["exceptionType"] = error.GetType().FullName
+                });
+                return;
+            }
             owner = this;
             if (persistAcrossScenes && Application.isPlaying) DontDestroyOnLoad(gameObject);
         }

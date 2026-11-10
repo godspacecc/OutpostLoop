@@ -24,6 +24,8 @@
   "SettingsReset": "恢复默认设置",
   "SettingsCheck": "检查更新",
   "SettingsRestart": "重启并更新",
+  "SettingsRestartRunWarning": "重启会结束当前战局，未保存的进度将丢失。你也可以取消，打完这一局再更新。",
+  "SettingsRestartSaveFailed": "设置保存失败，请重试后再更新。",
   "SettingsUpdateAvailable": "发现更新，重启后由启动流程更新。",
   "SettingsUpToDate": "当前已是最新版本",
   "UpdateVersionUnknown": "当前资源版本：未知",

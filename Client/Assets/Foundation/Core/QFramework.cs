@@ -88,37 +88,74 @@ namespace QFramework
             if (mArchitecture == null)
             {
                 mArchitecture = new T();
-                mArchitecture.Init();
-
-                OnRegisterPatch?.Invoke(mArchitecture);
-
-                foreach (var model in mArchitecture.mContainer.GetInstancesByType<IModel>().Where(m => !m.Initialized))
+                try
                 {
-                    model.Init();
-                    model.Initialized = true;
+                    mArchitecture.Init();
+                    OnRegisterPatch?.Invoke(mArchitecture);
+                    foreach (var model in mArchitecture.mContainer.GetInstancesByType<IModel>().Where(m => !m.Initialized))
+                        InitializeComponent(model);
+                    foreach (var system in mArchitecture.mContainer.GetInstancesByType<ISystem>().Where(s => !s.Initialized))
+                        InitializeComponent(system);
+                    mArchitecture.mInited = true;
                 }
-
-                foreach (var system in mArchitecture.mContainer.GetInstancesByType<ISystem>()
-                             .Where(m => !m.Initialized))
+                catch
                 {
-                    system.Init();
-                    system.Initialized = true;
+                    Rollback(mArchitecture.Deinit);
+                    throw;
                 }
-
-                mArchitecture.mInited = true;
             }
+        }
+
+        /// <summary>初始化失败的组件也有机会撤销已经建立的订阅。</summary>
+        private static void InitializeComponent(ICanInit component)
+        {
+            try
+            {
+                component.Init();
+                component.Initialized = true;
+            }
+            catch
+            {
+                Rollback(component.Deinit);
+                throw;
+            }
+        }
+
+        /// <summary>保留原始启动异常，单独记录清理失败。</summary>
+        private static void Rollback(Action action)
+        {
+            try { action(); }
+            catch (Exception error) { UnityEngine.Debug.LogException(error); }
         }
 
         protected abstract void Init();
 
         public void Deinit()
         {
-            OnDeinit();
-            foreach (var system in mContainer.GetInstancesByType<ISystem>().Where(s => s.Initialized)) system.Deinit();
-            foreach (var model in mContainer.GetInstancesByType<IModel>().Where(m => m.Initialized)) model.Deinit();
-            mContainer.Clear();
-            mTypeEventSystem = new TypeEventSystem();
-            mArchitecture = null;
+            // 单个模块退出失败时继续清理，再把错误交给会话入口报告。
+            var errors = new List<Exception>();
+            void Cleanup(Action action)
+            {
+                try { action(); }
+                catch (Exception error) { errors.Add(error); }
+            }
+
+            try
+            {
+                Cleanup(OnDeinit);
+                foreach (var system in mContainer.GetInstancesByType<ISystem>().Where(s => s.Initialized).ToArray())
+                    Cleanup(system.Deinit);
+                foreach (var model in mContainer.GetInstancesByType<IModel>().Where(m => m.Initialized).ToArray())
+                    Cleanup(model.Deinit);
+            }
+            finally
+            {
+                mContainer.Clear();
+                mTypeEventSystem = new TypeEventSystem();
+                mInited = false;
+                if (ReferenceEquals(mArchitecture, this)) mArchitecture = null;
+            }
+            if (errors.Count != 0) throw new AggregateException("架构退出时部分模块清理失败。", errors);
         }
 
         protected virtual void OnDeinit()

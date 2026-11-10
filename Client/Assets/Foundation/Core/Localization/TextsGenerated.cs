@@ -539,6 +539,14 @@ namespace Game
         /// </summary>
         public static string Settingsrestart => Loc.T("SettingsRestart");
         /// <summary>
+        /// 重启会结束当前战局，未保存的进度将丢失。你也可以取消，打完这一局再更新。
+        /// </summary>
+        public static string Settingsrestartrunwarning => Loc.T("SettingsRestartRunWarning");
+        /// <summary>
+        /// 设置保存失败，请重试后再更新。
+        /// </summary>
+        public static string Settingsrestartsavefailed => Loc.T("SettingsRestartSaveFailed");
+        /// <summary>
         /// 音效音量
         /// </summary>
         public static string Settingssound => Loc.T("SettingsSound");

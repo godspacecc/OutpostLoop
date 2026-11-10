@@ -94,7 +94,11 @@ namespace OutpostLoop
         private bool initialized;
         private readonly Color groundColor = new Color(0.16f,0.25f,0.24f);
 
-        private void Awake() { Initialize(); }
+        private void Awake()
+        {
+            // 基础启动失败已交给 Boot 展示，玩法入口不能重新创建已回滚的架构。
+            if (Game.FoundationRuntime.IsInitialized) Initialize();
+        }
         /// <summary>Main 完成真实玩法初始化后才释放 Boot 启动界面。</summary>
         private void Start()
         {

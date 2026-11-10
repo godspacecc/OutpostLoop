@@ -28,6 +28,9 @@ namespace OutpostLoop
         private bool awaitingStart;
         private bool rewardAttempted;
         public bool VictoryRewardRecorded { get; private set; }
+        /// <summary>开局后尚未结算，或胜利奖励还未落盘时，重启应用会丢失进度。</summary>
+        internal bool HasUnsavedRun => !awaitingStart && model?.World is { } world &&
+            (world.Run.Outcome == 0 || world.Run.Outcome > 0 && !VictoryRewardRecorded);
         public int Wins => this.GetUtility<PrototypeWallet>()?.Wins ?? 0;
         public int StartingFunds => this.GetUtility<PrototypeWallet>()?.StartingFunds ?? PrototypeWallet.InitialFunds;
         protected override void OnInit(){model=this.GetModel<PrototypeModel>();Game.LifeCycle.RegisterUpdate(OnTick);}

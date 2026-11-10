@@ -14,42 +14,55 @@ namespace Game
         public static void Initialize()
         {
             if (IsInitialized) return;
-            if (!ResourceLoader.IsConfigured)
+            try
             {
-                if (Boot.BootHost.TryGetResourceInfo(out _))
-                    ResourceLoader.Use(new YooAssetResourceLoader(YooAsset.YooAssets.GetPackage("OutpostLoop")));
-            }
-            if (!ResourceLoader.IsConfigured)
-            {
+                if (!ResourceLoader.IsConfigured)
+                {
+                    if (Boot.BootHost.TryGetResourceInfo(out _))
+                        ResourceLoader.Use(new YooAssetResourceLoader(YooAsset.YooAssets.GetPackage("OutpostLoop")));
+                }
+                if (!ResourceLoader.IsConfigured)
+                {
 #if UNITY_EDITOR
-                ResourceLoader.Use(new EditorSourceResourceLoader());
+                    ResourceLoader.Use(new EditorSourceResourceLoader());
 #else
-                throw new InvalidOperationException("基础启动失败：资源后端尚未就绪。");
+                    throw new InvalidOperationException("基础启动失败：资源后端尚未就绪。");
 #endif
+                }
+                UIHelper.SetPrefabLoader(null);
+                // 资源先就绪，再重载语言配置并应用本项目持久目录中的设置。
+                LocalizationLanguages.ResetCache();
+                architecture = Game.Interface;
+                architecture.GetUtility<LocalizationUtility>().InitializeConfiguredTables();
+                architecture.GetSystem<SettingsSystem>().LoadAndApply();
+                architecture.GetSystem<AudioSystem>().ApplyVolumes();
+                if (Boot.BootHost.TryGetResourceInfo(out var startupInfo))
+                    architecture.GetSystem<ResourceUpdateSystem>().InitializeStartupInfo(startupInfo);
+                IsInitialized = true;
             }
-            UIHelper.SetPrefabLoader(null);
-            // 资源先就绪，再重载语言配置并应用本项目持久目录中的设置。
-            LocalizationLanguages.ResetCache();
-            architecture = Game.Interface;
-            architecture.GetUtility<LocalizationUtility>().InitializeConfiguredTables();
-            architecture.GetSystem<SettingsSystem>().LoadAndApply();
-            architecture.GetSystem<AudioSystem>().ApplyVolumes();
-            if (Boot.BootHost.TryGetResourceInfo(out var startupInfo))
-                architecture.GetSystem<ResourceUpdateSystem>().InitializeStartupInfo(startupInfo);
-            IsInitialized = true;
+            catch
+            {
+                ReleaseSession();
+                throw;
+            }
         }
         /// <summary>退出按逆序释放界面、玩法容器、计时器和事件，最后断开资源入口；重复调用无副作用。</summary>
         public static void Shutdown()
         {
-            if (!IsInitialized) return;
+            if (IsInitialized) ReleaseSession();
+        }
+
+        /// <summary>正常退出和部分初始化失败使用同一条清理路径。</summary>
+        private static void ReleaseSession()
+        {
             IsInitialized = false;
             var current = architecture;
             architecture = null;
             Cleanup(UIHelper.Shutdown);
             Cleanup(() => current?.Deinit());
             Cleanup(LifeCycle.Quit);
-            LocalizationLanguages.ResetCache();
-            ResourceLoader.Shutdown();
+            Cleanup(LocalizationLanguages.ResetCache);
+            Cleanup(ResourceLoader.Shutdown);
         }
         /// <summary>一个模块清理失败不阻断其它模块退出，同时保留错误原因。</summary>
         private static void Cleanup(Action action)

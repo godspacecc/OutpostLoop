@@ -3,7 +3,7 @@ using UnityEngine;
 using Game;
 namespace OutpostLoop.Tests
 {
-    /// <summary>限定五项：纯基础入口初始化、拥有者清理、重复入口隔离。</summary>
+    /// <summary>限定基础入口初始化、失败回滚、拥有者清理和重复入口隔离。</summary>
     public sealed class FoundationStartupTests
     {
         // EditMode 不自动调用普通 MonoBehaviour 的 Awake，显式调用相同生命周期方法。
@@ -69,6 +69,53 @@ namespace OutpostLoop.Tests
             Game.FoundationRuntime.Initialize();
             Assert.AreSame(loader,ResourceLoader.Current);Assert.AreSame(architecture,Game.Game.Interface);
             Game.FoundationRuntime.Shutdown();
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void FailedInitializationReleasesSessionAndAllowsFreshStartup(bool failDuringArchitecture)
+        {
+            var previous = Game.Game.OnRegisterPatch;
+            QFramework.IArchitecture failedArchitecture = null;
+            var fault = new SystemStartupFault();
+            try
+            {
+                Game.Game.OnRegisterPatch = candidate =>
+                {
+                    previous?.Invoke(candidate);
+                    failedArchitecture = candidate;
+                    if (failDuringArchitecture) candidate.RegisterSystem(fault);
+                    else candidate.RegisterUtility<IDisplayResolutionApplier>(new DisplayStartupFault());
+                };
+                Assert.Throws<System.InvalidOperationException>(() => FoundationRuntime.Initialize());
+                Assert.IsFalse(FoundationRuntime.IsInitialized);
+                Assert.IsFalse(ResourceLoader.IsConfigured);
+                Assert.AreEqual(failDuringArchitecture ? 1 : 0, fault.Cleanups);
+
+                Game.Game.OnRegisterPatch = previous;
+                FoundationRuntime.Initialize();
+                Assert.IsTrue(FoundationRuntime.IsInitialized);
+                Assert.AreNotSame(failedArchitecture, Game.Game.Interface);
+            }
+            finally
+            {
+                Game.Game.OnRegisterPatch = previous;
+                FoundationRuntime.Shutdown();
+            }
+        }
+
+        // 两个入口分别注入架构组件初始化错误和架构建成后的显示设置错误。
+        private sealed class SystemStartupFault : QFramework.AbstractSystem
+        {
+            public int Cleanups { get; private set; }
+            protected override void OnInit() => throw new System.InvalidOperationException("Injected system startup failure");
+            protected override void OnDeinit() => Cleanups++;
+        }
+
+        private sealed class DisplayStartupFault : IDisplayResolutionApplier
+        {
+            public void Apply(DisplayResolutionPreset preset, FullScreenMode mode) =>
+                throw new System.InvalidOperationException("Injected display startup failure");
         }
         [Test] public void DuplicateDoesNotShutdownOwner()
         {

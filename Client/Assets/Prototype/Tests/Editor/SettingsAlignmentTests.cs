@@ -8,7 +8,7 @@ using OutpostLoop.Resources;
 
 namespace OutpostLoop.Tests
 {
-    /// <summary>限定十项，使用隔离存储与显示替身，不改用户设置和桌面分辨率。</summary>
+    /// <summary>使用隔离存储、显示和重启替身验证设置流程。</summary>
     public sealed class SettingsAlignmentTests
     {
         private string folder;
@@ -165,6 +165,47 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(2, LocalizationLanguages.All.Count);
             Assert.AreEqual(new Vector2Int(2560, 1440), UnityDisplayResolutionApplier.ResolveSize(DisplayResolutionPresets.Default, FullScreenMode.FullScreenWindow, 2560, 1440));
             Assert.AreEqual(new Vector2Int(1600, 900), UnityDisplayResolutionApplier.ResolveSize(DisplayResolutionPresets.Default, FullScreenMode.Windowed, 2560, 1440));
+        }
+
+        [Test]
+        public void UpdateRestartRequiresFreshConfirmationOnlyAfterRunStarts()
+        {
+            var restart = new RestartSpy();
+            architecture.RegisterUtility<IApplicationRestartUtility>(restart);
+            architecture.RegisterModel(new PrototypeModel());
+            var session = new PrototypeSystem();
+            architecture.RegisterSystem(session);
+            var viewType = typeof(PrototypeSettingsCtrl).Assembly.GetType("OutpostLoop.PrototypeSettingsView", true);
+            var root = new GameObject("Update restart test");
+            try
+            {
+                var view = root.AddComponent(viewType);
+                void Invoke(string method) => viewType.GetMethod(method,
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(view, null);
+                session.Begin(731, false);
+                Invoke("RequestUpdateRestart");
+                Assert.AreEqual(1, restart.Calls, "开局前可直接重启");
+
+                var world = session.Begin(731, true);
+                Invoke("RequestUpdateRestart");
+                Assert.AreEqual(1, restart.Calls, "局内第一次点击只能发起确认");
+                Invoke("Cancel");
+                Invoke("ConfirmUpdateRestart");
+                Assert.AreEqual(1, restart.Calls, "关闭设置后旧确认失效");
+                Assert.AreSame(world, architecture.GetModel<PrototypeModel>().World);
+
+                Invoke("RequestUpdateRestart");
+                Invoke("ConfirmUpdateRestart");
+                Invoke("ConfirmUpdateRestart");
+                Assert.AreEqual(2, restart.Calls, "确认只生效一次");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
+        private sealed class RestartSpy : IApplicationRestartUtility
+        {
+            public int Calls { get; private set; }
+            public bool TryRestart(out string error) { Calls++; error = null; return true; }
         }
 
         private sealed class Clock : ISettingsClock { public float Now { get; set; } }
