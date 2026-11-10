@@ -36,8 +36,9 @@ namespace OutpostLoop
         // 每份距离场只在占地变更或目的地变更时重新计算。
         private readonly BattleNavigation navigation;
         private readonly WaveDirector waves;
-        private readonly RouteWalker commanderWalker = new RouteWalker();
-        private int[] commanderRoute, coreAttackRoute;
+        private int[] coreAttackRoute;
+        // 选址阶段没有阻挡通行的建筑，指挥员直接走向地面目标。
+        private Vector2? commanderTarget;
         private readonly int[][] buildingRoutes = new int[ExpansionLimit + TurretLimit][];
         private Vector2Int? miningPreviewCell;
         private bool miningPreviewValid;
@@ -80,12 +81,12 @@ namespace OutpostLoop
             Array.Clear(buildingRoutes, 0, buildingRoutes.Length);
         }
 
+        /// <summary>保留右键指向的地面坐标，并把目标限制在地图圆内。</summary>
         public bool MoveCommander(Vector2 point)
         {
-            if (!Active || Headquarters.HasValue) return false;
-            var cell = BattleGrid.Cell(Vector2.ClampMagnitude(point, Rules.MapRadius - BattleGrid.CellSize));
-            if (!navigation.Walkable(cell)) return false;
-            commanderRoute = navigation.Field(new RectInt(cell, Vector2Int.one), 0);
+            if (!Active || Headquarters.HasValue || float.IsNaN(point.x) || float.IsNaN(point.y) ||
+                float.IsInfinity(point.x) || float.IsInfinity(point.y)) return false;
+            commanderTarget = Vector2.ClampMagnitude(point, Rules.MapRadius);
             return true;
         }
 
@@ -235,7 +236,7 @@ namespace OutpostLoop
             if (kind == ExpansionKind.Headquarters)
             {
                 Headquarters = footprint;
-                commanderRoute = null;
+                commanderTarget = null;
                 Run.EstablishBase();
                 RefreshNavigation();
                 return PlacementIssue.None;
@@ -476,10 +477,10 @@ namespace OutpostLoop
             float dt = Mathf.Min(seconds, Rules.MaxStep);
             if (!Headquarters.HasValue)
             {
-                if (commanderRoute == null) return;
-                var point = CommanderPosition;
-                if (navigation.Follow(commanderRoute, ref point, commanderWalker, Rules.MoveSpeed * dt)) commanderRoute = null;
-                CommanderPosition = point;
+                if (!commanderTarget.HasValue) return;
+                var target = commanderTarget.Value;
+                CommanderPosition = Vector2.MoveTowards(CommanderPosition, target, Rules.MoveSpeed * dt);
+                if (CommanderPosition.Equals(target)) commanderTarget = null;
                 return;
             }
             waves.Step(Run.Elapsed + dt, Rules.WaveTimes, Enemies, Rules);

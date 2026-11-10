@@ -569,8 +569,8 @@ namespace OutpostLoop
         /// <summary>基地尚未部署时，右键战场移动指挥员。</summary>
         public bool MoveCommanderAt(Vector2 screenPoint)
         {
-            return CanBuild && !HasPlacement && TryBattlefieldCell(screenPoint, out var cell) &&
-                session.MoveCommander(BattleGrid.Center(cell));
+            return CanBuild && !HasPlacement && TryBattlefieldPoint(screenPoint, out var point) &&
+                session.MoveCommander(point);
         }
 
         internal void DeploySquad(int sector)
@@ -727,16 +727,24 @@ namespace OutpostLoop
             construction?.Hide();
         }
 
-        /// <summary>由屏幕投影确定落格，排除小地图和状态栏。</summary>
+        /// <summary>建筑落位使用吸附格，指挥员移动使用原始地面投影。</summary>
         private bool TryBattlefieldCell(Vector2 screenPoint, out Vector2Int cell)
         {
             cell = default;
+            if (!TryBattlefieldPoint(screenPoint, out var point)) return false;
+            cell = BattleGrid.Cell(point);
+            return true;
+        }
+
+        private bool TryBattlefieldPoint(Vector2 screenPoint, out Vector2 point)
+        {
+            point = default;
             var hudPoint = new Vector2(screenPoint.x, Screen.height - screenPoint.y) / HudScale;
             if (!gameCamera.pixelRect.Contains(screenPoint) || MapRect.Contains(hudPoint) || StatusRect.Contains(hudPoint)) return false;
             var ray = gameCamera.ScreenPointToRay(screenPoint);
             if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float distance)) return false;
-            var point = ray.GetPoint(distance);
-            cell = BattleGrid.Cell(new Vector2(point.x, point.z));
+            var hit = ray.GetPoint(distance);
+            point = new Vector2(hit.x, hit.z);
             return true;
         }
 

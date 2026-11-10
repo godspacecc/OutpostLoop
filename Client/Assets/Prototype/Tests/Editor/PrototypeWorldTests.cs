@@ -43,19 +43,31 @@ namespace OutpostLoop.Tests
         public void CommanderMovesBeforeBaseAndPauses()
         {
             var world = new WorldState(732);
-            Assert.IsTrue(world.MoveCommander(new Vector2(0, -8)));
+            var firstTarget = new Vector2(3.4f, -4.6f);
+            Assert.IsTrue(world.MoveCommander(firstTarget));
             Advance(world, .5f);
-            Assert.Less(world.CommanderPosition.y, 0);
+            var expected = firstTarget.normalized * (world.Run.Config.MoveSpeed * .5f);
+            Assert.Less(Vector2.Distance(expected, world.CommanderPosition), .0001f, "斜向移动应沿直线");
             world.Run.Paused = true;
             var location = world.CommanderPosition;
             Assert.IsFalse(world.MoveCommander(Vector2.zero));
             Advance(world, 1);
             Assert.AreEqual(location, world.CommanderPosition);
             world.Run.Paused = false;
+            var secondTarget = new Vector2(.35f, -7.65f);
+            Assert.IsTrue(world.MoveCommander(secondTarget));
+            world.Step(.1f);
+            expected = Vector2.MoveTowards(location, secondTarget, world.Run.Config.MoveSpeed * .1f);
+            Assert.AreEqual(expected, world.CommanderPosition, "改派从当前位置直接转向");
             Advance(world, 2);
-            Assert.AreEqual(new Vector2(0, -8), world.CommanderPosition);
+            Assert.AreEqual(secondTarget, world.CommanderPosition, "终点不吸附格心");
             BuildBase(world, 4);
             Assert.IsFalse(world.MoveCommander(Vector2.zero));
+
+            var boundary = new WorldState(732);
+            Assert.IsTrue(boundary.MoveCommander(Vector2.right * 100));
+            Advance(boundary, 12);
+            Assert.AreEqual(Vector2.right * boundary.Run.Config.MapRadius, boundary.CommanderPosition);
         }
 
         [Test]

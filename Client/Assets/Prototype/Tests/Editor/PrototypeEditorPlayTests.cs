@@ -93,9 +93,11 @@ namespace OutpostLoop.Tests
             Assert.IsNull(GameObject.Find("DeploySquad0"));
             Assert.IsFalse(GameObject.Find("OpenUpgrade").GetComponent<Button>().interactable);
             var camera = controller.GetComponentInChildren<Camera>();
-            Assert.IsTrue(controller.MoveCommanderAt(camera.WorldToScreenPoint(new Vector3(0, 0, -4))));
+            var groundTarget = new Vector3(.6f, 0, -3.4f);
+            Assert.IsTrue(controller.MoveCommanderAt(camera.WorldToScreenPoint(groundTarget)));
             PrototypeWorldTests.Advance(world, 1);
-            Assert.AreEqual(new Vector2(0, -4), world.CommanderPosition);
+            Assert.Less(Vector2.Distance(new Vector2(groundTarget.x, groundTarget.z), world.CommanderPosition), .001f,
+                "应到达实际点中的地面位置");
             Assert.AreEqual(0, world.Run.Elapsed);
 
             Click("OpenConstruction");
