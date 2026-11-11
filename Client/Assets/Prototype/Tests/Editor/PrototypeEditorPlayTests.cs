@@ -33,6 +33,70 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeInstallsAutomaticDefenseFromBuildMenu()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            Click("StartScavenge");
+            yield return null;
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var field = typeof(PrototypeController).GetField("scavengeRun",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var run = (ScavengeRun)field.GetValue(controller);
+            void Walk(Vector2 target)
+            {
+                for (int step = 0; step < 220 && Vector2.Distance(run.Player, target) > .1f; step++)
+                    run.Tick(.02f, Vector2.ClampMagnitude((target - run.Player) * 10, 1));
+                Assert.That(Vector2.Distance(run.Player, target), Is.LessThan(.11f));
+            }
+            void Take(int index, ScavengeItem item)
+            {
+                Walk(ScavengeLayout.Caches[index]);
+                Assert.IsTrue(run.Interact());
+                for (int step = 0; step < 34; step++) run.Tick(.02f, Vector2.zero);
+                Assert.IsTrue(run.Transfer(item, true));
+                run.CloseSearch();
+            }
+            Take(0, ScavengeItem.Materials);
+            Take(1, ScavengeItem.DefenseParts);
+            Walk(new Vector2(-.8f, -6));
+            Walk(new Vector2(-5.4f, -6));
+            Assert.IsTrue(run.BuildShelter(new Vector2(-3, -6.25f)));
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var mouse = InputSystem.AddDevice<Mouse>();
+            try
+            {
+                var target = new Vector2(-1.68f, -5.22f);
+                var camera = GameObject.Find("PreviewCamera").GetComponent<Camera>();
+                var screen = (Vector2)camera.WorldToScreenPoint(new Vector3(target.x, 0, target.y));
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = screen });
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.V));
+                yield return null;
+                Assert.IsTrue(GameObject.Find("防御射程预览").GetComponent<LineRenderer>().enabled);
+                screen = camera.WorldToScreenPoint(new Vector3(target.x, 0, target.y));
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = screen }.WithButton(MouseButton.Left));
+                for (int frame = 0; frame < 12 && !run.Defense.HasValue; frame++) yield return null;
+                Assert.IsTrue(run.Defense.HasValue);
+                Assert.That(Vector2.Distance(run.Defense.Value, target), Is.LessThan(.1f));
+                Assert.NotNull(GameObject.Find("防御装置工地"));
+                Assert.AreEqual(ScavengeItem.None, run.Inventory);
+                Walk(new Vector2(-6.8f, -6));
+                for (int step = 0; step < 350; step++) run.Tick(.02f, Vector2.zero);
+                yield return null;
+                Assert.IsFalse(run.Patrols[1].Alive);
+                Assert.NotNull(GameObject.Find("自动防御装置"));
+                Assert.Greater(run.ShelterHealth, 0);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(mouse);
+                InputSystem.RemoveDevice(keyboard);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeSelectsShelterGroundAndPausesWork()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

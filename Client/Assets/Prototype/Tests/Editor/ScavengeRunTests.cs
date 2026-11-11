@@ -119,6 +119,85 @@ namespace OutpostLoop.Tests
         }
 
         [Test]
+        public void RoadConstructionDrawsPatrolAndInstalledDefenseProtectsShelter()
+        {
+            var run = ArmedWithMaterials();
+            var site = new Vector2(-3, -6.25f);
+            var defense = new Vector2(-1.68f, -5.22f);
+            MoveTo(run, new Vector2(-.8f, -6));
+            MoveTo(run, new Vector2(-5.4f, -6));
+            Assert.AreEqual(ShelterPlacement.NeedsShelter, run.CheckDefense(defense));
+            Assert.IsTrue(run.BuildShelter(site));
+            Assert.AreEqual(ShelterPlacement.Obstructed, run.CheckDefense(site));
+            Assert.IsTrue(run.BuildDefense(defense));
+            Assert.IsFalse(run.BuildDefense(defense));
+            Assert.AreEqual(ScavengeItem.None, run.Inventory);
+            MoveTo(run, new Vector2(-6.8f, -6));
+            bool investigated = false;
+            bool fired = false;
+            for (int i = 0; i < 650; i++)
+            {
+                run.Tick(.02f, Vector2.zero);
+                investigated |= run.ConstructionInvestigated;
+                fired |= run.DefenseShotRemaining > 0;
+            }
+            Assert.IsTrue(investigated, "近处施工应让路边巡逻者离开原路线查看");
+            Assert.IsTrue(fired, "发现据点后应进入装置的有效射界");
+            Assert.IsFalse(run.Patrols[1].Alive);
+            Assert.IsTrue(run.Patrols[0].Alive);
+            Assert.Greater(run.ShelterHealth, 0);
+            MoveTo(run, ScavengeLayout.Exit);
+            Assert.IsTrue(run.Interact());
+            Assert.IsNull(run.Defense);
+        }
+
+        [Test]
+        public void ShelterCanFallWhileAnUnarmedPlayerCanStillExtract()
+        {
+            var run = ArmedWithMaterials();
+            MoveTo(run, new Vector2(-.8f, -6));
+            MoveTo(run, new Vector2(-5.4f, -6));
+            Assert.IsTrue(run.BuildShelter(new Vector2(-3, -6.25f)));
+            MoveTo(run, new Vector2(-6.8f, -6));
+            Advance(run, 15);
+            Assert.IsTrue(run.ShelterLost);
+            Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
+            MoveTo(run, ScavengeLayout.Exit);
+            Assert.IsTrue(run.Interact());
+            Assert.AreEqual(ScavengeItem.DefenseParts, run.CarriedOut);
+        }
+
+        [Test]
+        public void CoveredSiteCanFinishWithoutAnAttackAndWallBlocksFire()
+        {
+            var run = ArmedWithMaterials();
+            MoveTo(run, new Vector2(-.8f, -6));
+            MoveTo(run, new Vector2(-6.3f, -6));
+            MoveTo(run, new Vector2(-6.3f, 9.8f));
+            for (int step = 0; step < 500 && run.Enemy.y > -1.5f; step++) run.Tick(.02f, Vector2.zero);
+            MoveTo(run, new Vector2(6.4f, 9.8f));
+            for (int step = 0; step < 500 && (run.Enemy.y > -1.5f || run.EnemyFacing.y >= 0); step++)
+                run.Tick(.02f, Vector2.zero);
+            Assert.IsTrue(run.BuildShelter(new Vector2(8.65f, 8.85f)), $"生命 {run.Health}，状态 {run.Outcome}");
+            Assert.IsTrue(run.BuildDefense(new Vector2(7.3f, 9.45f)));
+            Advance(run, 3.15f);
+            Assert.AreEqual(ScavengeRun.ShelterMaxHealth, run.ShelterHealth);
+            Assert.IsFalse(run.Alerted);
+            Assert.IsFalse(ScavengeLayout.ClearLine(run.Defense.Value, new Vector2(7.8f, 4.9f)));
+            Assert.IsNull(run.DefenseShotTarget);
+        }
+
+        private static ScavengeRun ArmedWithMaterials()
+        {
+            var run = new ScavengeRun();
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            SearchAndTake(run, ScavengeItem.Materials);
+            MoveTo(run, ScavengeLayout.Caches[1]);
+            SearchAndTake(run, ScavengeItem.DefenseParts);
+            return run;
+        }
+
+        [Test]
         public void DeathClearsOnlyTheCurrentTrip()
         {
             var run = new ScavengeRun();

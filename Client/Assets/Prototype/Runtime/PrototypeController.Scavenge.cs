@@ -7,7 +7,8 @@ namespace OutpostLoop
     public sealed partial class PrototypeController
     {
         // 临时探索入口拥有独立状态和表现根，退出后恢复原开始页。
-        private Transform scavengeRoot, scavengePlayer, scavengeEnemy, scavengeExit;
+        private Transform scavengeRoot, scavengePlayer, scavengeExit;
+        private readonly Transform[] scavengeEnemies = new Transform[2];
         private readonly Transform[] scavengeCrates = new Transform[ScavengeLayout.Caches.Length];
         private readonly List<Material> scavengeMaterials = new List<Material>();
         private ScavengeRun scavengeRun;
@@ -18,9 +19,12 @@ namespace OutpostLoop
         private Transform shelterPreview, shelterWorksite, shelterModel;
         private Material shelterPreviewMaterial;
         private ShelterPlacement shelterPlacement;
+        private bool placingDefense;
+        private Transform defenseModel, defenseWorksite;
+        private LineRenderer defenseRadius, defenseShot;
         private Color previousCameraColor;
         private static readonly ScavengeItem[] ScavengeItems =
-            { ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal, ScavengeItem.Materials };
+            { ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal, ScavengeItem.Materials, ScavengeItem.DefenseParts };
 
         /// <summary>从开始页进入独立的首趟探索。</summary>
         internal void StartScavenge()
@@ -44,6 +48,7 @@ namespace OutpostLoop
             scavengePaused = false;
             scavengeSaved = false;
             placingShelter = false;
+            placingDefense = false;
             scavengeRoot.gameObject.SetActive(true);
             SyncScavenge();
         }
@@ -99,7 +104,11 @@ namespace OutpostLoop
             if (toggle)
             {
                 placingShelter = !placingShelter;
-                if (placingShelter) scavengeRun.CloseSearch();
+                if (placingShelter)
+                {
+                    scavengeRun.CloseSearch();
+                    placingDefense = scavengeRun.Shelter.HasValue;
+                }
             }
             if (!placingShelter) return toggle;
             if (escape || mouse?.rightButton.wasPressedThisFrame == true)
@@ -107,6 +116,8 @@ namespace OutpostLoop
                 placingShelter = false;
                 return true;
             }
+            if (keyboard?.digit1Key.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Alpha1)) placingDefense = false;
+            if (keyboard?.digit2Key.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Alpha2)) placingDefense = true;
             var cursor = mouse?.position.ReadValue() ?? (Vector2)Input.mousePosition;
             if (!gameCamera.pixelRect.Contains(cursor) || ScavengeHudContains(cursor) ||
                 !TryProjectBattleGround(cursor, out var point))
@@ -115,12 +126,17 @@ namespace OutpostLoop
                 shelterPlacement = ShelterPlacement.Obstructed;
                 return true;
             }
-            shelterPlacement = scavengeRun.CheckShelter(point);
+            shelterPlacement = placingDefense ? scavengeRun.CheckDefense(point) : scavengeRun.CheckShelter(point);
             shelterPreview.position = At(point, .055f);
+            float size = placingDefense ? ScavengeRun.DefenseWidth : ScavengeRun.ShelterWidth;
+            shelterPreview.localScale = new Vector3(size, .06f, size);
             shelterPreviewMaterial.color = shelterPlacement == ShelterPlacement.Available ?
                 new Color(.29f, .82f, .57f) : new Color(.76f, .32f, .22f);
-            if (!toggle && mouse?.leftButton.wasPressedThisFrame == true && scavengeRun.BuildShelter(point))
-                placingShelter = false;
+            if (!toggle && mouse?.leftButton.wasPressedThisFrame == true)
+            {
+                bool built = placingDefense ? scavengeRun.BuildDefense(point) : scavengeRun.BuildShelter(point);
+                if (built) placingShelter = false;
+            }
             return true;
         }
 
@@ -135,10 +151,14 @@ namespace OutpostLoop
         private void SyncScavenge()
         {
             scavengePlayer.position = At(scavengeRun.Player, .76f);
-            scavengeEnemy.gameObject.SetActive(scavengeRun.EnemyAlive);
-            scavengeEnemy.position = At(scavengeRun.Enemy, .7f);
-            if (scavengeRun.EnemyFacing != Vector2.zero)
-                scavengeEnemy.rotation = Quaternion.LookRotation(At(scavengeRun.EnemyFacing, 0));
+            for (int i = 0; i < scavengeEnemies.Length; i++)
+            {
+                var patrol = scavengeRun.Patrols[i];
+                var model = scavengeEnemies[i];
+                model.gameObject.SetActive(patrol.Alive);
+                model.position = At(patrol.Position, .7f);
+                if (patrol.Facing != Vector2.zero) model.rotation = Quaternion.LookRotation(At(patrol.Facing, 0));
+            }
             for (int i = 0; i < scavengeCrates.Length; i++)
                 scavengeCrates[i].localScale = new Vector3(1.3f,
                     scavengeRun.IsSearched(i) && scavengeRun.VisibleContents(i) == ScavengeItem.None ? .33f : .66f, .82f);
@@ -151,6 +171,7 @@ namespace OutpostLoop
                 shelterWorksite.position = At(shelter, .12f);
                 shelterModel.position = At(shelter, 0);
             }
+            SyncDefenseModels();
             var focus = new Vector2(scavengeRun.Player.x * .55f, scavengeRun.Player.y * .72f + 3.8f);
             gameCamera.orthographicSize = Mathf.Max(10.5f, 15f / gameCamera.aspect);
             var rotation = Quaternion.Euler(62, 0, 0);
@@ -195,10 +216,75 @@ namespace OutpostLoop
             ScavengeBox("灯箱", At(ScavengeLayout.Exit, 2.33f), new Vector3(.8f, .25f, .56f), teal);
             ScavengeBox("裂口底座", At(ScavengeLayout.Exit, .02f), new Vector3(2.4f, .04f, 2.4f), teal);
             scavengePlayer = Shape("探索角色", scavengeRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(.65f, .78f, .65f), canvas);
-            scavengeEnemy = Shape("巡逻敌人", scavengeRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(.75f, .72f, .75f), rust);
-            Shape("敌人朝向", scavengeEnemy, PrimitiveType.Cube, new Vector3(0, .55f, .43f),
-                new Vector3(.65f, .15f, .45f), gold);
+            for (int i = 0; i < scavengeEnemies.Length; i++)
+            {
+                scavengeEnemies[i] = Shape(i == 0 ? "巡逻敌人" : "路边巡逻敌人", scavengeRoot, PrimitiveType.Capsule,
+                    Vector3.zero, new Vector3(.75f, .72f, .75f), rust);
+                Shape("敌人朝向", scavengeEnemies[i], PrimitiveType.Cube, new Vector3(0, .55f, .43f),
+                    new Vector3(.65f, .15f, .45f), gold);
+            }
             CreateShelterModels(steel, gold, canvas);
+            CreateDefenseModels(steel, gold);
+        }
+
+        /// <summary>建立装置、射程预览与自动射击反馈。</summary>
+        private void CreateDefenseModels(Material steel, Material gold)
+        {
+            defenseWorksite = ScavengeBox("防御装置工地", Vector3.zero,
+                new Vector3(ScavengeRun.DefenseWidth, .24f, ScavengeRun.DefenseWidth), gold);
+            defenseModel = new GameObject("自动防御装置").transform;
+            defenseModel.SetParent(scavengeRoot, false);
+            Shape("装置基座", defenseModel, PrimitiveType.Cylinder, new Vector3(0, .12f, 0),
+                new Vector3(.66f, .12f, .66f), steel);
+            Shape("装置支架", defenseModel, PrimitiveType.Cube, new Vector3(0, .37f, 0),
+                new Vector3(.18f, .49f, .18f), steel);
+            Shape("装置发射器", defenseModel, PrimitiveType.Cube, new Vector3(0, .66f, .14f),
+                new Vector3(.35f, .23f, .71f), gold);
+            var lineMaterial = new Material(Shader.Find("Sprites/Default"));
+            scavengeMaterials.Add(lineMaterial);
+            defenseRadius = CreateDefenseLine("防御射程预览", lineMaterial, 48, true, new Color(.50f, .83f, .69f, .8f));
+            defenseShot = CreateDefenseLine("防御射击", lineMaterial, 2, false, new Color(1, .80f, .35f));
+        }
+
+        private LineRenderer CreateDefenseLine(string name, Material material, int points, bool loop, Color color)
+        {
+            var line = new GameObject(name).AddComponent<LineRenderer>();
+            line.transform.SetParent(scavengeRoot, false);
+            line.sharedMaterial = material;
+            line.positionCount = points;
+            line.loop = loop;
+            line.startWidth = line.endWidth = .036f;
+            line.startColor = line.endColor = color;
+            return line;
+        }
+
+        private void SyncDefenseModels()
+        {
+            bool present = scavengeRun.Defense.HasValue;
+            bool building = scavengeRun.DefenseRemaining > 0;
+            defenseWorksite.gameObject.SetActive(present && building);
+            defenseModel.gameObject.SetActive(present && !building);
+            if (scavengeRun.Defense is Vector2 site)
+            {
+                defenseWorksite.position = At(site, .12f);
+                defenseModel.position = At(site, 0);
+                if (scavengeRun.DefenseShotTarget is Vector2 target)
+                {
+                    var direction = target - site;
+                    if (direction.sqrMagnitude > .001f) defenseModel.rotation = Quaternion.LookRotation(At(direction, 0));
+                    defenseShot.SetPosition(0, At(site, .68f));
+                    defenseShot.SetPosition(1, At(target, .60f));
+                }
+            }
+            defenseShot.enabled = present && scavengeRun.DefenseShotRemaining > 0;
+            defenseRadius.enabled = placingShelter && placingDefense && shelterPreview.position.y > 0;
+            if (!defenseRadius.enabled) return;
+            for (int i = 0; i < defenseRadius.positionCount; i++)
+            {
+                float angle = i * Mathf.PI * 2 / defenseRadius.positionCount;
+                var offset = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * ScavengeRun.DefenseRange;
+                defenseRadius.SetPosition(i, shelterPreview.position + offset);
+            }
         }
 
         /// <summary>表现依次展示占地、工地和有两侧开放入口的休整棚。</summary>
@@ -240,13 +326,15 @@ namespace OutpostLoop
         private static Rect ScavengeInfoRect => new Rect(20, 18, 338, 128);
         private static Rect ScavengeMapRect(float width) => new Rect(width - 172, 18, 152, 136);
         private static Rect ScavengeActionRect(float width, float height) => new Rect(width / 2 - 208, height - 65, 416, 38);
+        private static Rect ScavengeBuildRect(float width) => new Rect(width / 2 - 196, 18, 392, 45);
 
-        private static bool ScavengeHudContains(Vector2 mouse)
+        private bool ScavengeHudContains(Vector2 mouse)
         {
             float scale = HudScale;
             var point = new Vector2(mouse.x, Screen.height - mouse.y) / scale;
             return ScavengeInfoRect.Contains(point) || ScavengeMapRect(Screen.width / scale).Contains(point) ||
-                ScavengeActionRect(Screen.width / scale, Screen.height / scale).Contains(point);
+                ScavengeActionRect(Screen.width / scale, Screen.height / scale).Contains(point) ||
+                (placingShelter && ScavengeBuildRect(Screen.width / scale).Contains(point));
         }
 
         /// <summary>绘制临时探索界面，保留视野中心供玩家观察道路。</summary>
@@ -272,15 +360,20 @@ namespace OutpostLoop
             GUI.Label(new Rect(35, 99, 315, 28), "WASD 移动   E 交互   V 建造   Esc 暂停");
             if (placingShelter)
             {
+                var menu = ScavengeBuildRect(width);
+                GUI.Box(menu, "");
+                if (GUI.Button(new Rect(menu.x + 8, menu.y + 6, 176, 33), "1  避难所")) placingDefense = false;
+                if (GUI.Button(new Rect(menu.x + 193, menu.y + 6, 191, 33), "2  自动防御装置")) placingDefense = true;
                 var action = ScavengeActionRect(width, height);
                 GUI.Box(action, "");
                 GUI.Label(new Rect(action.x + 12, action.y + 3, action.width - 24, 31),
                     shelterPlacement switch
                     {
-                        ShelterPlacement.Available => "左键搭建避难所 · 右键或 Esc 取消",
-                        ShelterPlacement.MissingMaterials => "需要建材 · 可以在路边箱里找",
-                        ShelterPlacement.AlreadyPlaced => "这一趟已有一座避难所",
-                        ShelterPlacement.TooFar => "靠近空地再建造",
+                        ShelterPlacement.Available => placingDefense ? "左键安装 · 预览圈内可射击，墙会遮挡" : "左键搭建避难所 · 右键或 Esc 取消",
+                        ShelterPlacement.MissingMaterials => placingDefense ? "需要防守零件 · 搜索仓门外工具箱" : "需要建材 · 可以在路边箱里找",
+                        ShelterPlacement.AlreadyPlaced => "这一趟已经放置过",
+                        ShelterPlacement.TooFar => placingDefense ? "在避难所附近的空地安装" : "靠近空地再建造",
+                        ShelterPlacement.NeedsShelter => "先建避难所，再安装防御装置",
                         _ => "把整块占地放在空地内 · 避开自己"
                     });
             }
@@ -311,6 +404,14 @@ namespace OutpostLoop
             }
             if ((run.Inventory & ScavengeItem.Crowbar) != 0)
                 GUI.Label(new Rect(35, height - 51, 310, 29), "鼠标指向 · 左键挥动撬棍");
+            if (!placingShelter)
+            {
+                string notice = run.ShelterLost ? "避难所失守 · 仍可撤离" :
+                    run.ShelterHit ? $"避难所受击 · {run.ShelterHealth}/{ScavengeRun.ShelterMaxHealth}" :
+                    run.Alerted ? "巡逻者发现了目标，正在接近" :
+                    run.ConstructionInvestigated ? "巡逻者听到了施工声，正在查看" : "";
+                if (notice.Length > 0) GUI.Box(new Rect(width / 2 - 150, 23, 300, 32), notice);
+            }
             if (run.ExitKnown) DrawScavengeExitLabel();
             DrawScavengeMap(width);
         }
@@ -348,7 +449,7 @@ namespace OutpostLoop
         private void DrawScavengeCache()
         {
             var run = scavengeRun;
-            GUI.Box(new Rect(20, 154, 338, 225), "");
+            GUI.Box(new Rect(20, 154, 338, 266), "");
             GUI.Label(new Rect(35, 163, 315, 29), run.SearchRemaining > 0 ? "正在搜索…" : "箱子 · E 关闭");
             if (run.SearchRemaining > 0) return;
             float y = 199;
@@ -423,6 +524,7 @@ namespace OutpostLoop
             ScavengeItem.Crowbar => "撬棍",
             ScavengeItem.Signal => "异常物件",
             ScavengeItem.Materials => "建材",
+            ScavengeItem.DefenseParts => "防守零件",
             _ => ""
         };
     }
