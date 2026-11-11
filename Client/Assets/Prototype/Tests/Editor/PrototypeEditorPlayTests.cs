@@ -33,6 +33,60 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeOpensStorageAndPausesWorkshop()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            Click("StartScavenge");
+            yield return null;
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var run = (ScavengeRun)typeof(PrototypeController).GetField("scavengeRun", flags).GetValue(controller);
+            var panel = typeof(PrototypeController).GetField("storageOpen", flags);
+            void Walk(Vector2 point)
+            {
+                for (int step = 0; step < 160 && Vector2.Distance(run.Player, point) > .1f; step++)
+                    run.Tick(.02f, Vector2.ClampMagnitude((point - run.Player) * 10, 1));
+                Assert.That(Vector2.Distance(run.Player, point), Is.LessThan(.11f));
+            }
+            Walk(ScavengeLayout.Caches[0]);
+            Assert.IsTrue(run.Interact());
+            for (int step = 0; step < 35; step++) run.Tick(.02f, Vector2.zero);
+            Assert.IsTrue(run.Transfer(ScavengeItem.Materials, true));
+            run.CloseSearch();
+            Walk(new Vector2(-5.4f, -6));
+            Assert.IsTrue(run.BuildShelter(new Vector2(-3, -6.25f)));
+            for (int step = 0; step < 153; step++) run.Tick(.02f, Vector2.zero);
+            Walk(new Vector2(-4.15f, -6.25f));
+            Assert.IsTrue(run.CanUseStorage);
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.B));
+                yield return null;
+                Assert.AreEqual(true, panel.GetValue(controller));
+                // 本用例聚焦 Boot 的面板与暂停，材料搜取由规则测试覆盖。
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Inventory)).SetValue(run, ScavengeItem.RepairMaterials);
+                Assert.IsTrue(run.TransferStorage(ScavengeItem.RepairMaterials, false));
+                Assert.IsTrue(run.StartWorkshop());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return null;
+                Assert.AreEqual(false, panel.GetValue(controller));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return null;
+                float remaining = run.WorkshopRemaining;
+                for (int frame = 0; frame < 10; frame++) yield return null;
+                Assert.Greater(remaining, 0);
+                Assert.AreEqual(remaining, run.WorkshopRemaining);
+            }
+            finally { InputSystem.RemoveDevice(keyboard); }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeInstallsAutomaticDefenseFromBuildMenu()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

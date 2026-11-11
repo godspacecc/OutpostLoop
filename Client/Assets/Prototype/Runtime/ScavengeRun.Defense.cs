@@ -212,6 +212,7 @@ namespace OutpostLoop
             Shelter = null;
             Defense = null;
             ShelterRemaining = DefenseRemaining = DefenseShotRemaining = 0;
+            ClearShelterStorage();
         }
 
         private static void MovePatrol(ScavengePatrol patrol, Vector2 goal, float dt)

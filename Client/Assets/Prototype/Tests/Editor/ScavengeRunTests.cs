@@ -198,6 +198,104 @@ namespace OutpostLoop.Tests
         }
 
         [Test]
+        public void WorkshopProcessesWhileAwayAndRepairRestoresDamagedShelter()
+        {
+            var run = RoadShelter(true);
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            SearchAndTake(run, ScavengeItem.Supplies);
+            MoveTo(run, new Vector2(-4, -6.25f));
+            Assert.IsTrue(run.TransferStorage(ScavengeItem.Supplies, false));
+            Assert.AreEqual(0, run.Count);
+            MoveTo(run, ScavengeLayout.Caches[1]);
+            SearchAndTake(run, ScavengeItem.Crowbar);
+            MoveTo(run, new Vector2(7.8f, -3));
+            for (int i = 0; i < 380 && Vector2.Distance(run.Player, run.Enemy) > 1.6f; i++)
+                run.Tick(.02f, Vector2.zero);
+            Assert.IsTrue(run.Attack(run.Enemy - run.Player));
+            Advance(run, .56f);
+            Assert.IsTrue(run.Attack(run.Enemy - run.Player));
+            Assert.IsFalse(run.EnemyAlive);
+            MoveTo(run, ScavengeLayout.Caches[3]);
+            SearchAndTake(run, ScavengeItem.RepairMaterials);
+            MoveTo(run, new Vector2(-.8f, -3));
+            MoveTo(run, new Vector2(-4, -6.25f));
+            Assert.IsTrue(run.TransferStorage(ScavengeItem.RepairMaterials, false));
+            Assert.IsTrue(run.StartWorkshop());
+            Assert.IsFalse(run.StartWorkshop());
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            Assert.IsFalse(run.CanUseStorage);
+            Advance(run, ScavengeRun.WorkshopSeconds);
+            Assert.AreEqual(ScavengeItem.Supplies | ScavengeItem.RepairKit, run.Stored);
+            Assert.IsFalse(run.RepairShelter());
+            MoveTo(run, new Vector2(-4, -6.25f));
+            int damaged = run.ShelterHealth;
+            Assert.Less(damaged, ScavengeRun.ShelterMaxHealth);
+            Assert.IsTrue(run.RepairShelter());
+            Assert.AreEqual(Mathf.Min(damaged + 2, ScavengeRun.ShelterMaxHealth), run.ShelterHealth);
+            Assert.IsFalse(run.RepairShelter());
+            MoveTo(run, ScavengeLayout.Exit);
+            Assert.IsTrue(run.Interact());
+            Assert.AreEqual(ScavengeItem.Crowbar, run.CarriedOut);
+            Assert.AreEqual(ScavengeItem.None, run.Stored);
+        }
+
+        [Test]
+        public void ReservedOutputPreventsOverfillingStorageAndFullHealthPreservesKit()
+        {
+            var run = RoadShelter(true);
+            MoveTo(run, new Vector2(-4, -6.25f));
+            // 直接布置满仓的边界状态，避免重复走已覆盖的拾取路线。
+            ArrangeItems(run, ScavengeItem.Supplies | ScavengeItem.Signal | ScavengeItem.DefenseParts |
+                ScavengeItem.RepairMaterials, ScavengeItem.Crowbar | ScavengeItem.Materials);
+            Assert.IsFalse(run.TransferStorage(ScavengeItem.Crowbar, false));
+            Assert.IsFalse(run.TransferStorage(ScavengeItem.Supplies, true));
+            Assert.IsTrue(run.StartWorkshop());
+            Assert.AreEqual(4, run.StorageUsed);
+            Assert.IsFalse(run.TransferStorage(ScavengeItem.Crowbar, false));
+            Advance(run, ScavengeRun.WorkshopSeconds);
+            Assert.AreEqual(4, run.StorageUsed);
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.ShelterHealth)).SetValue(run, ScavengeRun.ShelterMaxHealth);
+            Assert.IsFalse(run.RepairShelter());
+            Assert.IsTrue(run.HasRepairKit);
+            Assert.IsNull(new ScavengeRun().Shelter);
+            Assert.AreEqual(ScavengeItem.None, new ScavengeRun().Stored);
+        }
+
+        [Test]
+        public void DestroyedShelterCancelsWorkshopAndKeepsBackpack()
+        {
+            var run = RoadShelter(false);
+            MoveTo(run, new Vector2(-4.15f, -6.25f));
+            ArrangeItems(run, ScavengeItem.RepairMaterials | ScavengeItem.Supplies, ScavengeItem.DefenseParts);
+            Assert.IsTrue(run.StartWorkshop());
+            MoveTo(run, new Vector2(-6.9f, -6.25f));
+            Advance(run, 12f);
+            Assert.IsTrue(run.ShelterLost);
+            Assert.AreEqual(0, run.WorkshopRemaining);
+            Assert.AreEqual(ScavengeItem.None, run.Stored);
+            Assert.AreEqual(ScavengeItem.DefenseParts, run.Inventory);
+            Assert.IsFalse(run.StartWorkshop());
+        }
+
+        private static void ArrangeItems(ScavengeRun run, ScavengeItem stored, ScavengeItem inventory)
+        {
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Stored)).SetValue(run, stored);
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Inventory)).SetValue(run, inventory);
+        }
+
+        private static ScavengeRun RoadShelter(bool defend)
+        {
+            var run = ArmedWithMaterials();
+            MoveTo(run, new Vector2(-.8f, -6));
+            MoveTo(run, new Vector2(-5.4f, -6));
+            Assert.IsTrue(run.BuildShelter(new Vector2(-3, -6.25f)));
+            if (defend) Assert.IsTrue(run.BuildDefense(new Vector2(-1.68f, -5.22f)));
+            MoveTo(run, new Vector2(-6.8f, -6));
+            Advance(run, defend ? 7f : 3.15f);
+            return run;
+        }
+
+        [Test]
         public void DeathClearsOnlyTheCurrentTrip()
         {
             var run = new ScavengeRun();

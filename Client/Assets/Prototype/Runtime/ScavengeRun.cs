@@ -6,7 +6,11 @@ using UnityEngine;
 namespace OutpostLoop
 {
     [Flags]
-    public enum ScavengeItem { None = 0, Supplies = 1, Crowbar = 2, Signal = 4, Materials = 8, DefenseParts = 16 }
+    public enum ScavengeItem
+    {
+        None = 0, Supplies = 1, Crowbar = 2, Signal = 4, Materials = 8,
+        DefenseParts = 16, RepairMaterials = 32, RepairKit = 64
+    }
     public enum ScavengeOutcome { Exploring, Extracted, Died }
     public enum ShelterPlacement { Available, MissingMaterials, AlreadyPlaced, Obstructed, TooFar, NeedsShelter }
 
@@ -17,7 +21,7 @@ namespace OutpostLoop
         public static readonly Vector2 Exit = new Vector2(-5, 8);
         public static readonly Vector2[] Caches =
         {
-            new Vector2(-6, -4), new Vector2(-.8f, -3), new Vector2(6.3f, 2)
+            new Vector2(-6, -4), new Vector2(-.8f, -3), new Vector2(6.3f, 2), new Vector2(8.62f, -4.02f)
         };
         // 两块空地包含多个落位，避开两条主通路和侧门。
         public static readonly Rect[] ShelterGrounds =
@@ -73,7 +77,10 @@ namespace OutpostLoop
         public const float ShelterWidth = 1.6f;
         public const float ShelterBuildSeconds = 3f;
         private readonly ScavengeItem[] contents =
-            { ScavengeItem.Supplies | ScavengeItem.Materials, ScavengeItem.Crowbar | ScavengeItem.DefenseParts, ScavengeItem.Signal };
+        {
+            ScavengeItem.Supplies | ScavengeItem.Materials, ScavengeItem.Crowbar | ScavengeItem.DefenseParts,
+            ScavengeItem.Signal, ScavengeItem.RepairMaterials
+        };
         // 每个容器只在首次成功搜索后显示内容。
         private readonly bool[] known = new bool[ScavengeLayout.Caches.Length];
         private float attackCooldown;
@@ -132,6 +139,7 @@ namespace OutpostLoop
 
             attackCooldown = Mathf.Max(0, attackCooldown - dt);
             TickDefense(dt);
+            TickWorkshop(dt);
         }
 
         /// <summary>同一交互键依次处理撤离、开箱或关箱。</summary>
@@ -160,9 +168,7 @@ namespace OutpostLoop
         public bool Transfer(ScavengeItem item, bool take)
         {
             if (Outcome != ScavengeOutcome.Exploring || OpenCache < 0 ||
-                SearchRemaining > 0 ||
-                (item != ScavengeItem.Supplies && item != ScavengeItem.Crowbar &&
-                    item != ScavengeItem.Signal && item != ScavengeItem.Materials && item != ScavengeItem.DefenseParts)) return false;
+                SearchRemaining > 0 || !IsSingleItem(item)) return false;
             if (take)
             {
                 if ((contents[OpenCache] & item) == 0 || Count >= Capacity) return false;
@@ -250,15 +256,27 @@ namespace OutpostLoop
             ShelterRemaining = 0;
             Defense = null;
             DefenseRemaining = 0;
+            ClearShelterStorage();
             CloseSearch();
         }
 
-        private static int CountItems(ScavengeItem items) =>
-            ((items & ScavengeItem.Supplies) != 0 ? 1 : 0) +
-            ((items & ScavengeItem.Crowbar) != 0 ? 1 : 0) +
-            ((items & ScavengeItem.Signal) != 0 ? 1 : 0) +
-            ((items & ScavengeItem.Materials) != 0 ? 1 : 0) +
-            ((items & ScavengeItem.DefenseParts) != 0 ? 1 : 0);
+        internal const ScavengeItem AllItems = ScavengeItem.Supplies | ScavengeItem.Crowbar | ScavengeItem.Signal |
+            ScavengeItem.Materials | ScavengeItem.DefenseParts | ScavengeItem.RepairMaterials | ScavengeItem.RepairKit;
+
+        private static bool IsSingleItem(ScavengeItem item) =>
+            item != ScavengeItem.None && (item & AllItems) == item && (((int)item & ((int)item - 1)) == 0);
+
+        private static int CountItems(ScavengeItem items)
+        {
+            int bits = (int)(items & AllItems);
+            int count = 0;
+            while (bits != 0)
+            {
+                bits &= bits - 1;
+                count++;
+            }
+            return count;
+        }
     }
 
     /// <summary>空间保留带回过的物品种类。同一种物品重复撤离只登记一次。</summary>
@@ -273,7 +291,7 @@ namespace OutpostLoop
         {
             store = new JsonFileStore<Data>(directory);
             var read = store.Read(FileName);
-            if (read.Status == SaveFileStatus.Valid) Items = (ScavengeItem)(read.Data.items & 31);
+            if (read.Status == SaveFileStatus.Valid) Items = (ScavengeItem)read.Data.items & ScavengeRun.AllItems;
         }
 
         /// <summary>只提交成功撤离的结果，保存失败可以原地重试。</summary>
