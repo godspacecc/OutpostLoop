@@ -7,7 +7,7 @@ namespace OutpostLoop
     public enum ScavengeItem
     {
         None = 0, Supplies = 1, Crowbar = 2, Signal = 4, Materials = 8,
-        DefenseParts = 16, RepairMaterials = 32, RepairKit = 64
+        DefenseParts = 16, RepairMaterials = 32, RepairKit = 64, Pistol = 128, Ammo = 256, ReserveMedicine = 512
     }
     public enum ScavengeOutcome { Exploring, Extracted, Died }
     public enum ShelterPlacement { Available, MissingMaterials, AlreadyPlaced, Obstructed, TooFar, NeedsShelter }
@@ -48,27 +48,31 @@ namespace OutpostLoop
         };
 
         /// <summary>逐轴移动，保证斜着撞墙时可以沿墙移动。</summary>
-        public static Vector2 Move(Vector2 point, Vector2 step)
+        public static Vector2 Move(Vector2 point, Vector2 step) => Move(point, step, new Rect(-11, -9, 22, 19), Walls);
+
+        internal static Vector2 Move(Vector2 point, Vector2 step, Rect bounds, Rect[] walls)
         {
-            var next = new Vector2(Mathf.Clamp(point.x + step.x, -11, 11), point.y);
-            if (Blocked(next, .34f)) next.x = point.x;
-            next.y = Mathf.Clamp(point.y + step.y, -9, 10);
-            if (Blocked(next, .34f)) next.y = point.y;
+            var next = new Vector2(Mathf.Clamp(point.x + step.x, bounds.xMin, bounds.xMax), point.y);
+            if (Blocked(next, .34f, walls)) next.x = point.x;
+            next.y = Mathf.Clamp(point.y + step.y, bounds.yMin, bounds.yMax);
+            if (Blocked(next, .34f, walls)) next.y = point.y;
             return next;
         }
 
         /// <summary>低墙和货架遮挡敌人观察、近战及拾取。</summary>
-        public static bool ClearLine(Vector2 from, Vector2 to, float clearance = 0)
+        public static bool ClearLine(Vector2 from, Vector2 to, float clearance = 0) => ClearLine(from, to, clearance, Walls);
+
+        internal static bool ClearLine(Vector2 from, Vector2 to, float clearance, Rect[] walls)
         {
             int steps = Mathf.CeilToInt(Vector2.Distance(from, to) * 5);
             for (int i = 1; i <= steps; i++)
-                if (Blocked(Vector2.Lerp(from, to, (float)i / steps), clearance)) return false;
+                if (Blocked(Vector2.Lerp(from, to, (float)i / steps), clearance, walls)) return false;
             return true;
         }
 
-        private static bool Blocked(Vector2 point, float padding)
+        private static bool Blocked(Vector2 point, float padding, Rect[] walls)
         {
-            foreach (var wall in Walls)
+            foreach (var wall in walls)
                 if (point.x > wall.xMin - padding && point.x < wall.xMax + padding &&
                     point.y > wall.yMin - padding && point.y < wall.yMax + padding)
                     return true;
@@ -84,18 +88,21 @@ namespace OutpostLoop
         public const float SearchSeconds = .6f;
         public const float ShelterWidth = 1.6f;
         public const float ShelterBuildSeconds = 3f;
-        private readonly ScavengeItem[] contents = new ScavengeItem[ScavengeLayout.Caches.Length];
+        private readonly ScavengeItem[] contents;
         // 走近才在地图上登记；成功搜索才公开存货。
-        private readonly bool[] discovered = new bool[ScavengeLayout.Caches.Length];
+        private readonly bool[] discovered;
         // 每个容器只在首次成功搜索后显示内容。
-        private readonly bool[] known = new bool[ScavengeLayout.Caches.Length];
+        private readonly bool[] known;
         private float attackCooldown;
 
-        public Vector2 Player { get; private set; } = ScavengeLayout.Start;
+        public Vector2 Player { get; private set; }
         public Vector2 Enemy => patrols[0].Position;
         public Vector2 EnemyFacing => patrols[0].Facing;
         public bool EnemyAlive => patrols[0].Alive;
-        public bool Alerted => patrols[0].Engaged || patrols[1].Engaged;
+        public bool Alerted
+        {
+            get { foreach (var patrol in patrols) if (patrol.Engaged) return true; return false; }
+        }
         public int Seed { get; }
         public int Health { get; private set; } = MaxHealth;
         public ScavengeItem Inventory { get; private set; }
@@ -105,7 +112,7 @@ namespace OutpostLoop
         public int OpenCache { get; private set; } = -1;
         public float SearchRemaining { get; private set; }
         public bool ExitKnown { get; private set; }
-        public bool AtExit => ExitKnown && Vector2.Distance(Player, ScavengeLayout.Exit) <= 1.65f;
+        public bool AtExit => ExitKnown && Vector2.Distance(Player, ExitPoint) <= 1.65f;
         public ScavengeOutcome Outcome { get; private set; }
         // 工地和休整机会仅属于当前行动。
         public Vector2? Shelter { get; private set; }
@@ -114,9 +121,22 @@ namespace OutpostLoop
         public bool NearShelter => Shelter.HasValue && Vector2.Distance(Player, Shelter.Value) <= 1.45f;
 
         /// <summary>种子决定两个相互独立的物资位置选择，固定地标维持相同的路线。</summary>
-        public ScavengeRun(int seed = 0)
+        public ScavengeRun(int seed = 0, bool town = false)
         {
             Seed = seed;
+            IsTown = town;
+            Player = town ? ScavengeTown.Start : ScavengeLayout.Start;
+            contents = new ScavengeItem[CachePoints.Length];
+            discovered = new bool[contents.Length];
+            known = new bool[contents.Length];
+            if (town)
+            {
+                var random = new System.Random(seed);
+                ScavengeTown.FillLoot(contents, random, out medicineCache);
+                patrols = ScavengeTown.CreatePatrols(random);
+                return;
+            }
+            patrols = CreateTrialPatrols();
             contents[0] = ScavengeItem.Materials;
             contents[1] = ScavengeItem.Crowbar;
             contents[2] = ScavengeItem.Signal;
@@ -132,11 +152,11 @@ namespace OutpostLoop
             {
                 int closest = -1;
                 float closestDistance = 1.65f * 1.65f;
-                for (int i = 0; i < ScavengeLayout.Caches.Length; i++)
+                for (int i = 0; i < CachePoints.Length; i++)
                 {
-                    var position = ScavengeLayout.Caches[i];
+                    var position = CachePoints[i];
                     float distance = (Player - position).sqrMagnitude;
-                    if (distance > closestDistance || !ScavengeLayout.ClearLine(Player, position)) continue;
+                    if (distance > closestDistance || !ClearRunLine(Player, position)) continue;
                     closest = i;
                     closestDistance = distance;
                 }
@@ -152,11 +172,11 @@ namespace OutpostLoop
         public void Tick(float dt, Vector2 input)
         {
             if (Outcome != ScavengeOutcome.Exploring || dt <= 0) return;
-            Player = ScavengeLayout.Move(Player, Vector2.ClampMagnitude(input, 1) * (5 * dt));
+            Player = MoveInRun(Player, Vector2.ClampMagnitude(input, 1) * (5 * dt));
             for (int i = 0; i < discovered.Length; i++)
                 if (!discovered[i] && CanReachCache(i)) discovered[i] = true;
-            if (Vector2.Distance(Player, ScavengeLayout.Exit) < 4 &&
-                ScavengeLayout.ClearLine(Player, ScavengeLayout.Exit)) ExitKnown = true;
+            if (Vector2.Distance(Player, ExitPoint) < 4 &&
+                ClearRunLine(Player, ExitPoint)) ExitKnown = true;
 
             if (OpenCache >= 0)
             {
@@ -164,7 +184,11 @@ namespace OutpostLoop
                 else
                 {
                     SearchRemaining = Mathf.Max(0, SearchRemaining - dt);
-                    if (SearchRemaining == 0) known[OpenCache] = true;
+                    if (SearchRemaining == 0)
+                    {
+                        known[OpenCache] = true;
+                        if (IsTown && OpenCache == ScavengeTown.Manifest) RevealMedicineLead();
+                    }
                 }
             }
 
@@ -189,6 +213,12 @@ namespace OutpostLoop
                 return true;
             }
             int cache = NearbyCache;
+            if (CanTalk)
+            {
+                SurvivorSpoken = true;
+                RevealMedicineLead();
+                return true;
+            }
             if (cache < 0) return NearShelter && Rest();
             discovered[cache] = true;
             OpenCache = cache;
@@ -206,6 +236,8 @@ namespace OutpostLoop
                 if ((contents[OpenCache] & item) == 0 || (Inventory & item) != 0 || Count >= Capacity) return false;
                 Inventory |= item;
                 contents[OpenCache] &= ~item;
+                if (item == ScavengeItem.ReserveMedicine) MedicineFound = true;
+                if (item == ScavengeItem.Pistol && (Inventory & ScavengeItem.Crowbar) == 0) FirearmSelected = true;
             }
             else
             {
@@ -225,10 +257,10 @@ namespace OutpostLoop
             float half = ShelterWidth * .5f;
             if (Mathf.Abs(Player.x - point.x) < half + .35f && Mathf.Abs(Player.y - point.y) < half + .35f)
                 return ShelterPlacement.Obstructed;
-            foreach (var ground in ScavengeLayout.ShelterGrounds)
+            foreach (var ground in BuildGrounds)
                 if (point.x - half >= ground.xMin && point.x + half <= ground.xMax &&
                     point.y - half >= ground.yMin && point.y + half <= ground.yMax &&
-                    ScavengeLayout.ClearLine(Player, point)) return ShelterPlacement.Available;
+                    ClearRunLine(Player, point)) return ShelterPlacement.Available;
             return ShelterPlacement.Obstructed;
         }
 
@@ -263,14 +295,15 @@ namespace OutpostLoop
             return true;
         }
 
-        private bool CanReachCache(int index) => Vector2.Distance(Player, ScavengeLayout.Caches[index]) <= 1.65f &&
-            ScavengeLayout.ClearLine(Player, ScavengeLayout.Caches[index]);
+        private bool CanReachCache(int index) => Vector2.Distance(Player, CachePoints[index]) <= 1.65f &&
+            ClearRunLine(Player, CachePoints[index]);
 
         /// <summary>装备撬棍后才可近战。攻击有间隔、距离、方向和障碍约束。</summary>
         public bool Attack(Vector2 direction)
         {
-            if (Outcome != ScavengeOutcome.Exploring || OpenCache >= 0 ||
-                (Inventory & ScavengeItem.Crowbar) == 0 || attackCooldown > 0) return false;
+            if (Outcome != ScavengeOutcome.Exploring || OpenCache >= 0 || attackCooldown > 0) return false;
+            if (UsingFirearm) return Fire(direction);
+            if ((Inventory & ScavengeItem.Crowbar) == 0) return false;
             attackCooldown = .55f;
             ScavengePatrol target = null;
             float best = 1.75f * 1.75f;
@@ -279,7 +312,7 @@ namespace OutpostLoop
                 var delta = patrol.Position - Player;
                 if (!patrol.Alive || delta.sqrMagnitude > best ||
                     (delta.sqrMagnitude > .001f && Vector2.Dot(direction.normalized, delta.normalized) < .45f) ||
-                    !ScavengeLayout.ClearLine(Player, patrol.Position)) continue;
+                    !ClearRunLine(Player, patrol.Position)) continue;
                 target = patrol;
                 best = delta.sqrMagnitude;
             }
@@ -306,7 +339,8 @@ namespace OutpostLoop
         }
 
         private const ScavengeItem AllItems = ScavengeItem.Supplies | ScavengeItem.Crowbar | ScavengeItem.Signal |
-            ScavengeItem.Materials | ScavengeItem.DefenseParts | ScavengeItem.RepairMaterials | ScavengeItem.RepairKit;
+            ScavengeItem.Materials | ScavengeItem.DefenseParts | ScavengeItem.RepairMaterials | ScavengeItem.RepairKit |
+            ScavengeItem.Pistol | ScavengeItem.Ammo | ScavengeItem.ReserveMedicine;
 
         private static bool IsSingleItem(ScavengeItem item) =>
             item != ScavengeItem.None && (item & AllItems) == item && (((int)item & ((int)item - 1)) == 0);

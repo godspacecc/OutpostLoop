@@ -50,7 +50,7 @@ namespace OutpostLoop
                     if (part == null || !part.enabled || !part.gameObject.activeInHierarchy) continue;
                     var bounds = part.bounds;
                     hidden = BlocksView(bounds, origin, torso) || BlocksView(bounds, origin, feet) ||
-                        (cache >= 0 && BlocksView(bounds, origin, At(ScavengeLayout.Caches[cache], .36f)));
+                        (cache >= 0 && BlocksView(bounds, origin, At(scavengeRun.CachePoints[cache], .36f)));
                     if (hidden) break;
                 }
                 foreach (var part in segment)

@@ -18,8 +18,11 @@ namespace OutpostLoop
         public bool Engaged => Alive && Memory > 0;
         public bool Investigating => Alive && !Engaged && Noise.HasValue;
 
-        internal ScavengePatrol(Vector2 start, Vector2 end)
+        public bool Fast { get; }
+
+        internal ScavengePatrol(Vector2 start, Vector2 end, bool fast = false)
         {
+            Fast = fast;
             Position = Start = start;
             End = end;
             Facing = (end - start).normalized;
@@ -34,7 +37,8 @@ namespace OutpostLoop
         private const float NoiseRange = 5f;
 
         // 从开局就在地图上的两个巡逻者。状态中没有刷怪时钟。
-        private readonly ScavengePatrol[] patrols =
+        private readonly ScavengePatrol[] patrols;
+        private static ScavengePatrol[] CreateTrialPatrols() => new[]
         {
             new ScavengePatrol(new Vector2(7.8f, -2.8f), new Vector2(7.8f, 5.5f)),
             new ScavengePatrol(new Vector2(-3.32f, .12f), new Vector2(-3.32f, -2.48f))
@@ -50,7 +54,10 @@ namespace OutpostLoop
 
         private float defenseCooldown, damageNotice;
         public IReadOnlyList<ScavengePatrol> Patrols => patrols;
-        public bool ConstructionInvestigated => patrols[0].Investigating || patrols[1].Investigating;
+        public bool ConstructionInvestigated
+        {
+            get { foreach (var patrol in patrols) if (patrol.Investigating) return true; return false; }
+        }
         public int ShelterHealth { get; private set; }
         public bool ShelterLost { get; private set; }
         public bool ShelterHit => damageNotice > 0;
@@ -74,10 +81,10 @@ namespace OutpostLoop
             offset = point - Player;
             if (Mathf.Abs(offset.x) < half + .35f && Mathf.Abs(offset.y) < half + .35f)
                 return ShelterPlacement.Obstructed;
-            foreach (var ground in ScavengeLayout.ShelterGrounds)
+            foreach (var ground in BuildGrounds)
                 if (ground.Contains(Shelter.Value) && point.x - half >= ground.xMin && point.x + half <= ground.xMax &&
                     point.y - half >= ground.yMin && point.y + half <= ground.yMax &&
-                    ScavengeLayout.ClearLine(Player, point)) return ShelterPlacement.Available;
+                    ClearRunLine(Player, point)) return ShelterPlacement.Available;
             return ShelterPlacement.Obstructed;
         }
 
@@ -105,10 +112,13 @@ namespace OutpostLoop
 
             foreach (var patrol in patrols)
             {
-                if (!patrol.Alive) continue;
+                if (!patrol.Alive || (IsTown && Vector2.Distance(Player, patrol.Position) > 32 &&
+                    (!Shelter.HasValue || Vector2.Distance(Shelter.Value, patrol.Position) > 24))) continue;
                 TickPatrol(patrol, dt, shelterNoise, defenseNoise);
                 if (Outcome != ScavengeOutcome.Exploring) return;
             }
+
+            gunshotRemaining = Mathf.Max(0, gunshotRemaining - dt);
 
             if (!Defense.HasValue || DefenseRemaining > 0 || defenseCooldown > 0) return;
             ScavengePatrol target = null;
@@ -117,7 +127,7 @@ namespace OutpostLoop
             {
                 if (!patrol.Engaged) continue;
                 float distance = Vector2.Distance(Defense.Value, patrol.Position);
-                if (distance > nearest || !ScavengeLayout.ClearLine(Defense.Value, patrol.Position)) continue;
+                if (distance > nearest || !ClearRunLine(Defense.Value, patrol.Position)) continue;
                 nearest = distance;
                 target = patrol;
             }
@@ -134,10 +144,10 @@ namespace OutpostLoop
             patrol.Cooldown = Mathf.Max(0, patrol.Cooldown - dt);
             patrol.Memory = Mathf.Max(0, patrol.Memory - dt);
             patrol.NoiseRemaining = Mathf.Max(0, patrol.NoiseRemaining - dt);
-            bool warehouse = patrol == patrols[0];
-            float sight = warehouse ? 5f : 2.65f;
+            bool warehouse = !IsTown && patrol == patrols[0];
+            float sight = IsTown ? (patrol.Fast ? 7f : 5.4f) : warehouse ? 5f : 2.65f;
             bool seesPlayer = (!warehouse || Player.x > 1.25f || patrol.Engaged) &&
-                CanSee(patrol, Player, warehouse ? sight : 2f, warehouse ? 1.65f : .9f);
+                CanSee(patrol, Player, IsTown || warehouse ? sight : 2f, IsTown || warehouse ? 1.65f : .9f);
             var shelter = Shelter.GetValueOrDefault();
             bool seesShelter = Shelter.HasValue && CanSee(patrol, shelter, sight, 1.55f);
             bool attackShelter = seesShelter && (!seesPlayer ||
@@ -167,7 +177,8 @@ namespace OutpostLoop
             }
             else if (!patrol.Engaged)
             {
-                var sound = Heard(patrol, firstNoise) ? firstNoise :
+                var sound = gunshotRemaining > 0 && Vector2.Distance(patrol.Position, gunshot) <= 16f ? gunshot :
+                    Heard(patrol, firstNoise) ? firstNoise :
                     Heard(patrol, secondNoise) ? secondNoise : null;
                 if (sound.HasValue)
                 {
@@ -185,7 +196,7 @@ namespace OutpostLoop
                     Mathf.Min(patrol.Start.y, patrol.End.y), Mathf.Max(patrol.Start.y, patrol.End.y))) : endpoint;
             var goal = patrol.Engaged ? patrol.LastSeen : patrol.Noise ??
                 (Vector2.Distance(patrol.Position, patrolAxis) > .12f &&
-                    ScavengeLayout.ClearLine(patrol.Position, patrolAxis, .34f) ? patrolAxis : endpoint);
+                    ClearRunLine(patrol.Position, patrolAxis, .34f) ? patrolAxis : endpoint);
             MovePatrol(patrol, goal, dt);
             if (!patrol.Engaged && !patrol.Noise.HasValue && Vector2.Distance(patrol.Position, endpoint) < .13f)
                 patrol.TowardEnd = !patrol.TowardEnd;
@@ -194,13 +205,13 @@ namespace OutpostLoop
         private static bool Heard(ScavengePatrol patrol, Vector2? point) =>
             point.HasValue && (point.Value - patrol.Position).sqrMagnitude <= NoiseRange * NoiseRange;
 
-        private static bool CanSee(ScavengePatrol patrol, Vector2 point, float sight, float close)
+        private bool CanSee(ScavengePatrol patrol, Vector2 point, float sight, float close)
         {
             var offset = point - patrol.Position;
             float limit = sight + (patrol.Engaged ? 1.75f : 0);
             return offset.sqrMagnitude <= limit * limit &&
                 (patrol.Engaged || offset.sqrMagnitude <= close * close || Vector2.Dot(patrol.Facing, offset.normalized) > .22f) &&
-                ScavengeLayout.ClearLine(patrol.Position, point);
+                ClearRunLine(patrol.Position, point);
         }
 
         private void HitShelter()
@@ -215,11 +226,11 @@ namespace OutpostLoop
             ClearShelterStorage();
         }
 
-        private static void MovePatrol(ScavengePatrol patrol, Vector2 goal, float dt)
+        private void MovePatrol(ScavengePatrol patrol, Vector2 goal, float dt)
         {
             patrol.RouteCooldown = Mathf.Max(0, patrol.RouteCooldown - dt);
             var waypoint = goal;
-            if (!ScavengeLayout.ClearLine(patrol.Position, goal, .34f))
+            if (!ClearRunLine(patrol.Position, goal, .34f))
             {
                 if (patrol.RouteCooldown == 0 || Vector2.Distance(patrol.Position, patrol.RoutePoint) < .14f)
                 {
@@ -229,25 +240,33 @@ namespace OutpostLoop
                 waypoint = patrol.RoutePoint;
             }
             else patrol.RouteCooldown = 0;
-            float speed = patrol.Engaged ? 4.15f : patrol.Investigating ? 2.8f : 2.05f;
+            float speed = patrol.Engaged ? (patrol.Fast ? 5.35f : 4.15f) : patrol.Investigating ? 2.8f : 2.05f;
             var step = Vector2.MoveTowards(patrol.Position, waypoint, speed * dt) - patrol.Position;
-            var moved = ScavengeLayout.Move(patrol.Position, step);
+            var moved = MoveInRun(patrol.Position, step);
             if ((moved - patrol.Position).sqrMagnitude > .000001f)
                 patrol.Facing = (moved - patrol.Position).normalized;
             patrol.Position = moved;
         }
 
         /// <summary>在有限的地形节点中寻找最近的可走绕行路径。</summary>
-        private static Vector2 RouteAround(Vector2 start, Vector2 goal)
+        private Vector2 RouteAround(Vector2 start, Vector2 goal)
         {
-            int count = Corners.Length;
+            var corners = Corners;
+            if (IsTown)
+            {
+                var local = new List<Vector2>();
+                foreach (var point in ScavengeTown.Corners)
+                    if (Vector2.Distance(point, start) < 19f || Vector2.Distance(point, goal) < 19f) local.Add(point);
+                corners = local.ToArray();
+            }
+            int count = corners.Length;
             var distance = new float[count];
             var first = new int[count];
             var visited = new bool[count];
             for (int i = 0; i < count; i++)
             {
-                distance[i] = ScavengeLayout.ClearLine(start, Corners[i], .34f) ?
-                    Vector2.Distance(start, Corners[i]) : float.PositiveInfinity;
+                distance[i] = ClearRunLine(start, corners[i], .34f) ?
+                    Vector2.Distance(start, corners[i]) : float.PositiveInfinity;
                 first[i] = i;
             }
             float best = float.PositiveInfinity;
@@ -260,18 +279,18 @@ namespace OutpostLoop
                     if (!visited[i] && distance[i] < closest) { index = i; closest = distance[i]; }
                 if (index < 0) break;
                 visited[index] = true;
-                var point = Corners[index];
+                var point = corners[index];
                 float total = closest + Vector2.Distance(point, goal);
-                if (total < best && ScavengeLayout.ClearLine(point, goal, .34f))
+                if (total < best && ClearRunLine(point, goal, .34f))
                 {
                     best = total;
-                    result = Corners[first[index]];
+                    result = corners[first[index]];
                 }
                 for (int i = 0; i < count; i++)
                 {
                     if (visited[i]) continue;
-                    float next = closest + Vector2.Distance(point, Corners[i]);
-                    if (next >= distance[i] || !ScavengeLayout.ClearLine(point, Corners[i], .34f)) continue;
+                    float next = closest + Vector2.Distance(point, corners[i]);
+                    if (next >= distance[i] || !ClearRunLine(point, corners[i], .34f)) continue;
                     distance[i] = next;
                     first[i] = first[index];
                 }

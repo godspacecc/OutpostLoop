@@ -383,4 +383,95 @@ namespace OutpostLoop.Tests
                 run.Tick(.02f, Vector2.zero);
         }
     }
+
+    public sealed class ScavengeTownTests
+    {
+        [Test]
+        public void SeedsVaryLootAndPatrolsAcrossTheSameTown()
+        {
+            var first = new ScavengeRun(0, true);
+            var second = new ScavengeRun(1, true);
+            Assert.AreEqual(first.Player, second.Player);
+            Assert.IsFalse(first.IsRain);
+            Assert.IsTrue(second.IsRain);
+            Assert.AreEqual(12, first.Patrols.Count);
+            int fast = 0;
+            foreach (var patrol in first.Patrols) if (patrol.Fast) fast++;
+            Assert.AreEqual(2, fast);
+            Assert.AreNotEqual(first.Patrols[0].Position, second.Patrols[0].Position);
+            int differences = 0;
+            for (int i = 0; i < 22; i++)
+            {
+                if (ReadLoot(first, i) != ReadLoot(second, i)) differences++;
+            }
+            Assert.Greater(differences, 0);
+        }
+
+        [Test]
+        public void SurvivorAndManifestBothGiveAReachableOptionalLead()
+        {
+            var run = new ScavengeRun(0, true);
+            Place(run, new Vector2(-30, -33));
+            Assert.IsTrue(run.Interact());
+            Assert.IsTrue(run.SurvivorSpoken);
+            Assert.IsTrue(run.MedicineLeadKnown);
+            int target = Read<int>(run, "MedicineCache");
+            Assert.AreEqual(ScavengeItem.ReserveMedicine, ReadLoot(run, target));
+            Assert.IsTrue(run.Transfer(ScavengeItem.ReserveMedicine, true));
+            Assert.IsTrue(run.MedicineFound);
+            run.CloseSearch();
+            Place(run, new Vector2(-70, -40));
+            run.Tick(.02f, Vector2.zero);
+            Assert.IsTrue(run.Interact());
+            Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
+            Assert.AreEqual(ScavengeItem.ReserveMedicine, run.CarriedOut);
+            var other = new ScavengeRun(1, true);
+            Assert.AreEqual(ScavengeItem.Signal, ReadLoot(other, 7));
+            Assert.IsTrue(other.MedicineLeadKnown);
+            Assert.IsFalse(other.SurvivorSpoken);
+            Assert.IsFalse(new ScavengeRun(1, true).MedicineFound);
+        }
+
+        [Test]
+        public void PistolConsumesAmmunitionAndNearbyPatrolInvestigatesTheShot()
+        {
+            var run = new ScavengeRun(0, true);
+            Place(run, new Vector2(-75, -62));
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Inventory)).SetValue(run,
+                ScavengeItem.Pistol | ScavengeItem.Ammo);
+            var patrol = run.Patrols[0];
+            typeof(ScavengePatrol).GetProperty(nameof(ScavengePatrol.Position)).SetValue(patrol, new Vector2(-65, -62));
+            Assert.IsFalse(run.Attack(Vector2.up));
+            Assert.IsTrue(run.Reload());
+            Assert.AreEqual(6, run.Rounds);
+            Assert.AreEqual(ScavengeItem.Pistol, run.Inventory);
+            Assert.IsTrue(run.Attack(Vector2.up));
+            run.Tick(.02f, Vector2.zero);
+            Assert.AreEqual(5, run.Rounds);
+            Assert.IsTrue(patrol.Investigating);
+            for (int i = 0; i < 18; i++) run.Tick(.02f, Vector2.zero);
+            Assert.IsTrue(run.Attack(patrol.Position - run.Player));
+            Assert.IsFalse(patrol.Alive);
+            Assert.AreEqual(4, run.Rounds);
+        }
+
+        private static T Read<T>(ScavengeRun run, string name) => (T)typeof(ScavengeRun).GetProperty(name,
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(run);
+
+        private static void Place(ScavengeRun run, Vector2 point) =>
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, point);
+
+        private static ScavengeItem ReadLoot(ScavengeRun run, int index)
+        {
+            run.CloseSearch();
+            foreach (var patrol in run.Patrols)
+                typeof(ScavengePatrol).GetProperty(nameof(ScavengePatrol.Health)).SetValue(patrol, 0);
+            Place(run, Read<Vector2[]>(run, "CachePoints")[index]);
+            Assert.IsTrue(run.Interact(), $"搜点 {index}");
+            Assert.AreEqual(index, run.OpenCache);
+            for (int i = 0; i < 33; i++) run.Tick(.02f, Vector2.zero);
+            Assert.IsTrue(run.IsSearched(index), $"搜点 {index}");
+            return run.VisibleContents(index);
+        }
+    }
 }

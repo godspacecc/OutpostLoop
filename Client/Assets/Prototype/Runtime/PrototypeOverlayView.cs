@@ -554,6 +554,9 @@ namespace OutpostLoop
             var scavenge = Button(startStage, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(326, 52),
                 new Vector2(1279, -918), new Vector2(0, 1), controller.StartScavenge);
             scavenge.fontSize = 24;
+            var town = Button(startStage, font, "StartScavengeTown", "大镇与镇郊 · 探索试玩", new Vector2(326, 52),
+                new Vector2(1623, -850), new Vector2(0, 1), controller.StartScavengeTown);
+            town.fontSize = 24;
 
             Fill("FooterRule", 96, 992, 1728, 2, line);
             StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);

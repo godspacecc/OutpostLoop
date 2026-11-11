@@ -33,6 +33,52 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeTownStartsWithWeatherAndLetsThePlayerSpeak()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            Click("StartScavengeTown");
+            yield return null;
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var field = type.GetField("scavengeRun", flags);
+            type.GetMethod("BeginScavenge", flags).Invoke(controller, new object[] { 0 });
+            var rain = GameObject.Find("小雨").GetComponent<MeshRenderer>();
+            Assert.IsFalse(rain.enabled);
+            type.GetMethod("BeginScavenge", flags).Invoke(controller, new object[] { 1 });
+            var run = (ScavengeRun)field.GetValue(controller);
+            Assert.IsTrue(run.IsTown);
+            Assert.IsTrue(run.IsRain);
+            Assert.IsTrue(rain.enabled);
+            Assert.AreEqual(0, run.Count);
+            Assert.NotNull(GameObject.Find("本地幸存者"));
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, new Vector2(-30, -33));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.E));
+                yield return null;
+                Assert.IsTrue(run.SurvivorSpoken);
+                Assert.IsTrue(run.MedicineLeadKnown);
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, new Vector2(-70, -40));
+                yield return null;
+                Assert.IsTrue(run.Interact());
+                Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
+                yield return null;
+                var next = (ScavengeRun)field.GetValue(controller);
+                Assert.AreNotSame(run, next);
+                Assert.IsTrue(next.IsTown);
+                Assert.IsFalse(next.MedicineLeadKnown);
+                Assert.AreEqual(0, next.Count);
+            }
+            finally { InputSystem.RemoveDevice(keyboard); }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeCameraFollowsInputAndClearsVisualOcclusion()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
