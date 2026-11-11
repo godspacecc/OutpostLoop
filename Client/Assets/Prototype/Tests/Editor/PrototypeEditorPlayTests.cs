@@ -168,6 +168,8 @@ namespace OutpostLoop.Tests
             Click("StartScavenge");
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
+            typeof(PrototypeController).GetMethod("BeginScavenge", System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance).Invoke(controller, new object[] { 0 });
             var field = typeof(PrototypeController).GetField("scavengeRun",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var run = (ScavengeRun)field.GetValue(controller);
@@ -186,7 +188,7 @@ namespace OutpostLoop.Tests
                 run.CloseSearch();
             }
             Take(0, ScavengeItem.Materials);
-            Take(1, ScavengeItem.DefenseParts);
+            Take(ScavengeLayout.LoadingRack, ScavengeItem.DefenseParts);
             Walk(new Vector2(-.8f, -6));
             Walk(new Vector2(-5.4f, -6));
             Assert.IsTrue(run.BuildShelter(new Vector2(-3, -6.25f)));
@@ -316,6 +318,44 @@ namespace OutpostLoop.Tests
                 Assert.AreEqual(0, run.OpenCache);
             }
             finally { InputSystem.RemoveDevice(keyboard); }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator BootScavengeSearchesDifferentStreetLocationsForTwoSeeds()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            Click("StartScavenge");
+            yield return null;
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var begin = typeof(PrototypeController).GetMethod("BeginScavenge", flags);
+            var field = typeof(PrototypeController).GetField("scavengeRun", flags);
+            foreach (int seed in new[] { 0, 3 })
+            {
+                begin.Invoke(controller, new object[] { seed });
+                var run = (ScavengeRun)field.GetValue(controller);
+                Assert.AreEqual(seed, run.Seed);
+                Assert.AreEqual(0, run.Count);
+                int location = seed == 0 ? ScavengeLayout.Pharmacy : ScavengeLayout.AbandonedCar;
+                Assert.IsFalse(run.IsDiscovered(location));
+                void Walk(Vector2 target)
+                {
+                    for (int step = 0; step < 220 && Vector2.Distance(run.Player, target) > .1f; step++)
+                        run.Tick(.02f, Vector2.ClampMagnitude((target - run.Player) * 10, 1));
+                    Assert.That(Vector2.Distance(run.Player, target), Is.LessThan(.11f), $"种子 {seed}，{target}，{run.Player}");
+                }
+                if (seed == 3) Walk(new Vector2(-6.9f, -4));
+                Walk(ScavengeLayout.Caches[location]);
+                Assert.IsTrue(run.IsDiscovered(location));
+                Assert.IsFalse(run.IsSearched(location));
+                Assert.IsTrue(run.Interact());
+                for (int step = 0; step < 34; step++) run.Tick(.02f, Vector2.zero);
+                Assert.IsTrue(run.Transfer(ScavengeItem.Supplies, true));
+                Assert.AreEqual(1, run.Count);
+            }
             yield return new ExitPlayMode();
         }
 

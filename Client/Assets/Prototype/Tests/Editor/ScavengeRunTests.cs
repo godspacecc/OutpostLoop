@@ -14,14 +14,14 @@ namespace OutpostLoop.Tests
             MoveTo(run, ScavengeLayout.Caches[0]);
             Assert.AreEqual(ScavengeItem.None, run.VisibleContents(0));
             Assert.IsTrue(run.Interact());
-            Assert.IsFalse(run.Transfer(ScavengeItem.Supplies, true));
+            Assert.IsFalse(run.Transfer(ScavengeItem.Materials, true));
             Advance(run, .7f);
-            Assert.IsTrue(run.Transfer(ScavengeItem.Supplies, true));
-            Assert.IsFalse(run.Transfer(ScavengeItem.Supplies, true));
+            Assert.IsTrue(run.Transfer(ScavengeItem.Materials, true));
+            Assert.IsFalse(run.Transfer(ScavengeItem.Materials, true));
             MoveTo(run, ScavengeLayout.Exit);
             Assert.IsTrue(run.Interact());
             Assert.IsFalse(run.Interact());
-            Assert.AreEqual(ScavengeItem.Supplies, run.CarriedOut);
+            Assert.AreEqual(ScavengeItem.Materials, run.CarriedOut);
             Assert.AreEqual(ScavengeItem.None, run.Inventory);
 
             var next = new ScavengeRun();
@@ -36,7 +36,7 @@ namespace OutpostLoop.Tests
         {
             var run = new ScavengeRun();
             MoveTo(run, ScavengeLayout.Caches[0]);
-            SearchAndTake(run, ScavengeItem.Supplies);
+            SearchAndTake(run, ScavengeItem.Materials);
             MoveTo(run, ScavengeLayout.Caches[1]);
             SearchAndTake(run, ScavengeItem.Crowbar);
             MoveTo(run, new Vector2(4.3f, -3));
@@ -50,7 +50,7 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(run.Interact());
             Advance(run, .7f);
             Assert.IsFalse(run.Transfer(ScavengeItem.Signal, true));
-            Assert.IsTrue(run.Transfer(ScavengeItem.Supplies, false));
+            Assert.IsTrue(run.Transfer(ScavengeItem.Materials, false));
             Assert.IsTrue(run.Transfer(ScavengeItem.Signal, true));
             MoveTo(run, new Vector2(5.4f, 5.5f));
             MoveTo(run, new Vector2(5.4f, 8.5f));
@@ -184,7 +184,7 @@ namespace OutpostLoop.Tests
             var run = new ScavengeRun();
             MoveTo(run, ScavengeLayout.Caches[0]);
             SearchAndTake(run, ScavengeItem.Materials);
-            MoveTo(run, ScavengeLayout.Caches[1]);
+            MoveTo(run, ScavengeLayout.Caches[ScavengeLayout.LoadingRack]);
             SearchAndTake(run, ScavengeItem.DefenseParts);
             return run;
         }
@@ -193,7 +193,7 @@ namespace OutpostLoop.Tests
         public void WorkshopProcessesWhileAwayAndRepairRestoresDamagedShelter()
         {
             var run = RoadShelter(true);
-            MoveTo(run, ScavengeLayout.Caches[0]);
+            MoveTo(run, ScavengeLayout.Caches[ScavengeLayout.Pharmacy]);
             SearchAndTake(run, ScavengeItem.Supplies);
             MoveTo(run, new Vector2(-4, -6.25f));
             Assert.IsTrue(run.TransferStorage(ScavengeItem.Supplies, false));
@@ -292,7 +292,7 @@ namespace OutpostLoop.Tests
         {
             var run = new ScavengeRun();
             MoveTo(run, ScavengeLayout.Caches[0]);
-            SearchAndTake(run, ScavengeItem.Supplies);
+            SearchAndTake(run, ScavengeItem.Materials);
             MoveTo(run, new Vector2(-.7f, -3));
             MoveTo(run, new Vector2(7.8f, -3));
             Advance(run, 12);
@@ -300,6 +300,66 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(ScavengeItem.None, run.Inventory);
             Assert.AreEqual(ScavengeItem.None, run.CarriedOut);
             Assert.IsFalse(run.Interact());
+        }
+
+        [TestCase(0, ScavengeLayout.Pharmacy, ScavengeLayout.LoadingRack)]
+        [TestCase(3, ScavengeLayout.AbandonedCar, ScavengeLayout.RepairRoom)]
+        public void SeedChangesAidAndPartsWithoutRevealingUnsearchedLoot(int seed, int aid, int defense)
+        {
+            var expected = new[] { ScavengeItem.Materials, ScavengeItem.Crowbar, ScavengeItem.Signal,
+                ScavengeItem.RepairMaterials, ScavengeItem.RepairMaterials, ScavengeItem.None, ScavengeItem.None };
+            expected[aid] = ScavengeItem.Supplies;
+            expected[defense] = ScavengeItem.DefenseParts;
+            for (int i = 0; i < expected.Length; i++)
+            {
+                var run = new ScavengeRun(seed);
+                Assert.AreEqual(seed, run.Seed);
+                Assert.IsFalse(run.IsDiscovered(i));
+                // 单独检查每个容器，巡逻路线和实地走法另有覆盖。
+                foreach (var patrol in run.Patrols)
+                    typeof(ScavengePatrol).GetProperty(nameof(ScavengePatrol.Health)).SetValue(patrol, 0);
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeLayout.Caches[i]);
+                Assert.IsTrue(run.Interact());
+                Assert.AreEqual(i, run.OpenCache);
+                Assert.IsTrue(run.IsDiscovered(i));
+                Assert.IsFalse(run.IsSearched(i));
+                Assert.AreEqual(ScavengeItem.None, run.VisibleContents(i));
+                Advance(run, ScavengeRun.SearchSeconds + .05f);
+                Assert.IsTrue(run.IsSearched(i), ScavengeLayout.CacheNames[i]);
+                Assert.AreEqual(expected[i], run.VisibleContents(i));
+            }
+        }
+
+        [Test]
+        public void FirstAidNeedsDamageAndIsConsumedOnce()
+        {
+            var run = new ScavengeRun();
+            MoveTo(run, ScavengeLayout.Caches[ScavengeLayout.Pharmacy]);
+            SearchAndTake(run, ScavengeItem.Supplies);
+            Assert.IsFalse(run.UseFirstAid());
+            Assert.AreEqual(1, run.Count);
+            MoveTo(run, new Vector2(-.8f, -3));
+            MoveTo(run, new Vector2(7.8f, -3));
+            for (int step = 0; step < 400 && run.Health == ScavengeRun.MaxHealth; step++) run.Tick(.02f, Vector2.zero);
+            Assert.AreEqual(2, run.Health);
+            Assert.IsTrue(run.UseFirstAid());
+            Assert.AreEqual(ScavengeRun.MaxHealth, run.Health);
+            Assert.AreEqual(0, run.Count);
+            Assert.IsFalse(run.UseFirstAid());
+        }
+
+        [Test]
+        public void LeavingASearchKeepsDiscoveredMarkerAndHidesContents()
+        {
+            var run = new ScavengeRun();
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            Assert.IsTrue(run.IsDiscovered(0));
+            Assert.IsTrue(run.Interact());
+            run.Tick(.4f, Vector2.down);
+            Assert.AreEqual(-1, run.OpenCache);
+            Assert.IsTrue(run.IsDiscovered(0));
+            Assert.IsFalse(run.IsSearched(0));
+            Assert.AreEqual(ScavengeItem.None, run.VisibleContents(0));
         }
 
         private static void SearchAndTake(ScavengeRun run, ScavengeItem item)

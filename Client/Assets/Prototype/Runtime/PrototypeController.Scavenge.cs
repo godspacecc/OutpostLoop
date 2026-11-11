@@ -45,9 +45,11 @@ namespace OutpostLoop
         }
 
         /// <summary>开始页、Enter 和空手按钮统一从零开始。</summary>
-        private void RestartScavenge()
+        private void RestartScavenge() => BeginScavenge(Random.Range(0, int.MaxValue));
+
+        private void BeginScavenge(int seed)
         {
-            scavengeRun = new ScavengeRun();
+            scavengeRun = new ScavengeRun(seed);
             scavengePaused = false;
             storageOpen = false;
             placingShelter = false;
@@ -216,9 +218,11 @@ namespace OutpostLoop
                 ScavengeBox("道路标线", new Vector3(-7, .026f, i * 1.8f - 7), new Vector3(.13f, .026f, .8f), concrete);
             foreach (var wall in ScavengeLayout.Walls)
             {
+                if (wall == ScavengeLayout.PharmacyFacade || wall == ScavengeLayout.CarBody) continue;
                 ScavengeBox("矮墙", At(wall.center, .67f), new Vector3(wall.width, 1.34f, wall.height), concrete);
                 ScavengeBox("压顶", At(wall.center, 1.36f), new Vector3(wall.width + .08f, .1f, wall.height + .08f), steel);
             }
+            CreateScavengeStreetLandmarks(concrete, steel, rust, canvas);
             ScavengeBox("仓门", new Vector3(.84f, .06f, -3.1f), new Vector3(.85f, .07f, 2.65f), gold);
             ScavengeBox("侧门", new Vector3(5.35f, .06f, 7), new Vector3(2.45f, .07f, .8f), gold);
             for (int i = 0; i < scavengeCrates.Length; i++)
@@ -237,6 +241,21 @@ namespace OutpostLoop
             }
             CreateShelterModels(steel, gold, canvas);
             CreateDefenseModels(steel, gold);
+        }
+
+        /// <summary>用临时轮廓区分药房入口和废车，尺寸对齐通行障碍。</summary>
+        private void CreateScavengeStreetLandmarks(Material concrete, Material steel, Material rust, Material sign)
+        {
+            var pharmacy = ScavengeLayout.PharmacyFacade;
+            ScavengeBox("药房外墙", At(pharmacy.center, 1.03f), new Vector3(pharmacy.width, 2.06f, pharmacy.height), concrete);
+            ScavengeBox("药房雨棚", At(pharmacy.center + new Vector2(.4f, 0), 1.64f), new Vector3(1.3f, .12f, 2.6f), steel);
+            var cross = At(pharmacy.center + new Vector2(.68f, 0), 1.71f);
+            ScavengeBox("药房标志横", cross, new Vector3(.18f, .025f, .54f), sign);
+            ScavengeBox("药房标志竖", cross, new Vector3(.5f, .026f, .17f), sign);
+            var car = ScavengeLayout.CarBody;
+            ScavengeBox("废车底盘", At(car.center, .27f), new Vector3(car.width, .28f, car.height), steel);
+            ScavengeBox("废车车身", At(car.center, .49f), new Vector3(car.width, .27f, car.height - .04f), rust);
+            ScavengeBox("废车驾驶舱", At(car.center + new Vector2(0, -.08f), .73f), new Vector3(.82f, .26f, .87f), steel);
         }
 
         /// <summary>建立装置、射程预览与自动射击反馈。</summary>
@@ -369,8 +388,18 @@ namespace OutpostLoop
             }
 
             GUI.Box(ScavengeInfoRect, "");
-            GUI.Label(new Rect(35, 30, 300, 28), $"生命 {run.Health}/3    背包 {run.Count}/{ScavengeRun.Capacity}");
-            GUI.Label(new Rect(35, 63, 310, 28), DescribeItems(run.Inventory));
+            GUI.Label(new Rect(35, 30, 300, 28), $"生命 {run.Health}/{ScavengeRun.MaxHealth}    背包 {run.Count}/{ScavengeRun.Capacity}");
+            if ((run.Inventory & ScavengeItem.Supplies) != 0)
+            {
+                var otherItems = run.Inventory & ~ScavengeItem.Supplies;
+                if (otherItems != ScavengeItem.None) GUI.Label(new Rect(35, 63, 153, 28), DescribeItems(otherItems));
+                bool enabled = GUI.enabled;
+                GUI.enabled = enabled && run.Health < ScavengeRun.MaxHealth;
+                if (GUI.Button(new Rect(194, 62, 151, 31), GUI.enabled ? "使用急救包" : "急救包 · 生命已满"))
+                    run.UseFirstAid();
+                GUI.enabled = enabled;
+            }
+            else GUI.Label(new Rect(35, 63, 310, 28), DescribeItems(run.Inventory));
             GUI.Label(new Rect(35, 99, 315, 28), "WASD 移动   E 交互   V 建造   Esc 暂停");
             if (placingShelter)
             {
@@ -384,7 +413,7 @@ namespace OutpostLoop
                     shelterPlacement switch
                     {
                         ShelterPlacement.Available => placingDefense ? "左键安装 · 预览圈内可射击，墙会遮挡" : "左键搭建避难所 · 右键或 Esc 取消",
-                        ShelterPlacement.MissingMaterials => placingDefense ? "需要防守零件 · 搜索仓门外工具箱" : "需要建材 · 可以在路边箱里找",
+                        ShelterPlacement.MissingMaterials => placingDefense ? "需要防守零件 · 检查装卸架和维修间" : "需要建材 · 可以在路边箱里找",
                         ShelterPlacement.AlreadyPlaced => "这一趟已经放置过",
                         ShelterPlacement.TooFar => placingDefense ? "在避难所附近的空地安装" : "靠近空地再建造",
                         ShelterPlacement.NeedsShelter => "先建避难所，再安装防御装置",
@@ -396,15 +425,17 @@ namespace OutpostLoop
             else
             {
                 var action = ScavengeActionRect(width, height);
-                if (run.AtExit || run.NearbyCache >= 0)
+                int nearbyCache = run.NearbyCache;
+                if (run.AtExit || nearbyCache >= 0)
                 {
-                    if (GUI.Button(action, run.AtExit ? "撤离  E" : "搜索箱子  E")) InteractScavenge();
+                    if (GUI.Button(action, run.AtExit ? "撤离  E" : "搜索" + ScavengeLayout.CacheNames[nearbyCache] + "  E"))
+                        InteractScavenge();
                 }
                 else if (run.NearShelter)
                 {
                     string rest = run.ShelterRemaining > 0 ? $"避难所施工中 · {run.ShelterRemaining:0.0} 秒" :
-                        run.Rested ? "这趟已经休整过" : run.Health >= 3 ? "生命已满 · 可留待受伤后休整" : "休整  E · 恢复一格生命";
-                    if (run.ShelterRemaining <= 0 && !run.Rested && run.Health < 3)
+                        run.Rested ? "这趟已经休整过" : run.Health >= ScavengeRun.MaxHealth ? "生命已满 · 可留待受伤后休整" : "休整  E · 恢复一格生命";
+                    if (run.ShelterRemaining <= 0 && !run.Rested && run.Health < ScavengeRun.MaxHealth)
                     {
                         if (GUI.Button(action, rest)) InteractScavenge();
                     }
@@ -446,6 +477,15 @@ namespace OutpostLoop
                 ScavengeFill(new Rect(topLeft, new Vector2(wall.width * map.width / 24,
                     wall.height * map.height / 21)), new Color(.48f, .55f, .54f));
             }
+            for (int i = 0; i < ScavengeLayout.Caches.Length; i++)
+            {
+                if (!scavengeRun.IsDiscovered(i)) continue;
+                var marker = ScavengeMapPoint(map, ScavengeLayout.Caches[i]);
+                bool searched = scavengeRun.IsSearched(i);
+                Color color = !searched ? new Color(.65f, .8f, .91f) :
+                    scavengeRun.VisibleContents(i) == ScavengeItem.None ? new Color(.55f, .55f, .55f) : new Color(.97f, .67f, .29f);
+                ScavengeFill(new Rect(marker - Vector2.one * 2.5f, Vector2.one * 5), color);
+            }
             if (scavengeRun.ExitKnown)
                 ScavengeFill(new Rect(ScavengeMapPoint(map, ScavengeLayout.Exit) - Vector2.one * 4, Vector2.one * 8),
                     new Color(.29f, .80f, .74f));
@@ -474,7 +514,7 @@ namespace OutpostLoop
             if (run.SearchRemaining > 0)
             {
                 GUI.Box(new Rect(20, 154, 338, 54), "");
-                GUI.Label(new Rect(35, 163, 315, 29), $"正在搜索 · {run.SearchRemaining:0.0} 秒");
+                GUI.Label(new Rect(35, 163, 315, 29), $"搜索{ScavengeLayout.CacheNames[run.OpenCache]} · {run.SearchRemaining:0.0} 秒");
                 return;
             }
 
@@ -483,7 +523,7 @@ namespace OutpostLoop
             foreach (var item in ScavengeItems)
                 if ((contents & item) != 0) boxRows++;
             GUI.Box(new Rect(20, 154, 338, 85 + Mathf.Max(32, boxRows * 42) + Mathf.Max(32, run.Count * 42)), "");
-            GUI.Label(new Rect(35, 163, 315, 29), "箱内 · E 关闭");
+            GUI.Label(new Rect(35, 163, 315, 29), ScavengeLayout.CacheNames[run.OpenCache] + " · E 关闭");
             float y = DrawScavengeCacheItems(contents, true, 199);
             GUI.Label(new Rect(35, y, 315, 29), $"背包 {run.Count}/{ScavengeRun.Capacity}");
             DrawScavengeCacheItems(run.Inventory, false, y + 30);
@@ -591,7 +631,7 @@ namespace OutpostLoop
             GUI.Label(new Rect(x + 26, y + 67, 420, 29), died ? "阵亡 · 本趟物品全部失去" :
                 "撤离时随身携带 · " + DescribeItems(carriedOut));
             if ((carriedOut & ScavengeItem.Signal) != 0)
-                GUI.Label(new Rect(x + 26, y + 100, 420, 29), "线索 · 物件上的刻痕与裂口边缘一致");
+                GUI.Label(new Rect(x + 26, y + 100, 420, 29), "街区记录 · 净水站在城区断电后停运");
             if (GUI.Button(new Rect(x + 26, y + 140, 420, 38), "再次出发 · 空手  Enter")) RestartScavenge();
             if (GUI.Button(new Rect(x + 26, y + 196, 420, 32), "回到开始页")) LeaveScavenge();
         }
@@ -607,9 +647,9 @@ namespace OutpostLoop
 
         private static string ScavengeItemName(ScavengeItem item) => item switch
         {
-            ScavengeItem.Supplies => "补给包",
+            ScavengeItem.Supplies => "急救包",
             ScavengeItem.Crowbar => "撬棍",
-            ScavengeItem.Signal => "异常物件",
+            ScavengeItem.Signal => "街区记录",
             ScavengeItem.Materials => "建材",
             ScavengeItem.DefenseParts => "防守零件",
             ScavengeItem.RepairMaterials => "维修材料",

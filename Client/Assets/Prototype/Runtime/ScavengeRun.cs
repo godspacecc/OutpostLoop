@@ -19,8 +19,16 @@ namespace OutpostLoop
         public static readonly Vector2 Exit = new Vector2(-5, 8);
         public static readonly Vector2[] Caches =
         {
-            new Vector2(-6, -4), new Vector2(-.8f, -3), new Vector2(6.3f, 2), new Vector2(8.62f, -4.02f)
+            new Vector2(-6, -4), new Vector2(-.8f, -3), new Vector2(6.3f, 2), new Vector2(8.62f, -4.02f),
+            new Vector2(.02f, -4.05f), new Vector2(-9.35f, -1.1f), new Vector2(-7f, 2.65f)
         };
+        public static readonly string[] CacheNames =
+        {
+            "临街物资箱", "仓门工具箱", "仓内办公室", "维修间", "装卸架", "药房柜台", "路边废车"
+        };
+        public const int RepairRoom = 3, LoadingRack = 4, Pharmacy = 5, AbandonedCar = 6;
+        public static readonly Rect PharmacyFacade = new Rect(-11f, -2.3f, .8f, 2.45f);
+        public static readonly Rect CarBody = new Rect(-8.54f, 2.06f, 1.02f, 1.86f);
         // 两块空地包含多个落位，避开两条主通路和侧门。
         public static readonly Rect[] ShelterGrounds =
         {
@@ -35,7 +43,8 @@ namespace OutpostLoop
             new Rect(.5f, 6.7f, 3.6f, .7f),
             new Rect(6.7f, 6.7f, 3.6f, .7f),
             new Rect(2.4f, -.7f, 1.15f, 4.5f),
-            new Rect(-2.6f, .3f, 1.6f, 3.4f)
+            new Rect(-2.6f, .3f, 1.6f, 3.4f),
+            PharmacyFacade, CarBody
         };
 
         /// <summary>逐轴移动，保证斜着撞墙时可以沿墙移动。</summary>
@@ -71,14 +80,13 @@ namespace OutpostLoop
     public sealed partial class ScavengeRun
     {
         public const int Capacity = 2;
+        public const int MaxHealth = 3;
         public const float SearchSeconds = .6f;
         public const float ShelterWidth = 1.6f;
         public const float ShelterBuildSeconds = 3f;
-        private readonly ScavengeItem[] contents =
-        {
-            ScavengeItem.Supplies | ScavengeItem.Materials, ScavengeItem.Crowbar | ScavengeItem.DefenseParts,
-            ScavengeItem.Signal, ScavengeItem.RepairMaterials
-        };
+        private readonly ScavengeItem[] contents = new ScavengeItem[ScavengeLayout.Caches.Length];
+        // 走近才在地图上登记；成功搜索才公开存货。
+        private readonly bool[] discovered = new bool[ScavengeLayout.Caches.Length];
         // 每个容器只在首次成功搜索后显示内容。
         private readonly bool[] known = new bool[ScavengeLayout.Caches.Length];
         private float attackCooldown;
@@ -88,7 +96,8 @@ namespace OutpostLoop
         public Vector2 EnemyFacing => patrols[0].Facing;
         public bool EnemyAlive => patrols[0].Alive;
         public bool Alerted => patrols[0].Engaged || patrols[1].Engaged;
-        public int Health { get; private set; } = 3;
+        public int Seed { get; }
+        public int Health { get; private set; } = MaxHealth;
         public ScavengeItem Inventory { get; private set; }
         // 仅用于本趟结算的撤离快照，实际背包在终局清空。
         public ScavengeItem CarriedOut { get; private set; }
@@ -104,17 +113,38 @@ namespace OutpostLoop
         public bool Rested { get; private set; }
         public bool NearShelter => Shelter.HasValue && Vector2.Distance(Player, Shelter.Value) <= 1.45f;
 
+        /// <summary>种子决定两个相互独立的物资位置选择，固定地标维持相同的路线。</summary>
+        public ScavengeRun(int seed = 0)
+        {
+            Seed = seed;
+            contents[0] = ScavengeItem.Materials;
+            contents[1] = ScavengeItem.Crowbar;
+            contents[2] = ScavengeItem.Signal;
+            bool swapParts = (seed & 2) != 0;
+            contents[ScavengeLayout.RepairRoom] = swapParts ? ScavengeItem.DefenseParts : ScavengeItem.RepairMaterials;
+            contents[ScavengeLayout.LoadingRack] = swapParts ? ScavengeItem.RepairMaterials : ScavengeItem.DefenseParts;
+            contents[(seed & 1) == 0 ? ScavengeLayout.Pharmacy : ScavengeLayout.AbandonedCar] = ScavengeItem.Supplies;
+        }
+
         public int NearbyCache
         {
             get
             {
+                int closest = -1;
+                float closestDistance = 1.65f * 1.65f;
                 for (int i = 0; i < ScavengeLayout.Caches.Length; i++)
-                    if (Vector2.Distance(Player, ScavengeLayout.Caches[i]) <= 1.65f &&
-                        ScavengeLayout.ClearLine(Player, ScavengeLayout.Caches[i])) return i;
-                return -1;
+                {
+                    var position = ScavengeLayout.Caches[i];
+                    float distance = (Player - position).sqrMagnitude;
+                    if (distance > closestDistance || !ScavengeLayout.ClearLine(Player, position)) continue;
+                    closest = i;
+                    closestDistance = distance;
+                }
+                return closest;
             }
         }
 
+        public bool IsDiscovered(int index) => discovered[index];
         public bool IsSearched(int index) => known[index];
         public ScavengeItem VisibleContents(int index) => known[index] ? contents[index] : ScavengeItem.None;
 
@@ -123,12 +153,14 @@ namespace OutpostLoop
         {
             if (Outcome != ScavengeOutcome.Exploring || dt <= 0) return;
             Player = ScavengeLayout.Move(Player, Vector2.ClampMagnitude(input, 1) * (5 * dt));
+            for (int i = 0; i < discovered.Length; i++)
+                if (!discovered[i] && CanReachCache(i)) discovered[i] = true;
             if (Vector2.Distance(Player, ScavengeLayout.Exit) < 4 &&
                 ScavengeLayout.ClearLine(Player, ScavengeLayout.Exit)) ExitKnown = true;
 
             if (OpenCache >= 0)
             {
-                if (NearbyCache != OpenCache) CloseSearch();
+                if (!CanReachCache(OpenCache)) CloseSearch();
                 else
                 {
                     SearchRemaining = Mathf.Max(0, SearchRemaining - dt);
@@ -158,6 +190,7 @@ namespace OutpostLoop
             }
             int cache = NearbyCache;
             if (cache < 0) return NearShelter && Rest();
+            discovered[cache] = true;
             OpenCache = cache;
             SearchRemaining = known[cache] ? 0 : SearchSeconds;
             return true;
@@ -214,11 +247,24 @@ namespace OutpostLoop
         /// <summary>每趟只可恢复一格生命，满血时保留机会。</summary>
         private bool Rest()
         {
-            if (Rested || ShelterRemaining > 0 || Health >= 3) return false;
+            if (Rested || ShelterRemaining > 0 || Health >= MaxHealth) return false;
             Health++;
             Rested = true;
             return true;
         }
+
+        /// <summary>受伤且携带急救包才消耗一份，背包腾出一格。</summary>
+        public bool UseFirstAid()
+        {
+            if (Outcome != ScavengeOutcome.Exploring || Health >= MaxHealth ||
+                (Inventory & ScavengeItem.Supplies) == 0) return false;
+            Inventory &= ~ScavengeItem.Supplies;
+            Health++;
+            return true;
+        }
+
+        private bool CanReachCache(int index) => Vector2.Distance(Player, ScavengeLayout.Caches[index]) <= 1.65f &&
+            ScavengeLayout.ClearLine(Player, ScavengeLayout.Caches[index]);
 
         /// <summary>装备撬棍后才可近战。攻击有间隔、距离、方向和障碍约束。</summary>
         public bool Attack(Vector2 direction)
