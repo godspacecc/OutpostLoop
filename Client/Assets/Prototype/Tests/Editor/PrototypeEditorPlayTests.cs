@@ -33,6 +33,76 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeCameraFollowsInputAndClearsVisualOcclusion()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var camera = GameObject.Find("PreviewCamera").GetComponent<Camera>();
+            float originalFov = camera.fieldOfView;
+            var originalColor = camera.backgroundColor;
+            var originalRotation = camera.transform.rotation;
+            Click("StartScavenge");
+            yield return null;
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var sync = type.GetMethod("SyncScavenge", flags);
+            var playerProperty = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            Assert.IsFalse(camera.orthographic);
+            Assert.That(camera.transform.eulerAngles.x, Is.EqualTo(43).Within(.1f));
+
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                var previous = run.Player;
+                var cameraStart = camera.transform.position;
+                float screenX = camera.WorldToScreenPoint(new Vector3(previous.x, 0, previous.y)).x;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.W));
+                for (int frame = 0; frame < 120 && Vector2.Distance(run.Player, previous) < .6f; frame++) yield return null;
+                Assert.That(Vector2.Distance(run.Player, previous), Is.GreaterThan(.55f));
+                Assert.That(Vector3.Distance(camera.transform.position, cameraStart), Is.GreaterThan(.02f));
+                Assert.That(camera.WorldToScreenPoint(new Vector3(run.Player.x, 0, run.Player.y)).x, Is.EqualTo(screenX).Within(1f));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+
+                var point = run.Player + Vector2.right * 1.7f;
+                var screen = (Vector2)camera.WorldToScreenPoint(new Vector3(point.x, 0, point.y));
+                var args = new object[] { screen, Vector2.zero };
+                Assert.IsTrue((bool)type.GetMethod("TryProjectBattleGround", flags).Invoke(controller, args));
+                Assert.That(Vector2.Distance(point, (Vector2)args[1]), Is.LessThan(.01f));
+
+                var wall = System.Array.Find(GameObject.Find("ScavengeTrial").GetComponentsInChildren<Renderer>(),
+                    renderer => renderer.name == "矮墙" && Mathf.Abs(renderer.bounds.center.z + 4.95f) < .05f);
+                Assert.NotNull(wall);
+                // 角色离墙较远，维修间仍在交互距离内，镜头应切开挡住搜点的墙。
+                playerProperty.SetValue(run, new Vector2(8.62f, -2.75f));
+                sync.Invoke(controller, new object[] { true });
+                Assert.AreEqual(ScavengeLayout.RepairRoom, run.NearbyCache);
+                Assert.IsTrue(wall.forceRenderingOff);
+                Assert.IsFalse(ScavengeLayout.ClearLine(new Vector2(8.62f, -5.8f), new Vector2(8.62f, -3.7f)));
+
+                playerProperty.SetValue(run, ScavengeLayout.Start);
+                sync.Invoke(controller, new object[] { true });
+                Assert.IsFalse(wall.forceRenderingOff);
+
+                var site = new Vector2(-3f, -6.25f);
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Shelter)).SetValue(run, site);
+                playerProperty.SetValue(run, site);
+                sync.Invoke(controller, new object[] { true });
+                Assert.IsTrue(GameObject.Find("篷顶").GetComponent<Renderer>().forceRenderingOff);
+
+                type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
+                Assert.That(camera.fieldOfView, Is.EqualTo(originalFov).Within(.01f));
+                Assert.AreEqual(originalColor, camera.backgroundColor);
+                Assert.That(Quaternion.Angle(originalRotation, camera.transform.rotation), Is.LessThan(.1f));
+            }
+            finally { InputSystem.RemoveDevice(keyboard); }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeSpaceResetsAfterExtractionAndDeath()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

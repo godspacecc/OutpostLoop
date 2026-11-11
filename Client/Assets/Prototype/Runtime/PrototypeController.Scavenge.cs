@@ -24,6 +24,7 @@ namespace OutpostLoop
         private Transform defenseModel, defenseWorksite;
         private LineRenderer defenseRadius, defenseShot;
         private Color previousCameraColor;
+        private float previousCameraFieldOfView;
         private static readonly ScavengeItem[] ScavengeItems =
         {
             ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal, ScavengeItem.Materials,
@@ -36,8 +37,10 @@ namespace OutpostLoop
             if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return;
             CreateScavengeMap();
             previousCameraColor = gameCamera.backgroundColor;
+            previousCameraFieldOfView = gameCamera.fieldOfView;
             gameCamera.backgroundColor = new Color(.095f, .122f, .128f);
-            gameCamera.orthographic = true;
+            gameCamera.orthographic = false;
+            gameCamera.fieldOfView = ScavengeCameraFieldOfView;
             gameCamera.farClipPlane = 100;
             worldRoot.gameObject.SetActive(false);
             modal?.Hide();
@@ -55,7 +58,7 @@ namespace OutpostLoop
             placingShelter = false;
             placingDefense = false;
             scavengeRoot.gameObject.SetActive(true);
-            SyncScavenge();
+            SyncScavenge(snapCamera: true);
         }
 
         private void LeaveScavenge()
@@ -64,8 +67,10 @@ namespace OutpostLoop
             scavengeRoot.gameObject.SetActive(false);
             scavengeRoot = null;
             scavengeRun = null;
+            scavengeOccluders.Clear();
             ReleaseScavengeMaterials();
             gameCamera.orthographic = false;
+            gameCamera.fieldOfView = previousCameraFieldOfView;
             gameCamera.backgroundColor = previousCameraColor;
             worldRoot.gameObject.SetActive(true);
             UpdateBattleCamera();
@@ -91,7 +96,7 @@ namespace OutpostLoop
             var movement = keyboard == null ? Vector2.zero : new Vector2(
                 (keyboard.dKey.isPressed ? 1 : 0) - (keyboard.aKey.isPressed ? 1 : 0),
                 (keyboard.wKey.isPressed ? 1 : 0) - (keyboard.sKey.isPressed ? 1 : 0));
-            scavengeRun.Tick(Mathf.Min(Time.unscaledDeltaTime, .05f), movement);
+            scavengeRun.Tick(Mathf.Min(Time.unscaledDeltaTime, .05f), ScavengeWorldMovement(movement));
             if (!scavengeRun.CanUseStorage) storageOpen = false;
             if (!placingShelter && (Input.GetKeyDown(KeyCode.B) || keyboard?.bKey.wasPressedThisFrame == true))
                 ToggleScavengeStorage();
@@ -162,7 +167,7 @@ namespace OutpostLoop
         }
 
         /// <summary>画面只读取角色、敌情、探索物和撤离状态。</summary>
-        private void SyncScavenge()
+        private void SyncScavenge(bool snapCamera = false)
         {
             scavengePlayer.position = At(scavengeRun.Player, .76f);
             for (int i = 0; i < scavengeEnemies.Length; i++)
@@ -186,10 +191,7 @@ namespace OutpostLoop
                 shelterModel.position = At(shelter, 0);
             }
             SyncDefenseModels();
-            var focus = new Vector2(scavengeRun.Player.x * .55f, scavengeRun.Player.y * .72f + 3.8f);
-            gameCamera.orthographicSize = Mathf.Max(10.5f, 15f / gameCamera.aspect);
-            var rotation = Quaternion.Euler(62, 0, 0);
-            gameCamera.transform.SetPositionAndRotation(At(focus, 0) - rotation * Vector3.forward * 27f, rotation);
+            UpdateScavengeCamera(snapCamera);
         }
 
         /// <summary>用临时几何体表达开阔路、仓门、矮墙和侧门。</summary>
@@ -219,8 +221,10 @@ namespace OutpostLoop
             foreach (var wall in ScavengeLayout.Walls)
             {
                 if (wall == ScavengeLayout.PharmacyFacade || wall == ScavengeLayout.CarBody) continue;
-                ScavengeBox("矮墙", At(wall.center, .67f), new Vector3(wall.width, 1.34f, wall.height), concrete);
-                ScavengeBox("压顶", At(wall.center, 1.36f), new Vector3(wall.width + .08f, .1f, wall.height + .08f), steel);
+                var body = ScavengeBox("矮墙", At(wall.center, .67f), new Vector3(wall.width, 1.34f, wall.height), concrete);
+                var cap = ScavengeBox("压顶", At(wall.center, 1.36f), new Vector3(wall.width + .08f, .1f, wall.height + .08f), steel);
+                ScavengeBox("墙脚", At(wall.center, .035f), new Vector3(wall.width, .07f, wall.height), concrete);
+                RegisterScavengeOccluder(body.GetComponent<Renderer>(), cap.GetComponent<Renderer>());
             }
             CreateScavengeStreetLandmarks(concrete, steel, rust, canvas);
             ScavengeBox("仓门", new Vector3(.84f, .06f, -3.1f), new Vector3(.85f, .07f, 2.65f), gold);
@@ -247,11 +251,14 @@ namespace OutpostLoop
         private void CreateScavengeStreetLandmarks(Material concrete, Material steel, Material rust, Material sign)
         {
             var pharmacy = ScavengeLayout.PharmacyFacade;
-            ScavengeBox("药房外墙", At(pharmacy.center, 1.03f), new Vector3(pharmacy.width, 2.06f, pharmacy.height), concrete);
-            ScavengeBox("药房雨棚", At(pharmacy.center + new Vector2(.4f, 0), 1.64f), new Vector3(1.3f, .12f, 2.6f), steel);
+            var wall = ScavengeBox("药房外墙", At(pharmacy.center, 1.03f), new Vector3(pharmacy.width, 2.06f, pharmacy.height), concrete);
+            var canopy = ScavengeBox("药房雨棚", At(pharmacy.center + new Vector2(.4f, 0), 1.64f), new Vector3(1.3f, .12f, 2.6f), steel);
             var cross = At(pharmacy.center + new Vector2(.68f, 0), 1.71f);
-            ScavengeBox("药房标志横", cross, new Vector3(.18f, .025f, .54f), sign);
-            ScavengeBox("药房标志竖", cross, new Vector3(.5f, .026f, .17f), sign);
+            var crossHorizontal = ScavengeBox("药房标志横", cross, new Vector3(.18f, .025f, .54f), sign);
+            var crossVertical = ScavengeBox("药房标志竖", cross, new Vector3(.5f, .026f, .17f), sign);
+            RegisterScavengeOccluder(wall.GetComponent<Renderer>());
+            RegisterScavengeOccluder(canopy.GetComponent<Renderer>(), crossHorizontal.GetComponent<Renderer>(),
+                crossVertical.GetComponent<Renderer>());
             var car = ScavengeLayout.CarBody;
             ScavengeBox("废车底盘", At(car.center, .27f), new Vector3(car.width, .28f, car.height), steel);
             ScavengeBox("废车车身", At(car.center, .49f), new Vector3(car.width, .27f, car.height - .04f), rust);
@@ -329,8 +336,9 @@ namespace OutpostLoop
             shelterModel.SetParent(scavengeRoot, false);
             Shape("防潮地垫", shelterModel, PrimitiveType.Cube, new Vector3(0, .036f, 0),
                 new Vector3(width, .07f, width), steel);
-            Shape("篷顶", shelterModel, PrimitiveType.Cube, new Vector3(0, 1.34f, .16f),
+            var roof = Shape("篷顶", shelterModel, PrimitiveType.Cube, new Vector3(0, 1.34f, .16f),
                 new Vector3(width, .14f, 1.1f), canvas);
+            RegisterScavengeOccluder(roof.GetComponent<Renderer>());
             for (int x = -1; x <= 1; x += 2)
                 for (int z = -1; z <= 1; z += 2)
                     Shape("支架", shelterModel, PrimitiveType.Cube, new Vector3(x * .72f, .68f, z * .44f + .16f),
