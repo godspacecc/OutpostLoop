@@ -548,6 +548,9 @@ namespace OutpostLoop
             StartText(font, "Sector", "SECTOR 01", 850, 198, 140, 47, 19, mint, FontStyle.Bold);
             Fill("ArtworkCaptionPlate", 798, 883, 1024, 73, new Color32(17, 30, 25, 218));
             StartText(font, "ArtworkCaption", Loc.T("PreviewText11"), 833, 891, 420, 50, 22, ink);
+            var harbor = Button(startStage, font, "StartOldHarbor", "旧港河堤 · 守城试玩", new Vector2(326, 52),
+                new Vector2(1623, -918), new Vector2(0, 1), controller.StartOldHarbor);
+            harbor.fontSize = 24;
 
             Fill("FooterRule", 96, 992, 1728, 2, line);
             StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);

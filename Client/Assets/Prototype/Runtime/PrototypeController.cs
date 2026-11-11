@@ -213,6 +213,8 @@ namespace OutpostLoop
             if(worldRoot!=null){worldRoot.gameObject.SetActive(false);Release(worldRoot.gameObject);}
             foreach(var material in materials)Release(material);
             materials.Clear();resources.Clear();enemies.Clear();boundaries.Clear();
+            foreach (var texture in harborTextures) Release(texture);
+            harborTextures.Clear();
             ReleaseFog();
             expansionModels.Clear();
             CloseConstruction();
@@ -224,21 +226,33 @@ namespace OutpostLoop
             ResetBattleCamera();
             UpdateBattleCamera();
             worldRoot=new GameObject("TemporaryPreviewWorld").transform;worldRoot.SetParent(transform);
-            var ground=Mat(World.Expedition?.Map == ExpeditionMap.Industrial ? new Color(.29f, .28f, .24f)
+            var ground=Mat(World.IsOldHarbor ? new Color(.37f, .39f, .37f)
+                : World.Expedition?.Map == ExpeditionMap.Industrial ? new Color(.29f, .28f, .24f)
                 : World.Expedition?.Map == ExpeditionMap.Beacon ? new Color(.24f, .28f, .31f) : groundColor);
             var stone=Mat(new Color(0.37f,0.40f,0.40f));
             var dark=Mat(new Color(0.11f,0.16f,0.17f));var amber=Mat(new Color(1,0.61f,0.13f));
             var cyan=Mat(new Color(0.15f,0.88f,0.84f));var rust=Mat(new Color(0.52f,0.24f,0.17f));
             Shape("Ground",worldRoot,PrimitiveType.Cube,new Vector3(0,-0.3f,0),new Vector3(96,0.5f,96),ground);
+            if (World.IsOldHarbor)
+            {
+                AddHarborSurface(ground, 7, .14f);
+                var concrete = Mat(new Color(.50f, .49f, .45f));
+                AddHarborSurface(concrete, 2, .22f);
+                CreateOldHarborTerrain(concrete, dark, Mat(new Color(.76f, .62f, .33f)));
+            }
             fog = new BattleFogPreview(worldRoot, World.Vision);
             visibleOre = World.Expedition == null ? cyan : Mat(new Color(.46f, .62f, .30f));
             rememberedOre = Mat(new Color(.34f, .45f, .43f));
             headquarters = new GameObject("Headquarters").transform;
             headquarters.SetParent(worldRoot, false);
-            Shape("HomePad", headquarters, PrimitiveType.Cube, new Vector3(0, -.02f, 0), new Vector3(5.9f, .12f, 5.9f), dark);
-            Shape("Shelter", headquarters, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(3.6f, 2.3f, 3), stone);
-            Shape("Roof", headquarters, PrimitiveType.Cube, new Vector3(0, 2.5f, 0), new Vector3(4, .5f, 3.5f), dark);
-            Shape("Door", headquarters, PrimitiveType.Cube, new Vector3(0, .8f, -1.55f), new Vector3(.9f, 1.6f, .1f), amber);
+            if (World.IsOldHarbor) CreateOldHarborHeadquarters(stone, dark);
+            else
+            {
+                Shape("HomePad", headquarters, PrimitiveType.Cube, new Vector3(0, -.02f, 0), new Vector3(5.9f, .12f, 5.9f), dark);
+                Shape("Shelter", headquarters, PrimitiveType.Cube, new Vector3(0, 1.15f, 0), new Vector3(3.6f, 2.3f, 3), stone);
+                Shape("Roof", headquarters, PrimitiveType.Cube, new Vector3(0, 2.5f, 0), new Vector3(4, .5f, 3.5f), dark);
+                Shape("Door", headquarters, PrimitiveType.Cube, new Vector3(0, .8f, -1.55f), new Vector3(.9f, 1.6f, .1f), amber);
+            }
             commander = Shape("Commander", worldRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(1.1f, .9f, 1.1f), amber);
             var blue = Mat(new Color(.32f, .58f, 1));
             CreateExpeditionMarkers(blue, amber, stone, rust);
@@ -256,17 +270,18 @@ namespace OutpostLoop
             enemyMaterials = new[] { rust, amber, Mat(new Color(.62f, .17f, .31f)) };
             foreach(var node in World.Nodes)
             {
-                var item = Shape("Mineral", worldRoot, World.Expedition == null ? PrimitiveType.Cylinder : PrimitiveType.Cube,
+                var item = Shape("Mineral", worldRoot, World.Expedition == null && !World.IsOldHarbor ? PrimitiveType.Cylinder : PrimitiveType.Cube,
                     At(node.Position, .6f), new Vector3(1.6f, .6f, 1.6f), visibleOre);
                 resources.Add(item.GetComponent<Renderer>());
             }
             for(int i=0;i<(World.Expedition?.Rules.EnemyCap ?? World.Run.Config.MaxEnemies);i++)
             {
                 var enemy=Shape("PooledEnemy",worldRoot,PrimitiveType.Capsule,Vector3.zero,new Vector3(0.65f,0.8f,0.65f),rust);
+                if (World.IsOldHarbor) DressHarborEnemy(enemy, rust, dark);
                 enemy.gameObject.SetActive(false);enemies.Add(enemy);
             }
             // 树只作为边缘装饰，不制造看不见的阻挡。
-            for(int i=0;i<32;i++)
+            for(int i=0;i<32 && !World.IsOldHarbor;i++)
             {
                 float angle=i*Mathf.PI/16;var pos=new Vector3(Mathf.Cos(angle)*48,1.5f,Mathf.Sin(angle)*48);
                 boundaries.Add(Shape("Boundary",worldRoot,PrimitiveType.Cube,pos,new Vector3(2,3,2),stone));
@@ -1017,6 +1032,8 @@ namespace OutpostLoop
                 float attack = Mathf.Clamp01(1 - (World.Run.Elapsed - state.LastAttackTime) / .18f);
                 model.localScale = size + new Vector3(.16f, -.1f, .16f) * (attack * (state.Kind == EnemyKind.Siege ? 2 : 1));
                 model.GetComponent<Renderer>().sharedMaterial = enemyMaterials[(int)state.Kind];
+                if (World.IsOldHarbor && (World.BasePosition - state.Position).sqrMagnitude > .01f)
+                    model.rotation = Quaternion.LookRotation(At(World.BasePosition - state.Position, 0));
             }
         }
 
@@ -1222,6 +1239,7 @@ namespace OutpostLoop
 
         private void OnDestroy()
         {
+            foreach (var texture in harborTextures) Release(texture);
             ReleaseFog();
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
             modal?.Detach(this);

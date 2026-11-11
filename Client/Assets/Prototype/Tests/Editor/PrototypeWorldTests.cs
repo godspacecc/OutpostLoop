@@ -71,6 +71,31 @@ namespace OutpostLoop.Tests
         }
 
         [Test]
+        public void OldHarborBlocksConstructionAndRoutesCommanderAroundLevee()
+        {
+            var world = WorldState.CreateOldHarbor(732, 800);
+            Assert.AreEqual(36, world.Nodes.Count);
+            var basin = new RectInt(7, -7, 8, 14);
+            var levee = new RectInt(-8, 5, 13, 2);
+            Assert.IsTrue(world.Nodes.All(node => !basin.Contains(BattleGrid.Cell(node.Position)) &&
+                !levee.Contains(BattleGrid.Cell(node.Position))));
+            Assert.AreEqual(PlacementIssue.Occupied, world.Build(ExpansionKind.Headquarters, new Vector2Int(0, 5)));
+            var target = new Vector2(0, 16);
+            Assert.IsTrue(world.MoveCommander(target));
+            for (int frame = 0; frame < 160; frame++)
+            {
+                world.Step(.1f);
+                var cell = BattleGrid.Cell(world.CommanderPosition);
+                Assert.IsFalse(levee.Contains(cell), "指挥员不应穿过堤身");
+            }
+            Assert.AreEqual(target, world.CommanderPosition);
+            var other = WorldState.CreateOldHarbor(733, 800);
+            BuildBase(other, 4);
+            Assert.AreEqual(PlacementIssue.Occupied, other.Build(ExpansionKind.Turret, new Vector2Int(7, 0)));
+            Assert.AreEqual(800, other.Run.Funds);
+        }
+
+        [Test]
         public void EnemiesWaitForAvailableCapacity()
         {
             var world = WithBase(12);

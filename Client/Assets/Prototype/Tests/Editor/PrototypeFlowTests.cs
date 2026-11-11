@@ -12,12 +12,18 @@ namespace OutpostLoop.Tests
         [TearDown] public void Close() => Game.FoundationRuntime.Shutdown();
 
         [Test]
-        public void EconomyAndDefenseOpeningsCanWinOnTwoSeeds()
+        public void EconomyAndDefenseOpeningsCanWinOnTwoSeeds() => VerifyOpenings(false);
+
+        [Test]
+        public void OldHarborEconomyAndDefenseOpeningsCanWinOnTwoSeeds() => VerifyOpenings(true);
+
+        private static void VerifyOpenings(bool oldHarbor)
         {
             foreach (int seed in new[] { 732, 733 })
             foreach (bool economy in new[] { true, false })
             {
-                var world = WithBase(seed, economy ? -4 : 4);
+                var world = oldHarbor ? WorldState.CreateOldHarbor(seed, 800) : new WorldState(seed);
+                BuildBase(world, economy ? -4 : 4);
                 var run = world.Run;
                 var center = world.BasePosition;
                 string strategy = economy ? "economy" : "defense";
