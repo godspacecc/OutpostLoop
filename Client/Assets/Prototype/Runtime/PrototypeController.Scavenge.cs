@@ -467,27 +467,50 @@ namespace OutpostLoop
             GUI.color = previous;
         }
 
+        /// <summary>分别显示箱内和随身物品，让空箱和满包时的取舍清楚可见。</summary>
         private void DrawScavengeCache()
         {
             var run = scavengeRun;
-            GUI.Box(new Rect(20, 154, 338, 350), "");
-            GUI.Label(new Rect(35, 163, 315, 29), run.SearchRemaining > 0 ? "正在搜索…" : "箱子 · E 关闭");
-            if (run.SearchRemaining > 0) return;
-            float y = 199;
+            if (run.SearchRemaining > 0)
+            {
+                GUI.Box(new Rect(20, 154, 338, 54), "");
+                GUI.Label(new Rect(35, 163, 315, 29), $"正在搜索 · {run.SearchRemaining:0.0} 秒");
+                return;
+            }
+
+            var contents = run.VisibleContents(run.OpenCache);
+            int boxRows = 0;
+            foreach (var item in ScavengeItems)
+                if ((contents & item) != 0) boxRows++;
+            GUI.Box(new Rect(20, 154, 338, 85 + Mathf.Max(32, boxRows * 42) + Mathf.Max(32, run.Count * 42)), "");
+            GUI.Label(new Rect(35, 163, 315, 29), "箱内 · E 关闭");
+            float y = DrawScavengeCacheItems(contents, true, 199);
+            GUI.Label(new Rect(35, y, 315, 29), $"背包 {run.Count}/{ScavengeRun.Capacity}");
+            DrawScavengeCacheItems(run.Inventory, false, y + 30);
+        }
+
+        private float DrawScavengeCacheItems(ScavengeItem items, bool take, float y)
+        {
+            var run = scavengeRun;
+            var destination = take ? run.Inventory : run.VisibleContents(run.OpenCache);
+            if (items == ScavengeItem.None)
+            {
+                GUI.Label(new Rect(35, y, 290, 28), take ? "箱子空了" : "背包空了");
+                return y + 32;
+            }
             foreach (var item in ScavengeItems)
             {
-                bool inBox = (run.VisibleContents(run.OpenCache) & item) != 0;
-                bool carried = (run.Inventory & item) != 0;
-                if (!inBox && !carried) continue;
+                if ((items & item) == 0) continue;
+                bool duplicate = (destination & item) != 0;
                 bool enabled = GUI.enabled;
-                GUI.enabled = !inBox || (!carried && run.Count < ScavengeRun.Capacity);
-                string action = inBox ? carried ? "已携带" : GUI.enabled ? "拿取" : "背包已满" : "放回箱中";
+                GUI.enabled = !duplicate && (!take || run.Count < ScavengeRun.Capacity);
+                string action = duplicate ? "已有" : take ? GUI.enabled ? "拿取" : "背包已满" : "放回箱中";
                 if (GUI.Button(new Rect(35, y, 308, 36), action + " · " + ScavengeItemName(item)))
-                    run.Transfer(item, inBox);
+                    run.Transfer(item, take);
                 GUI.enabled = enabled;
                 y += 42;
             }
-            if (y == 199) GUI.Label(new Rect(35, y, 290, 28), "箱子空了");
+            return y;
         }
 
         /// <summary>左侧为随身背包，右侧为仓库，底部操作工作台与据点维修。</summary>
