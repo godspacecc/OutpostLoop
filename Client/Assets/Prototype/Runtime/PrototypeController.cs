@@ -421,6 +421,11 @@ namespace OutpostLoop
         private void PollInputAndPresent()
         {
             if(!initialized)return;
+            if (scavengeRoot != null && scavengeRoot.gameObject.activeSelf)
+            {
+                PollScavenge();
+                return;
+            }
             if (UtilityWindowOpen)
             {
                 if (!World.Run.Paused) World.HoldInteraction(false);
@@ -1044,6 +1049,11 @@ namespace OutpostLoop
         private void OnGUI()
         {
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
+            if (scavengeRoot != null && scavengeRoot.gameObject.activeSelf)
+            {
+                DrawScavenge();
+                return;
+            }
             if (!started) return;
             float scale=HudScale;
             GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
@@ -1239,6 +1249,7 @@ namespace OutpostLoop
 
         private void OnDestroy()
         {
+            ReleaseScavengeMaterials();
             foreach (var texture in harborTextures) Release(texture);
             ReleaseFog();
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);

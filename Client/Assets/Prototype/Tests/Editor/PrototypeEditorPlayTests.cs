@@ -33,6 +33,48 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeEntryMovesAnUnarmedCharacter()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            Click("StartScavenge");
+            yield return null;
+            var character = GameObject.Find("探索角色");
+            Assert.NotNull(character);
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var field = typeof(PrototypeController).GetField("scavengeRun",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var run = (ScavengeRun)field.GetValue(controller);
+            Assert.AreEqual(ScavengeItem.None, run.Inventory);
+            var start = character.transform.position;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.W));
+                for (int frame = 0; frame < 120 && character.transform.position.z < start.z + .25f; frame++)
+                    yield return null;
+                Assert.Greater(character.transform.position.z, start.z + .2f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return null;
+                var paused = character.transform.position;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.W));
+                for (int frame = 0; frame < 8; frame++) yield return null;
+                Assert.AreEqual(paused, character.transform.position);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return null;
+                var target = ScavengeLayout.Caches[0];
+                for (int step = 0; step < 60 && Vector2.Distance(run.Player, target) > .1f; step++)
+                    run.Tick(.02f, Vector2.ClampMagnitude((target - run.Player) * 10, 1));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.E));
+                for (int frame = 0; frame < 12 && run.OpenCache < 0; frame++) yield return null;
+                Assert.AreEqual(0, run.OpenCache);
+            }
+            finally { InputSystem.RemoveDevice(keyboard); }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootExpeditionButtonsConfirmReturnAndRefreshProfile()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

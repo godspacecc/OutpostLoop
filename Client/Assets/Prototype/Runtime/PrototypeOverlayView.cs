@@ -551,6 +551,9 @@ namespace OutpostLoop
             var harbor = Button(startStage, font, "StartOldHarbor", "旧港河堤 · 守城试玩", new Vector2(326, 52),
                 new Vector2(1623, -918), new Vector2(0, 1), controller.StartOldHarbor);
             harbor.fontSize = 24;
+            var scavenge = Button(startStage, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(326, 52),
+                new Vector2(1279, -918), new Vector2(0, 1), controller.StartScavenge);
+            scavenge.fontSize = 24;
 
             Fill("FooterRule", 96, 992, 1728, 2, line);
             StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);

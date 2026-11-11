@@ -1,0 +1,329 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace OutpostLoop
+{
+    public sealed partial class PrototypeController
+    {
+        // 临时探索入口拥有独立状态和表现根，退出后恢复原开始页。
+        private Transform scavengeRoot, scavengePlayer, scavengeEnemy, scavengeExit;
+        private readonly Transform[] scavengeCrates = new Transform[ScavengeLayout.Caches.Length];
+        private readonly List<Material> scavengeMaterials = new List<Material>();
+        private ScavengeRun scavengeRun;
+        private ScavengeCollection scavengeCollection;
+        private bool scavengePaused, scavengeSaved;
+        private Color previousCameraColor;
+        private static readonly ScavengeItem[] ScavengeItems =
+            { ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal };
+
+        /// <summary>从开始页进入独立的首趟探索。</summary>
+        internal void StartScavenge()
+        {
+            if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return;
+            scavengeCollection ??= new ScavengeCollection();
+            CreateScavengeMap();
+            previousCameraColor = gameCamera.backgroundColor;
+            gameCamera.backgroundColor = new Color(.095f, .122f, .128f);
+            gameCamera.orthographic = true;
+            gameCamera.farClipPlane = 100;
+            worldRoot.gameObject.SetActive(false);
+            modal?.Hide();
+            RestartScavenge();
+        }
+
+        /// <summary>保持已撤离的收藏，重新开始空手行动。</summary>
+        private void RestartScavenge()
+        {
+            scavengeRun = new ScavengeRun();
+            scavengePaused = false;
+            scavengeSaved = false;
+            scavengeRoot.gameObject.SetActive(true);
+            SyncScavenge();
+        }
+
+        private void LeaveScavenge()
+        {
+            Release(scavengeRoot.gameObject);
+            scavengeRoot.gameObject.SetActive(false);
+            scavengeRoot = null;
+            ReleaseScavengeMaterials();
+            gameCamera.orthographic = false;
+            gameCamera.backgroundColor = previousCameraColor;
+            worldRoot.gameObject.SetActive(true);
+            UpdateBattleCamera();
+            RefreshOverlay();
+        }
+
+        /// <summary>把键鼠输入交给领域状态，UI 区域点击优先处理拾取。</summary>
+        private void PollScavenge()
+        {
+            if (UtilityWindowOpen) return;
+            var keyboard = Keyboard.current;
+            var mouse = Mouse.current;
+            if (scavengeRun.Outcome != ScavengeOutcome.Exploring)
+            {
+                if (keyboard?.enterKey.wasPressedThisFrame == true && CanDepartScavenge) RestartScavenge();
+                return;
+            }
+            if (keyboard?.escapeKey.wasPressedThisFrame == true) scavengePaused = !scavengePaused;
+            if (scavengePaused) return;
+
+            var movement = keyboard == null ? Vector2.zero : new Vector2(
+                (keyboard.dKey.isPressed ? 1 : 0) - (keyboard.aKey.isPressed ? 1 : 0),
+                (keyboard.wKey.isPressed ? 1 : 0) - (keyboard.sKey.isPressed ? 1 : 0));
+            scavengeRun.Tick(Mathf.Min(Time.unscaledDeltaTime, .05f), movement);
+            if (Input.GetKeyDown(KeyCode.E) || keyboard?.eKey.wasPressedThisFrame == true) InteractScavenge();
+            if (mouse?.leftButton.wasPressedThisFrame == true &&
+                !ScavengeHudContains(mouse.position.ReadValue()) &&
+                TryProjectBattleGround(mouse.position.ReadValue(), out var aim))
+                scavengeRun.Attack(aim - scavengeRun.Player);
+            SyncScavenge();
+        }
+
+        /// <summary>键盘和画面按钮共用搜索及撤离入口。</summary>
+        private void InteractScavenge()
+        {
+            if (scavengeRun.Interact() && scavengeRun.Outcome == ScavengeOutcome.Extracted)
+                scavengeSaved = scavengeCollection.SaveReturn(scavengeRun);
+        }
+
+        /// <summary>画面只读取角色、敌情、探索物和撤离状态。</summary>
+        private void SyncScavenge()
+        {
+            scavengePlayer.position = At(scavengeRun.Player, .76f);
+            scavengeEnemy.gameObject.SetActive(scavengeRun.EnemyAlive);
+            scavengeEnemy.position = At(scavengeRun.Enemy, .7f);
+            if (scavengeRun.EnemyFacing != Vector2.zero)
+                scavengeEnemy.rotation = Quaternion.LookRotation(At(scavengeRun.EnemyFacing, 0));
+            for (int i = 0; i < scavengeCrates.Length; i++)
+                scavengeCrates[i].localScale = new Vector3(1.3f,
+                    scavengeRun.IsSearched(i) && scavengeRun.VisibleContents(i) == ScavengeItem.None ? .33f : .66f, .82f);
+            var focus = new Vector2(scavengeRun.Player.x * .55f, scavengeRun.Player.y * .72f + 3.8f);
+            gameCamera.orthographicSize = Mathf.Max(10.5f, 15f / gameCamera.aspect);
+            var rotation = Quaternion.Euler(62, 0, 0);
+            gameCamera.transform.SetPositionAndRotation(At(focus, 0) - rotation * Vector3.forward * 27f, rotation);
+        }
+
+        /// <summary>用临时几何体表达开阔路、仓门、矮墙和侧门。</summary>
+        private void CreateScavengeMap()
+        {
+            scavengeRoot = new GameObject("ScavengeTrial").transform;
+            scavengeRoot.SetParent(transform, false);
+            var soil = ScavengeMaterial(new Color(.22f, .27f, .27f));
+            var road = ScavengeMaterial(new Color(.31f, .37f, .37f));
+            var concrete = ScavengeMaterial(new Color(.50f, .53f, .49f));
+            var steel = ScavengeMaterial(new Color(.22f, .34f, .38f));
+            var gold = ScavengeMaterial(new Color(.86f, .60f, .27f));
+            var teal = ScavengeMaterial(new Color(.29f, .80f, .74f));
+            var rust = ScavengeMaterial(new Color(.66f, .27f, .21f));
+            var canvas = ScavengeMaterial(new Color(.91f, .87f, .67f));
+
+            var outskirts = ScavengeMaterial(new Color(.17f, .21f, .21f));
+            ScavengeBox("外围地面", new Vector3(0, -.26f, 0), new Vector3(80, .25f, 80), outskirts);
+            ScavengeBox("地面", new Vector3(0, -.12f, .5f), new Vector3(24, .22f, 21), soil);
+            ScavengeBox("开阔路", new Vector3(-6.9f, -.01f, .4f), new Vector3(4.6f, .045f, 18), road);
+            ScavengeBox("仓库地坪", new Vector3(5.4f, 0, 1), new Vector3(9.2f, .05f, 12), steel);
+            for (int i = 0; i < 9; i++)
+                ScavengeBox("道路标线", new Vector3(-7, .026f, i * 1.8f - 7), new Vector3(.13f, .026f, .8f), concrete);
+            foreach (var wall in ScavengeLayout.Walls)
+            {
+                ScavengeBox("矮墙", At(wall.center, .67f), new Vector3(wall.width, 1.34f, wall.height), concrete);
+                ScavengeBox("压顶", At(wall.center, 1.36f), new Vector3(wall.width + .08f, .1f, wall.height + .08f), steel);
+            }
+            ScavengeBox("仓门", new Vector3(.84f, .06f, -3.1f), new Vector3(.85f, .07f, 2.65f), gold);
+            ScavengeBox("侧门", new Vector3(5.35f, .06f, 7), new Vector3(2.45f, .07f, .8f), gold);
+            for (int i = 0; i < scavengeCrates.Length; i++)
+                scavengeCrates[i] = ScavengeBox("可搜箱 " + i, At(ScavengeLayout.Caches[i], .36f), Vector3.one, gold);
+
+            scavengeExit = ScavengeBox("路灯", At(ScavengeLayout.Exit, 1.15f), new Vector3(.16f, 2.3f, .16f), steel);
+            ScavengeBox("灯箱", At(ScavengeLayout.Exit, 2.33f), new Vector3(.8f, .25f, .56f), teal);
+            ScavengeBox("裂口底座", At(ScavengeLayout.Exit, .02f), new Vector3(2.4f, .04f, 2.4f), teal);
+            scavengePlayer = Shape("探索角色", scavengeRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(.65f, .78f, .65f), canvas);
+            scavengeEnemy = Shape("巡逻敌人", scavengeRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(.75f, .72f, .75f), rust);
+            Shape("敌人朝向", scavengeEnemy, PrimitiveType.Cube, new Vector3(0, .55f, .43f),
+                new Vector3(.65f, .15f, .45f), gold);
+        }
+
+        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material) =>
+            Shape(name, scavengeRoot, PrimitiveType.Cube, point, size, material);
+
+        private Material ScavengeMaterial(Color color)
+        {
+            var material = new Material(previewShader) { color = color };
+            scavengeMaterials.Add(material);
+            return material;
+        }
+
+        private void ReleaseScavengeMaterials()
+        {
+            foreach (var material in scavengeMaterials) Release(material);
+            scavengeMaterials.Clear();
+        }
+
+        private bool CanDepartScavenge => scavengeRun.Outcome == ScavengeOutcome.Died || scavengeSaved;
+        private static Rect ScavengeInfoRect => new Rect(20, 18, 338, 128);
+        private static Rect ScavengeMapRect(float width) => new Rect(width - 172, 18, 152, 136);
+        private static Rect ScavengeActionRect(float width, float height) => new Rect(width / 2 - 208, height - 65, 416, 38);
+
+        private static bool ScavengeHudContains(Vector2 mouse)
+        {
+            float scale = HudScale;
+            var point = new Vector2(mouse.x, Screen.height - mouse.y) / scale;
+            return ScavengeInfoRect.Contains(point) || ScavengeMapRect(Screen.width / scale).Contains(point) ||
+                ScavengeActionRect(Screen.width / scale, Screen.height / scale).Contains(point);
+        }
+
+        /// <summary>绘制临时探索界面，保留视野中心供玩家观察道路。</summary>
+        private void DrawScavenge()
+        {
+            float scale = HudScale;
+            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1));
+            GUI.skin.font = font;
+            GUI.skin.label.fontSize = 18;
+            GUI.skin.button.fontSize = 18;
+            var run = scavengeRun;
+            float width = Screen.width / scale;
+            float height = Screen.height / scale;
+            if (run.Outcome != ScavengeOutcome.Exploring || scavengePaused)
+            {
+                DrawScavengeSpace(width, height);
+                return;
+            }
+
+            GUI.Box(ScavengeInfoRect, "");
+            GUI.Label(new Rect(35, 30, 300, 28), $"生命 {run.Health}/3    背包 {run.Count}/{ScavengeRun.Capacity}");
+            GUI.Label(new Rect(35, 63, 310, 28), DescribeItems(run.Inventory));
+            GUI.Label(new Rect(35, 99, 315, 28), "WASD 移动    E 交互    Esc 暂停");
+            if (run.OpenCache >= 0) DrawScavengeCache();
+            else
+            {
+                var action = ScavengeActionRect(width, height);
+                if (run.AtExit || run.NearbyCache >= 0)
+                {
+                    if (GUI.Button(action, run.AtExit ? "撤离  E" : "搜索箱子  E")) InteractScavenge();
+                }
+                else
+                {
+                    GUI.Box(action, "");
+                    GUI.Label(new Rect(action.x + 15, action.y + 3, action.width - 30, 31),
+                        run.Alerted ? "被发现了 · 绕到遮挡后拉开距离" : "找点能带走的东西，或者去灯下看看");
+                }
+            }
+            if ((run.Inventory & ScavengeItem.Crowbar) != 0)
+                GUI.Label(new Rect(35, height - 51, 310, 29), "鼠标指向 · 左键挥动撬棍");
+            if (run.ExitKnown) DrawScavengeExitLabel();
+            DrawScavengeMap(width);
+        }
+
+        /// <summary>以地标和已发现出口提供方向，敌人的位置由玩家现场观察。</summary>
+        private void DrawScavengeMap(float width)
+        {
+            var panel = ScavengeMapRect(width);
+            GUI.Box(panel, "");
+            var map = new Rect(panel.x + 9, panel.y + 8, 134, 118);
+            foreach (var wall in ScavengeLayout.Walls)
+            {
+                var topLeft = ScavengeMapPoint(map, new Vector2(wall.xMin, wall.yMax));
+                ScavengeFill(new Rect(topLeft, new Vector2(wall.width * map.width / 24,
+                    wall.height * map.height / 21)), new Color(.48f, .55f, .54f));
+            }
+            if (scavengeRun.ExitKnown)
+                ScavengeFill(new Rect(ScavengeMapPoint(map, ScavengeLayout.Exit) - Vector2.one * 4, Vector2.one * 8),
+                    new Color(.29f, .80f, .74f));
+            ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.Player) - Vector2.one * 3, Vector2.one * 6),
+                new Color(1, .94f, .7f));
+        }
+
+        private static Vector2 ScavengeMapPoint(Rect map, Vector2 position) =>
+            new Vector2(map.x + (position.x + 12) * map.width / 24, map.y + (11 - position.y) * map.height / 21);
+
+        private static void ScavengeFill(Rect rect, Color color)
+        {
+            var previous = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(rect, Texture2D.whiteTexture);
+            GUI.color = previous;
+        }
+
+        private void DrawScavengeCache()
+        {
+            var run = scavengeRun;
+            GUI.Box(new Rect(20, 154, 338, 190), "");
+            GUI.Label(new Rect(35, 163, 315, 29), run.SearchRemaining > 0 ? "正在搜索…" : "箱子 · E 关闭");
+            if (run.SearchRemaining > 0) return;
+            float y = 199;
+            foreach (var item in ScavengeItems)
+            {
+                bool inBox = (run.VisibleContents(run.OpenCache) & item) != 0;
+                bool carried = (run.Inventory & item) != 0;
+                if (!inBox && !carried) continue;
+                bool enabled = GUI.enabled;
+                GUI.enabled = !inBox || run.Count < ScavengeRun.Capacity;
+                string action = inBox ? GUI.enabled ? "拿取" : "背包已满" : "放回箱中";
+                if (GUI.Button(new Rect(35, y, 308, 36), action + " · " + ScavengeItemName(item)))
+                    run.Transfer(item, inBox);
+                GUI.enabled = enabled;
+                y += 42;
+            }
+            if (y == 199) GUI.Label(new Rect(35, y, 290, 28), "箱子空了");
+        }
+
+        private void DrawScavengeExitLabel()
+        {
+            var point = gameCamera.WorldToScreenPoint(scavengeExit.position + Vector3.up * 1.8f);
+            float scale = HudScale;
+            float x = Mathf.Clamp(point.x / scale - 34, 366, Screen.width / scale - 80);
+            float y = Mathf.Clamp((Screen.height - point.y) / scale - 16, 14, Screen.height / scale - 104);
+            GUI.Box(new Rect(x, y, 72, 27), "撤离点");
+        }
+
+        private void DrawScavengeSpace(float width, float height)
+        {
+            ScavengeFill(new Rect(0, 0, width, height), scavengePaused ?
+                new Color(.04f, .06f, .07f, .62f) : new Color(.065f, .095f, .105f));
+            float x = (width - 472) / 2, y = (height - 310) / 2;
+            GUI.Box(new Rect(x, y, 472, 310), "");
+            if (scavengePaused)
+            {
+                GUI.Label(new Rect(x + 26, y + 25, 419, 36), "探索已暂停");
+                if (GUI.Button(new Rect(x + 26, y + 72, 420, 42), "继续探索")) scavengePaused = false;
+                if (GUI.Button(new Rect(x + 26, y + 131, 420, 42), "结束本趟并返回开始页")) LeaveScavenge();
+                return;
+            }
+
+            bool died = scavengeRun.Outcome == ScavengeOutcome.Died;
+            GUI.Label(new Rect(x + 26, y + 23, 420, 34), died ? "你在陌生的空间醒来" : "已撤离 · 空间");
+            GUI.Label(new Rect(x + 26, y + 67, 420, 29), died ? "阵亡 · 本趟物品全部失去" :
+                "带回 · " + DescribeItems(scavengeRun.CarriedOut));
+            GUI.Label(new Rect(x + 26, y + 106, 420, 29), "已登记 · " + DescribeItems(scavengeCollection.Items));
+            if ((scavengeCollection.Items & ScavengeItem.Signal) != 0)
+                GUI.Label(new Rect(x + 26, y + 142, 420, 29), "线索 · 物件上的刻痕与裂口边缘一致");
+            if (!CanDepartScavenge)
+            {
+                if (GUI.Button(new Rect(x + 26, y + 189, 420, 42), "登记失败 · 重试保存"))
+                    scavengeSaved = scavengeCollection.SaveReturn(scavengeRun);
+                return;
+            }
+            if (GUI.Button(new Rect(x + 26, y + 189, 420, 42), "再次出发  Enter")) RestartScavenge();
+            if (GUI.Button(new Rect(x + 26, y + 248, 420, 38), "回到开始页")) LeaveScavenge();
+        }
+
+        private static string DescribeItems(ScavengeItem items)
+        {
+            string result = "";
+            foreach (var item in ScavengeItems)
+                if ((items & item) != 0)
+                    result += (result.Length == 0 ? "" : "、") + ScavengeItemName(item);
+            return result.Length == 0 ? "空" : result;
+        }
+
+        private static string ScavengeItemName(ScavengeItem item) => item switch
+        {
+            ScavengeItem.Supplies => "补给包",
+            ScavengeItem.Crowbar => "撬棍",
+            ScavengeItem.Signal => "异常物件",
+            _ => ""
+        };
+    }
+}
