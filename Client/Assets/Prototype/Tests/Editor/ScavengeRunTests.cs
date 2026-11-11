@@ -68,6 +68,57 @@ namespace OutpostLoop.Tests
         }
 
         [Test]
+        public void ShelterPlacementRejectsBlockedGroundAndConsumesOnlyOnSuccess()
+        {
+            var run = new ScavengeRun();
+            var roadSite = new Vector2(-3, -6.25f);
+            Assert.AreEqual(ShelterPlacement.MissingMaterials, run.CheckShelter(roadSite));
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            SearchAndTake(run, ScavengeItem.Materials);
+            Assert.AreEqual(ShelterPlacement.Obstructed, run.CheckShelter(new Vector2(-6.5f, -6)));
+            Assert.AreEqual(ShelterPlacement.TooFar, run.CheckShelter(new Vector2(8.5f, 8.9f)));
+            MoveTo(run, new Vector2(-5.4f, -6));
+            Assert.AreEqual(ShelterPlacement.Available, run.CheckShelter(roadSite));
+            Assert.AreEqual(ShelterPlacement.Available, run.CheckShelter(roadSite + Vector2.right * .5f));
+            Assert.IsTrue(run.BuildShelter(roadSite));
+            Assert.IsFalse(run.BuildShelter(roadSite + Vector2.right * .5f));
+            Assert.AreEqual(ScavengeItem.None, run.Inventory);
+            Assert.AreEqual(ScavengeRun.ShelterBuildSeconds, run.ShelterRemaining);
+            Assert.IsNull(new ScavengeRun().Shelter);
+        }
+
+        [Test]
+        public void SideDoorShelterCanRestoreOneHealthThenClearsOnExtraction()
+        {
+            var run = new ScavengeRun();
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            SearchAndTake(run, ScavengeItem.Materials);
+            MoveTo(run, ScavengeLayout.Caches[1]);
+            SearchAndTake(run, ScavengeItem.Crowbar);
+            MoveTo(run, new Vector2(7.8f, -3));
+            for (int step = 0; step < 400 && run.Health == 3; step++) run.Tick(.02f, Vector2.zero);
+            Assert.AreEqual(2, run.Health);
+            Assert.IsTrue(run.Attack(run.Enemy - run.Player));
+            Advance(run, .56f);
+            Assert.IsTrue(run.Attack(run.Enemy - run.Player));
+            Assert.IsFalse(run.EnemyAlive);
+            MoveTo(run, new Vector2(5.4f, -3));
+            MoveTo(run, new Vector2(5.4f, 8.65f));
+            var sideSite = new Vector2(8.5f, 8.9f);
+            Assert.IsTrue(run.BuildShelter(sideSite));
+            MoveTo(run, sideSite);
+            Assert.IsFalse(run.Interact(), "施工期间不可休整");
+            int wounded = run.Health;
+            Advance(run, ScavengeRun.ShelterBuildSeconds);
+            Assert.IsTrue(run.Interact(), $"剩余工期 {run.ShelterRemaining}，生命 {run.Health}，终局 {run.Outcome}");
+            Assert.AreEqual(wounded + 1, run.Health);
+            Assert.IsFalse(run.Interact());
+            MoveTo(run, ScavengeLayout.Exit);
+            Assert.IsTrue(run.Interact());
+            Assert.IsNull(run.Shelter);
+        }
+
+        [Test]
         public void DeathClearsOnlyTheCurrentTrip()
         {
             var run = new ScavengeRun();

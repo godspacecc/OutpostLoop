@@ -33,6 +33,60 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeSelectsShelterGroundAndPausesWork()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            Click("StartScavenge");
+            yield return null;
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var field = typeof(PrototypeController).GetField("scavengeRun",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var run = (ScavengeRun)field.GetValue(controller);
+            var target = ScavengeLayout.Caches[0];
+            for (int step = 0; step < 60 && Vector2.Distance(run.Player, target) > .1f; step++)
+                run.Tick(.02f, Vector2.ClampMagnitude((target - run.Player) * 10, 1));
+            Assert.IsTrue(run.Interact());
+            run.Tick(.7f, Vector2.zero);
+            Assert.IsTrue(run.Transfer(ScavengeItem.Materials, true));
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var mouse = InputSystem.AddDevice<Mouse>();
+            try
+            {
+                var site = new Vector2(-3, -6.25f);
+                var camera = GameObject.Find("PreviewCamera").GetComponent<Camera>();
+                var screen = (Vector2)camera.WorldToScreenPoint(new Vector3(site.x, 0, site.y));
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = screen });
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.V));
+                yield return null;
+                Assert.NotNull(GameObject.Find("避难所落位预览"));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return null;
+                Assert.IsNull(GameObject.Find("避难所落位预览"));
+                Assert.AreEqual(ScavengeItem.Materials, run.Inventory);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.V));
+                yield return null;
+                screen = camera.WorldToScreenPoint(new Vector3(site.x, 0, site.y));
+                InputSystem.QueueStateEvent(mouse, new MouseState { position = screen }.WithButton(MouseButton.Left));
+                for (int frame = 0; frame < 12 && !run.Shelter.HasValue; frame++) yield return null;
+                Assert.That(Vector2.Distance(site, run.Shelter.Value), Is.LessThan(.1f));
+                Assert.NotNull(GameObject.Find("避难所工地"));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return null;
+                float remaining = run.ShelterRemaining;
+                for (int frame = 0; frame < 8; frame++) yield return null;
+                Assert.AreEqual(remaining, run.ShelterRemaining);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(mouse);
+                InputSystem.RemoveDevice(keyboard);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeEntryMovesAnUnarmedCharacter()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

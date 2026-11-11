@@ -6,8 +6,9 @@ using UnityEngine;
 namespace OutpostLoop
 {
     [Flags]
-    public enum ScavengeItem { None = 0, Supplies = 1, Crowbar = 2, Signal = 4 }
+    public enum ScavengeItem { None = 0, Supplies = 1, Crowbar = 2, Signal = 4, Materials = 8 }
     public enum ScavengeOutcome { Exploring, Extracted, Died }
+    public enum ShelterPlacement { Available, MissingMaterials, AlreadyPlaced, Obstructed, TooFar }
 
     /// <summary>首张临时探索图，障碍范围同时用于渲染与地面通行。</summary>
     public static class ScavengeLayout
@@ -17,6 +18,12 @@ namespace OutpostLoop
         public static readonly Vector2[] Caches =
         {
             new Vector2(-6, -4), new Vector2(-.8f, -3), new Vector2(6.3f, 2)
+        };
+        // 两块空地包含多个落位，避开两条主通路和侧门。
+        public static readonly Rect[] ShelterGrounds =
+        {
+            new Rect(-4.35f, -8, 3.3f, 3.25f),
+            new Rect(6.9f, 7.7f, 4.1f, 2.45f)
         };
         public static readonly Rect[] Walls =
         {
@@ -63,7 +70,10 @@ namespace OutpostLoop
     {
         public const int Capacity = 2;
         public const float SearchSeconds = .6f;
-        private readonly ScavengeItem[] contents = { ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal };
+        public const float ShelterWidth = 1.6f;
+        public const float ShelterBuildSeconds = 3f;
+        private readonly ScavengeItem[] contents =
+            { ScavengeItem.Supplies | ScavengeItem.Materials, ScavengeItem.Crowbar, ScavengeItem.Signal };
         // 每个容器只在首次成功搜索后显示内容。
         private readonly bool[] known = new bool[ScavengeLayout.Caches.Length];
         private static readonly Vector2 PatrolSouth = new Vector2(7.8f, -2.8f);
@@ -87,6 +97,11 @@ namespace OutpostLoop
         public bool ExitKnown { get; private set; }
         public bool AtExit => ExitKnown && Vector2.Distance(Player, ScavengeLayout.Exit) <= 1.65f;
         public ScavengeOutcome Outcome { get; private set; }
+        // 工地和休整机会仅属于当前行动。
+        public Vector2? Shelter { get; private set; }
+        public float ShelterRemaining { get; private set; }
+        public bool Rested { get; private set; }
+        public bool NearShelter => Shelter.HasValue && Vector2.Distance(Player, Shelter.Value) <= 1.45f;
 
         public int NearbyCache
         {
@@ -107,6 +122,7 @@ namespace OutpostLoop
         {
             if (Outcome != ScavengeOutcome.Exploring || dt <= 0) return;
             Player = ScavengeLayout.Move(Player, Vector2.ClampMagnitude(input, 1) * (5 * dt));
+            ShelterRemaining = Mathf.Max(0, ShelterRemaining - dt);
             if (Vector2.Distance(Player, ScavengeLayout.Exit) < 4 &&
                 ScavengeLayout.ClearLine(Player, ScavengeLayout.Exit)) ExitKnown = true;
 
@@ -140,7 +156,7 @@ namespace OutpostLoop
                 return true;
             }
             int cache = NearbyCache;
-            if (cache < 0) return false;
+            if (cache < 0) return NearShelter && Rest();
             OpenCache = cache;
             SearchRemaining = known[cache] ? 0 : SearchSeconds;
             return true;
@@ -151,7 +167,8 @@ namespace OutpostLoop
         {
             if (Outcome != ScavengeOutcome.Exploring || OpenCache < 0 ||
                 SearchRemaining > 0 ||
-                (item != ScavengeItem.Supplies && item != ScavengeItem.Crowbar && item != ScavengeItem.Signal)) return false;
+                (item != ScavengeItem.Supplies && item != ScavengeItem.Crowbar &&
+                    item != ScavengeItem.Signal && item != ScavengeItem.Materials)) return false;
             if (take)
             {
                 if ((contents[OpenCache] & item) == 0 || Count >= Capacity) return false;
@@ -164,6 +181,42 @@ namespace OutpostLoop
                 Inventory &= ~item;
                 contents[OpenCache] |= item;
             }
+            return true;
+        }
+
+        /// <summary>验证整块占地、施工距离和玩家当前位置，无效预览不会消耗材料。</summary>
+        public ShelterPlacement CheckShelter(Vector2 point)
+        {
+            if (Outcome != ScavengeOutcome.Exploring || Shelter.HasValue) return ShelterPlacement.AlreadyPlaced;
+            if ((Inventory & ScavengeItem.Materials) == 0) return ShelterPlacement.MissingMaterials;
+            if ((Player - point).sqrMagnitude > 4.2f * 4.2f) return ShelterPlacement.TooFar;
+            float half = ShelterWidth * .5f;
+            if (Mathf.Abs(Player.x - point.x) < half + .35f && Mathf.Abs(Player.y - point.y) < half + .35f)
+                return ShelterPlacement.Obstructed;
+            foreach (var ground in ScavengeLayout.ShelterGrounds)
+                if (point.x - half >= ground.xMin && point.x + half <= ground.xMax &&
+                    point.y - half >= ground.yMin && point.y + half <= ground.yMax &&
+                    ScavengeLayout.ClearLine(Player, point)) return ShelterPlacement.Available;
+            return ShelterPlacement.Obstructed;
+        }
+
+        /// <summary>落位时扣除一份建材，完成前无法休整。</summary>
+        public bool BuildShelter(Vector2 point)
+        {
+            if (CheckShelter(point) != ShelterPlacement.Available) return false;
+            Inventory &= ~ScavengeItem.Materials;
+            CloseSearch();
+            Shelter = point;
+            ShelterRemaining = ShelterBuildSeconds;
+            return true;
+        }
+
+        /// <summary>每趟只可恢复一格生命，满血时保留机会。</summary>
+        private bool Rest()
+        {
+            if (Rested || ShelterRemaining > 0 || Health >= 3) return false;
+            Health++;
+            Rested = true;
             return true;
         }
 
@@ -227,13 +280,16 @@ namespace OutpostLoop
         {
             Outcome = outcome;
             Inventory = ScavengeItem.None;
+            Shelter = null;
+            ShelterRemaining = 0;
             CloseSearch();
         }
 
         private static int CountItems(ScavengeItem items) =>
             ((items & ScavengeItem.Supplies) != 0 ? 1 : 0) +
             ((items & ScavengeItem.Crowbar) != 0 ? 1 : 0) +
-            ((items & ScavengeItem.Signal) != 0 ? 1 : 0);
+            ((items & ScavengeItem.Signal) != 0 ? 1 : 0) +
+            ((items & ScavengeItem.Materials) != 0 ? 1 : 0);
     }
 
     /// <summary>空间保留带回过的物品种类。同一种物品重复撤离只登记一次。</summary>
@@ -248,7 +304,7 @@ namespace OutpostLoop
         {
             store = new JsonFileStore<Data>(directory);
             var read = store.Read(FileName);
-            if (read.Status == SaveFileStatus.Valid) Items = (ScavengeItem)(read.Data.items & 7);
+            if (read.Status == SaveFileStatus.Valid) Items = (ScavengeItem)(read.Data.items & 15);
         }
 
         /// <summary>只提交成功撤离的结果，保存失败可以原地重试。</summary>

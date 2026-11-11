@@ -13,9 +13,14 @@ namespace OutpostLoop
         private ScavengeRun scavengeRun;
         private ScavengeCollection scavengeCollection;
         private bool scavengePaused, scavengeSaved;
+        // 放置输入只在探索中接管鼠标，预览与工地由同一份领域规则驱动。
+        private bool placingShelter;
+        private Transform shelterPreview, shelterWorksite, shelterModel;
+        private Material shelterPreviewMaterial;
+        private ShelterPlacement shelterPlacement;
         private Color previousCameraColor;
         private static readonly ScavengeItem[] ScavengeItems =
-            { ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal };
+            { ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal, ScavengeItem.Materials };
 
         /// <summary>从开始页进入独立的首趟探索。</summary>
         internal void StartScavenge()
@@ -38,6 +43,7 @@ namespace OutpostLoop
             scavengeRun = new ScavengeRun();
             scavengePaused = false;
             scavengeSaved = false;
+            placingShelter = false;
             scavengeRoot.gameObject.SetActive(true);
             SyncScavenge();
         }
@@ -66,19 +72,56 @@ namespace OutpostLoop
                 if (keyboard?.enterKey.wasPressedThisFrame == true && CanDepartScavenge) RestartScavenge();
                 return;
             }
-            if (keyboard?.escapeKey.wasPressedThisFrame == true) scavengePaused = !scavengePaused;
+            bool escape = Input.GetKeyDown(KeyCode.Escape) || keyboard?.escapeKey.wasPressedThisFrame == true;
+            if (escape && !placingShelter) scavengePaused = !scavengePaused;
             if (scavengePaused) return;
 
             var movement = keyboard == null ? Vector2.zero : new Vector2(
                 (keyboard.dKey.isPressed ? 1 : 0) - (keyboard.aKey.isPressed ? 1 : 0),
                 (keyboard.wKey.isPressed ? 1 : 0) - (keyboard.sKey.isPressed ? 1 : 0));
             scavengeRun.Tick(Mathf.Min(Time.unscaledDeltaTime, .05f), movement);
-            if (Input.GetKeyDown(KeyCode.E) || keyboard?.eKey.wasPressedThisFrame == true) InteractScavenge();
-            if (mouse?.leftButton.wasPressedThisFrame == true &&
+            if (scavengeRun.Outcome != ScavengeOutcome.Exploring) placingShelter = false;
+            else if (!PollShelterPlacement(keyboard, mouse, escape))
+            {
+                if (Input.GetKeyDown(KeyCode.E) || keyboard?.eKey.wasPressedThisFrame == true) InteractScavenge();
+                if (mouse?.leftButton.wasPressedThisFrame == true &&
                 !ScavengeHudContains(mouse.position.ReadValue()) &&
                 TryProjectBattleGround(mouse.position.ReadValue(), out var aim))
-                scavengeRun.Attack(aim - scavengeRun.Player);
+                    scavengeRun.Attack(aim - scavengeRun.Player);
+            }
             SyncScavenge();
+        }
+
+        /// <summary>进入、取消或确认建造时吞掉对应的战场输入。</summary>
+        private bool PollShelterPlacement(Keyboard keyboard, Mouse mouse, bool escape)
+        {
+            bool toggle = Input.GetKeyDown(KeyCode.V) || keyboard?.vKey.wasPressedThisFrame == true;
+            if (toggle)
+            {
+                placingShelter = !placingShelter;
+                if (placingShelter) scavengeRun.CloseSearch();
+            }
+            if (!placingShelter) return toggle;
+            if (escape || mouse?.rightButton.wasPressedThisFrame == true)
+            {
+                placingShelter = false;
+                return true;
+            }
+            var cursor = mouse?.position.ReadValue() ?? (Vector2)Input.mousePosition;
+            if (!gameCamera.pixelRect.Contains(cursor) || ScavengeHudContains(cursor) ||
+                !TryProjectBattleGround(cursor, out var point))
+            {
+                shelterPreview.SetPositionAndRotation(At(scavengeRun.Player, -.5f), Quaternion.identity);
+                shelterPlacement = ShelterPlacement.Obstructed;
+                return true;
+            }
+            shelterPlacement = scavengeRun.CheckShelter(point);
+            shelterPreview.position = At(point, .055f);
+            shelterPreviewMaterial.color = shelterPlacement == ShelterPlacement.Available ?
+                new Color(.29f, .82f, .57f) : new Color(.76f, .32f, .22f);
+            if (!toggle && mouse?.leftButton.wasPressedThisFrame == true && scavengeRun.BuildShelter(point))
+                placingShelter = false;
+            return true;
         }
 
         /// <summary>键盘和画面按钮共用搜索及撤离入口。</summary>
@@ -99,6 +142,15 @@ namespace OutpostLoop
             for (int i = 0; i < scavengeCrates.Length; i++)
                 scavengeCrates[i].localScale = new Vector3(1.3f,
                     scavengeRun.IsSearched(i) && scavengeRun.VisibleContents(i) == ScavengeItem.None ? .33f : .66f, .82f);
+            shelterPreview.gameObject.SetActive(placingShelter);
+            bool building = scavengeRun.ShelterRemaining > 0;
+            shelterWorksite.gameObject.SetActive(scavengeRun.Shelter.HasValue && building);
+            shelterModel.gameObject.SetActive(scavengeRun.Shelter.HasValue && !building);
+            if (scavengeRun.Shelter is Vector2 shelter)
+            {
+                shelterWorksite.position = At(shelter, .12f);
+                shelterModel.position = At(shelter, 0);
+            }
             var focus = new Vector2(scavengeRun.Player.x * .55f, scavengeRun.Player.y * .72f + 3.8f);
             gameCamera.orthographicSize = Mathf.Max(10.5f, 15f / gameCamera.aspect);
             var rotation = Quaternion.Euler(62, 0, 0);
@@ -118,12 +170,15 @@ namespace OutpostLoop
             var teal = ScavengeMaterial(new Color(.29f, .80f, .74f));
             var rust = ScavengeMaterial(new Color(.66f, .27f, .21f));
             var canvas = ScavengeMaterial(new Color(.91f, .87f, .67f));
+            var pad = ScavengeMaterial(new Color(.31f, .42f, .36f));
 
             var outskirts = ScavengeMaterial(new Color(.17f, .21f, .21f));
             ScavengeBox("外围地面", new Vector3(0, -.26f, 0), new Vector3(80, .25f, 80), outskirts);
             ScavengeBox("地面", new Vector3(0, -.12f, .5f), new Vector3(24, .22f, 21), soil);
             ScavengeBox("开阔路", new Vector3(-6.9f, -.01f, .4f), new Vector3(4.6f, .045f, 18), road);
             ScavengeBox("仓库地坪", new Vector3(5.4f, 0, 1), new Vector3(9.2f, .05f, 12), steel);
+            foreach (var ground in ScavengeLayout.ShelterGrounds)
+                ScavengeBox("可建空地", At(ground.center, .012f), new Vector3(ground.width, .025f, ground.height), pad);
             for (int i = 0; i < 9; i++)
                 ScavengeBox("道路标线", new Vector3(-7, .026f, i * 1.8f - 7), new Vector3(.13f, .026f, .8f), concrete);
             foreach (var wall in ScavengeLayout.Walls)
@@ -143,6 +198,26 @@ namespace OutpostLoop
             scavengeEnemy = Shape("巡逻敌人", scavengeRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(.75f, .72f, .75f), rust);
             Shape("敌人朝向", scavengeEnemy, PrimitiveType.Cube, new Vector3(0, .55f, .43f),
                 new Vector3(.65f, .15f, .45f), gold);
+            CreateShelterModels(steel, gold, canvas);
+        }
+
+        /// <summary>表现依次展示占地、工地和有两侧开放入口的休整棚。</summary>
+        private void CreateShelterModels(Material steel, Material gold, Material canvas)
+        {
+            float width = ScavengeRun.ShelterWidth;
+            shelterPreviewMaterial = ScavengeMaterial(Color.green);
+            shelterPreview = ScavengeBox("避难所落位预览", Vector3.zero, new Vector3(width, .06f, width), shelterPreviewMaterial);
+            shelterWorksite = ScavengeBox("避难所工地", Vector3.zero, new Vector3(width, .23f, width), gold);
+            shelterModel = new GameObject("避难所").transform;
+            shelterModel.SetParent(scavengeRoot, false);
+            Shape("防潮地垫", shelterModel, PrimitiveType.Cube, new Vector3(0, .036f, 0),
+                new Vector3(width, .07f, width), steel);
+            Shape("篷顶", shelterModel, PrimitiveType.Cube, new Vector3(0, 1.34f, .16f),
+                new Vector3(width, .14f, 1.1f), canvas);
+            for (int x = -1; x <= 1; x += 2)
+                for (int z = -1; z <= 1; z += 2)
+                    Shape("支架", shelterModel, PrimitiveType.Cube, new Vector3(x * .72f, .68f, z * .44f + .16f),
+                        new Vector3(.08f, 1.36f, .08f), steel);
         }
 
         private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material) =>
@@ -194,14 +269,38 @@ namespace OutpostLoop
             GUI.Box(ScavengeInfoRect, "");
             GUI.Label(new Rect(35, 30, 300, 28), $"生命 {run.Health}/3    背包 {run.Count}/{ScavengeRun.Capacity}");
             GUI.Label(new Rect(35, 63, 310, 28), DescribeItems(run.Inventory));
-            GUI.Label(new Rect(35, 99, 315, 28), "WASD 移动    E 交互    Esc 暂停");
-            if (run.OpenCache >= 0) DrawScavengeCache();
+            GUI.Label(new Rect(35, 99, 315, 28), "WASD 移动   E 交互   V 建造   Esc 暂停");
+            if (placingShelter)
+            {
+                var action = ScavengeActionRect(width, height);
+                GUI.Box(action, "");
+                GUI.Label(new Rect(action.x + 12, action.y + 3, action.width - 24, 31),
+                    shelterPlacement switch
+                    {
+                        ShelterPlacement.Available => "左键搭建避难所 · 右键或 Esc 取消",
+                        ShelterPlacement.MissingMaterials => "需要建材 · 可以在路边箱里找",
+                        ShelterPlacement.AlreadyPlaced => "这一趟已有一座避难所",
+                        ShelterPlacement.TooFar => "靠近空地再建造",
+                        _ => "把整块占地放在空地内 · 避开自己"
+                    });
+            }
+            else if (run.OpenCache >= 0) DrawScavengeCache();
             else
             {
                 var action = ScavengeActionRect(width, height);
                 if (run.AtExit || run.NearbyCache >= 0)
                 {
                     if (GUI.Button(action, run.AtExit ? "撤离  E" : "搜索箱子  E")) InteractScavenge();
+                }
+                else if (run.NearShelter)
+                {
+                    string rest = run.ShelterRemaining > 0 ? $"避难所施工中 · {run.ShelterRemaining:0.0} 秒" :
+                        run.Rested ? "这趟已经休整过" : run.Health >= 3 ? "生命已满 · 可留待受伤后休整" : "休整  E · 恢复一格生命";
+                    if (run.ShelterRemaining <= 0 && !run.Rested && run.Health < 3)
+                    {
+                        if (GUI.Button(action, rest)) InteractScavenge();
+                    }
+                    else GUI.Box(action, rest);
                 }
                 else
                 {
@@ -249,7 +348,7 @@ namespace OutpostLoop
         private void DrawScavengeCache()
         {
             var run = scavengeRun;
-            GUI.Box(new Rect(20, 154, 338, 190), "");
+            GUI.Box(new Rect(20, 154, 338, 225), "");
             GUI.Label(new Rect(35, 163, 315, 29), run.SearchRemaining > 0 ? "正在搜索…" : "箱子 · E 关闭");
             if (run.SearchRemaining > 0) return;
             float y = 199;
@@ -323,6 +422,7 @@ namespace OutpostLoop
             ScavengeItem.Supplies => "补给包",
             ScavengeItem.Crowbar => "撬棍",
             ScavengeItem.Signal => "异常物件",
+            ScavengeItem.Materials => "建材",
             _ => ""
         };
     }
