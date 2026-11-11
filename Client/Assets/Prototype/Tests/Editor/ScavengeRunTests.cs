@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -8,147 +6,29 @@ namespace OutpostLoop.Tests
     public sealed class ScavengeRunTests
     {
         [Test]
-        public void SafeRoadExtractsOnceAndPersistsCollection()
+        public void SafeRoadExtractionShowsOnlyCurrentTripAndResetsInventory()
         {
-            var directory = Path.Combine(Path.GetTempPath(), "outpostloop-scavenge-" + Guid.NewGuid());
-            try
-            {
-                var run = new ScavengeRun();
-                Assert.AreEqual(ScavengeItem.None, run.Inventory);
-                Assert.IsFalse(run.Attack(Vector2.right));
-                MoveTo(run, ScavengeLayout.Caches[0]);
-                Assert.AreEqual(ScavengeItem.None, run.VisibleContents(0));
-                Assert.IsTrue(run.Interact());
-                Assert.IsFalse(run.Transfer(ScavengeItem.Supplies, true));
-                Advance(run, .7f);
-                Assert.IsTrue(run.Transfer(ScavengeItem.Supplies, true));
-                Assert.IsFalse(run.Transfer(ScavengeItem.Supplies, true));
-                MoveTo(run, ScavengeLayout.Exit);
-                Assert.IsTrue(run.Interact());
-                Assert.IsFalse(run.Interact());
-                Assert.AreEqual(ScavengeItem.Supplies, run.CarriedOut);
-                var collection = new ScavengeCollection(directory);
-                Assert.IsTrue(collection.SaveReturn(run));
-                Assert.IsTrue(collection.SaveReturn(run));
-                Assert.AreEqual(ScavengeItem.Supplies, new ScavengeCollection(directory).Items);
-                Assert.AreEqual(ScavengeItem.None, new ScavengeRun().Inventory);
-            }
-            finally
-            {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
-            }
-        }
+            var run = new ScavengeRun();
+            Assert.AreEqual(ScavengeItem.None, run.Inventory);
+            Assert.IsFalse(run.Attack(Vector2.right));
+            MoveTo(run, ScavengeLayout.Caches[0]);
+            Assert.AreEqual(ScavengeItem.None, run.VisibleContents(0));
+            Assert.IsTrue(run.Interact());
+            Assert.IsFalse(run.Transfer(ScavengeItem.Supplies, true));
+            Advance(run, .7f);
+            Assert.IsTrue(run.Transfer(ScavengeItem.Supplies, true));
+            Assert.IsFalse(run.Transfer(ScavengeItem.Supplies, true));
+            MoveTo(run, ScavengeLayout.Exit);
+            Assert.IsTrue(run.Interact());
+            Assert.IsFalse(run.Interact());
+            Assert.AreEqual(ScavengeItem.Supplies, run.CarriedOut);
+            Assert.AreEqual(ScavengeItem.None, run.Inventory);
 
-        [Test]
-        public void CrowbarReturnFundsOneDepartureAndCannotBeReplayed()
-        {
-            var directory = Path.Combine(Path.GetTempPath(), "outpostloop-scavenge-" + Guid.NewGuid());
-            try
-            {
-                var collection = new ScavengeCollection(directory);
-                var first = new ScavengeRun();
-                MoveTo(first, ScavengeLayout.Caches[1]);
-                SearchAndTake(first, ScavengeItem.Crowbar);
-                WalkToRoadExit(first);
-                Assert.IsTrue(first.Interact());
-                Assert.IsTrue(collection.SaveReturn(first));
-                Assert.IsTrue(new ScavengeCollection(directory).CrowbarAvailable);
-
-                Assert.IsTrue(collection.TryStartArmedRun(out var armed));
-                Assert.AreEqual(1, armed.Count);
-                Assert.IsTrue(armed.Attack(Vector2.right));
-                Assert.IsTrue(collection.SaveReturn(first));
-                Assert.IsFalse(collection.TryStartArmedRun(out _));
-                Assert.IsFalse(new ScavengeCollection(directory).CrowbarAvailable);
-
-                MoveTo(armed, ScavengeLayout.Caches[0]);
-                SearchAndTake(armed, ScavengeItem.Supplies);
-                Assert.AreEqual(2, armed.Count);
-                MoveTo(armed, ScavengeLayout.Caches[1]);
-                Assert.IsTrue(armed.Interact());
-                Advance(armed, .7f);
-                Assert.IsFalse(armed.Transfer(ScavengeItem.Crowbar, true));
-                Assert.IsFalse(armed.Transfer(ScavengeItem.Crowbar, false));
-                Assert.IsFalse(armed.Transfer(ScavengeItem.DefenseParts, true));
-                Assert.IsTrue(armed.Transfer(ScavengeItem.Supplies, false));
-                Assert.IsTrue(armed.Transfer(ScavengeItem.DefenseParts, true));
-                WalkToRoadExit(armed);
-                Assert.IsTrue(armed.Interact());
-                Assert.IsTrue(collection.SaveReturn(armed));
-                Assert.IsTrue(new ScavengeCollection(directory).CrowbarAvailable);
-
-                Assert.IsTrue(collection.TryStartArmedRun(out var leftBehind));
-                MoveTo(leftBehind, ScavengeLayout.Caches[0]);
-                Assert.IsTrue(leftBehind.Interact());
-                Advance(leftBehind, .7f);
-                Assert.IsTrue(leftBehind.Transfer(ScavengeItem.Crowbar, false));
-                WalkToRoadExit(leftBehind);
-                Assert.IsTrue(leftBehind.Interact());
-                Assert.IsTrue(collection.SaveReturn(leftBehind));
-                Assert.IsFalse(new ScavengeCollection(directory).CrowbarAvailable);
-            }
-            finally
-            {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
-            }
-        }
-
-        [Test]
-        public void LegacyCrowbarStaysHomeOnEmptyDepartureAndIsLostWhenCarriedIntoDeath()
-        {
-            var directory = Path.Combine(Path.GetTempPath(), "outpostloop-scavenge-" + Guid.NewGuid());
-            try
-            {
-                Directory.CreateDirectory(directory);
-                File.WriteAllText(Path.Combine(directory, "scavenge-collection.json"), "{\"format\":1,\"data\":{\"items\":2}}");
-                var collection = new ScavengeCollection(directory);
-                var empty = new ScavengeRun();
-                Assert.AreEqual(0, empty.Count);
-                MoveTo(empty, ScavengeLayout.Exit);
-                Assert.IsTrue(empty.Interact());
-                Assert.IsTrue(collection.SaveReturn(empty));
-                Assert.IsTrue(collection.CrowbarAvailable);
-
-                Assert.IsTrue(collection.TryStartArmedRun(out var armed));
-                MoveTo(armed, ScavengeLayout.Caches[1]);
-                MoveTo(armed, new Vector2(7.8f, -3));
-                for (int step = 0; step < 1200 && armed.Outcome == ScavengeOutcome.Exploring; step++)
-                    armed.Tick(.02f, Vector2.zero);
-                Assert.AreEqual(ScavengeOutcome.Died, armed.Outcome);
-                Assert.IsFalse(collection.SaveReturn(armed));
-                var reloaded = new ScavengeCollection(directory);
-                Assert.IsFalse(reloaded.CrowbarAvailable);
-                Assert.AreEqual(ScavengeItem.Crowbar, reloaded.Items);
-            }
-            finally
-            {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
-            }
-        }
-
-        [Test]
-        public void CrowbarSaveFailureKeepsEquipmentAvailableAndAllowsRetry()
-        {
-            var directory = Path.Combine(Path.GetTempPath(), "outpostloop-scavenge-" + Guid.NewGuid());
-            var path = Path.Combine(directory, "scavenge-collection.json");
-            const string legacy = "{\"format\":1,\"data\":{\"items\":2}}";
-            try
-            {
-                Directory.CreateDirectory(directory);
-                File.WriteAllText(path, legacy);
-                var collection = new ScavengeCollection(directory);
-                File.WriteAllText(path, "{}");
-                Assert.IsFalse(collection.TryStartArmedRun(out var run));
-                Assert.IsNull(run);
-                Assert.IsTrue(collection.CrowbarAvailable);
-                File.WriteAllText(path, legacy);
-                Assert.IsTrue(collection.TryStartArmedRun(out _));
-                Assert.IsFalse(new ScavengeCollection(directory).CrowbarAvailable);
-            }
-            finally
-            {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
-            }
+            var next = new ScavengeRun();
+            Assert.AreEqual(ScavengeItem.None, next.Inventory);
+            MoveTo(next, ScavengeLayout.Exit);
+            Assert.IsTrue(next.Interact());
+            Assert.AreEqual(ScavengeItem.None, next.CarriedOut);
         }
 
         [Test]
@@ -428,14 +308,6 @@ namespace OutpostLoop.Tests
             Advance(run, .7f);
             Assert.IsTrue(run.Transfer(item, true));
             run.CloseSearch();
-        }
-
-        private static void WalkToRoadExit(ScavengeRun run)
-        {
-            MoveTo(run, new Vector2(run.Player.x, -6.5f));
-            MoveTo(run, new Vector2(-9, -6.5f));
-            MoveTo(run, new Vector2(-9, 8));
-            MoveTo(run, ScavengeLayout.Exit);
         }
 
         private static void MoveTo(ScavengeRun run, Vector2 point)

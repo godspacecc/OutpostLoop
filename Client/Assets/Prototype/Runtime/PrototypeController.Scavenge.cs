@@ -12,10 +12,7 @@ namespace OutpostLoop
         private readonly Transform[] scavengeCrates = new Transform[ScavengeLayout.Caches.Length];
         private readonly List<Material> scavengeMaterials = new List<Material>();
         private ScavengeRun scavengeRun;
-        private ScavengeCollection scavengeCollection;
-        private bool scavengePaused, scavengeSaved;
-        // 领用写盘失败时留在空间，可重试或空手出发。
-        private bool scavengeEquipmentSaveFailed;
+        private bool scavengePaused;
         // 仓储与工作台界面只在玩家仍靠近可用据点时打开。
         private bool storageOpen;
         // 放置输入只在探索中接管鼠标，预览与工地由同一份领域规则驱动。
@@ -37,7 +34,6 @@ namespace OutpostLoop
         internal void StartScavenge()
         {
             if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return;
-            scavengeCollection ??= new ScavengeCollection();
             CreateScavengeMap();
             previousCameraColor = gameCamera.backgroundColor;
             gameCamera.backgroundColor = new Color(.095f, .122f, .128f);
@@ -49,22 +45,10 @@ namespace OutpostLoop
         }
 
         /// <summary>开始页、Enter 和空手按钮统一从零开始。</summary>
-        private void RestartScavenge() => BeginScavenge(new ScavengeRun());
-
-        /// <summary>仅在结算完成的空间领用撬棍，扣除成功后才切换场景状态。</summary>
-        private void DepartWithCrowbar()
+        private void RestartScavenge()
         {
-            if (scavengeRun.Outcome == ScavengeOutcome.Exploring || !CanDepartScavenge || !scavengeCollection.CrowbarAvailable) return;
-            if (scavengeCollection.TryStartArmedRun(out var run)) BeginScavenge(run);
-            else scavengeEquipmentSaveFailed = true;
-        }
-
-        private void BeginScavenge(ScavengeRun run)
-        {
-            scavengeRun = run;
+            scavengeRun = new ScavengeRun();
             scavengePaused = false;
-            scavengeSaved = false;
-            scavengeEquipmentSaveFailed = false;
             storageOpen = false;
             placingShelter = false;
             placingDefense = false;
@@ -77,6 +61,7 @@ namespace OutpostLoop
             Release(scavengeRoot.gameObject);
             scavengeRoot.gameObject.SetActive(false);
             scavengeRoot = null;
+            scavengeRun = null;
             ReleaseScavengeMaterials();
             gameCamera.orthographic = false;
             gameCamera.backgroundColor = previousCameraColor;
@@ -93,7 +78,7 @@ namespace OutpostLoop
             var mouse = Mouse.current;
             if (scavengeRun.Outcome != ScavengeOutcome.Exploring)
             {
-                if (keyboard?.enterKey.wasPressedThisFrame == true && CanDepartScavenge) RestartScavenge();
+                if (keyboard?.enterKey.wasPressedThisFrame == true) RestartScavenge();
                 return;
             }
             bool escape = Input.GetKeyDown(KeyCode.Escape) || keyboard?.escapeKey.wasPressedThisFrame == true;
@@ -165,11 +150,7 @@ namespace OutpostLoop
         }
 
         /// <summary>键盘和画面按钮共用搜索及撤离入口。</summary>
-        private void InteractScavenge()
-        {
-            if (scavengeRun.Interact() && scavengeRun.Outcome == ScavengeOutcome.Extracted)
-                scavengeSaved = scavengeCollection.SaveReturn(scavengeRun);
-        }
+        private void InteractScavenge() => scavengeRun.Interact();
 
         /// <summary>仓储入口与搜索面板互斥，离开据点时自动关闭。</summary>
         private void ToggleScavengeStorage()
@@ -353,7 +334,6 @@ namespace OutpostLoop
             scavengeMaterials.Clear();
         }
 
-        private bool CanDepartScavenge => scavengeRun.Outcome == ScavengeOutcome.Died || scavengeSaved;
         private static Rect ScavengeInfoRect => new Rect(20, 18, 338, 128);
         private static Rect ScavengeMapRect(float width) => new Rect(width - 172, 18, 152, 136);
         private static Rect ScavengeActionRect(float width, float height) => new Rect(width / 2 - 208, height - 65, 416, 38);
@@ -571,7 +551,7 @@ namespace OutpostLoop
         {
             ScavengeFill(new Rect(0, 0, width, height), scavengePaused ?
                 new Color(.04f, .06f, .07f, .62f) : new Color(.065f, .095f, .105f));
-            float panelHeight = scavengePaused ? 310 : 356;
+            float panelHeight = scavengePaused ? 310 : 258;
             float x = (width - 472) / 2, y = (height - panelHeight) / 2;
             GUI.Box(new Rect(x, y, 472, panelHeight), "");
             if (scavengePaused)
@@ -584,29 +564,13 @@ namespace OutpostLoop
 
             bool died = scavengeRun.Outcome == ScavengeOutcome.Died;
             GUI.Label(new Rect(x + 26, y + 23, 420, 34), died ? "你在陌生的空间醒来" : "已撤离 · 空间");
+            var carriedOut = scavengeRun.CarriedOut;
             GUI.Label(new Rect(x + 26, y + 67, 420, 29), died ? "阵亡 · 本趟物品全部失去" :
-                "带回 · " + DescribeItems(scavengeRun.CarriedOut));
-            bool wrap = GUI.skin.label.wordWrap;
-            GUI.skin.label.wordWrap = true;
-            GUI.Label(new Rect(x + 26, y + 106, 420, 51), "已登记 · " + DescribeItems(scavengeCollection.Items));
-            GUI.skin.label.wordWrap = wrap;
-            if ((scavengeCollection.Items & ScavengeItem.Signal) != 0)
-                GUI.Label(new Rect(x + 26, y + 154, 420, 29), "线索 · 物件上的刻痕与裂口边缘一致");
-            if (!CanDepartScavenge)
-            {
-                if (GUI.Button(new Rect(x + 26, y + 189, 420, 42), "登记失败 · 重试保存"))
-                    scavengeSaved = scavengeCollection.SaveReturn(scavengeRun);
-                return;
-            }
-            if (scavengeCollection.CrowbarAvailable)
-            {
-                GUI.Label(new Rect(x + 26, y + 184, 420, 28), scavengeEquipmentSaveFailed ?
-                    "装备保存失败 · 可重试或空手出发" : "空间存放 · 撬棍 ×1");
-                if (GUI.Button(new Rect(x + 26, y + 258, 420, 38), "带撬棍出发 · 占一格背包"))
-                    DepartWithCrowbar();
-            }
-            if (GUI.Button(new Rect(x + 26, y + 214, 420, 38), "空手出发  Enter")) RestartScavenge();
-            if (GUI.Button(new Rect(x + 26, y + 306, 420, 32), "回到开始页")) LeaveScavenge();
+                "撤离时随身携带 · " + DescribeItems(carriedOut));
+            if ((carriedOut & ScavengeItem.Signal) != 0)
+                GUI.Label(new Rect(x + 26, y + 100, 420, 29), "线索 · 物件上的刻痕与裂口边缘一致");
+            if (GUI.Button(new Rect(x + 26, y + 140, 420, 38), "再次出发 · 空手  Enter")) RestartScavenge();
+            if (GUI.Button(new Rect(x + 26, y + 196, 420, 32), "回到开始页")) LeaveScavenge();
         }
 
         private static string DescribeItems(ScavengeItem items)
