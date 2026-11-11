@@ -31,7 +31,7 @@ namespace Game
                 if (value.format != 1) return new SaveReadResult<T> { Status = SaveFileStatus.Unsupported, Error = "不支持的文件版本。" };
                 return new SaveReadResult<T> { Status = SaveFileStatus.Valid, Data = value.data };
             }
-            catch (Exception error) when (error is IOException || error is ArgumentException || error is UnauthorizedAccessException)
+            catch (Exception error) when (error is IOException || error is InvalidDataException || error is ArgumentException || error is UnauthorizedAccessException)
             { return new SaveReadResult<T> { Status = SaveFileStatus.Corrupted, Error = error.Message }; }
         }
         /// <summary>先完整写入同目录临时文件，再原子替换；异常不会删除旧文件。</summary>

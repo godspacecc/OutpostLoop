@@ -14,6 +14,8 @@ namespace OutpostLoop
         private ScavengeRun scavengeRun;
         private ScavengeCollection scavengeCollection;
         private bool scavengePaused, scavengeSaved;
+        // 领用写盘失败时留在空间，可重试或空手出发。
+        private bool scavengeEquipmentSaveFailed;
         // 仓储与工作台界面只在玩家仍靠近可用据点时打开。
         private bool storageOpen;
         // 放置输入只在探索中接管鼠标，预览与工地由同一份领域规则驱动。
@@ -46,12 +48,23 @@ namespace OutpostLoop
             RestartScavenge();
         }
 
-        /// <summary>保持已撤离的收藏，重新开始空手行动。</summary>
-        private void RestartScavenge()
+        /// <summary>开始页、Enter 和空手按钮统一从零开始。</summary>
+        private void RestartScavenge() => BeginScavenge(new ScavengeRun());
+
+        /// <summary>仅在结算完成的空间领用撬棍，扣除成功后才切换场景状态。</summary>
+        private void DepartWithCrowbar()
         {
-            scavengeRun = new ScavengeRun();
+            if (scavengeRun.Outcome == ScavengeOutcome.Exploring || !CanDepartScavenge || !scavengeCollection.CrowbarAvailable) return;
+            if (scavengeCollection.TryStartArmedRun(out var run)) BeginScavenge(run);
+            else scavengeEquipmentSaveFailed = true;
+        }
+
+        private void BeginScavenge(ScavengeRun run)
+        {
+            scavengeRun = run;
             scavengePaused = false;
             scavengeSaved = false;
+            scavengeEquipmentSaveFailed = false;
             storageOpen = false;
             placingShelter = false;
             placingDefense = false;
@@ -487,8 +500,8 @@ namespace OutpostLoop
                 bool carried = (run.Inventory & item) != 0;
                 if (!inBox && !carried) continue;
                 bool enabled = GUI.enabled;
-                GUI.enabled = !inBox || run.Count < ScavengeRun.Capacity;
-                string action = inBox ? GUI.enabled ? "拿取" : "背包已满" : "放回箱中";
+                GUI.enabled = !inBox || (!carried && run.Count < ScavengeRun.Capacity);
+                string action = inBox ? carried ? "已携带" : GUI.enabled ? "拿取" : "背包已满" : "放回箱中";
                 if (GUI.Button(new Rect(35, y, 308, 36), action + " · " + ScavengeItemName(item)))
                     run.Transfer(item, inBox);
                 GUI.enabled = enabled;
@@ -532,9 +545,11 @@ namespace OutpostLoop
             {
                 if ((items & item) == 0) continue;
                 bool enabled = GUI.enabled;
-                GUI.enabled = take ? scavengeRun.Count < ScavengeRun.Capacity :
-                    scavengeRun.StorageUsed < ScavengeRun.StorageCapacity;
-                string action = GUI.enabled ? take ? "取出" : "存入" : take ? "背包满" : "仓库满";
+                var destination = take ? scavengeRun.Inventory : scavengeRun.Stored;
+                bool alreadyThere = (destination & item) != 0;
+                GUI.enabled = !alreadyThere && (take ? scavengeRun.Count < ScavengeRun.Capacity :
+                    scavengeRun.StorageUsed < ScavengeRun.StorageCapacity);
+                string action = alreadyThere ? "已有" : GUI.enabled ? take ? "取出" : "存入" : take ? "背包满" : "仓库满";
                 if (GUI.Button(new Rect(x, y, 233, 33), action + " · " + ScavengeItemName(item)))
                     scavengeRun.TransferStorage(item, take);
                 GUI.enabled = enabled;
@@ -556,8 +571,9 @@ namespace OutpostLoop
         {
             ScavengeFill(new Rect(0, 0, width, height), scavengePaused ?
                 new Color(.04f, .06f, .07f, .62f) : new Color(.065f, .095f, .105f));
-            float x = (width - 472) / 2, y = (height - 310) / 2;
-            GUI.Box(new Rect(x, y, 472, 310), "");
+            float panelHeight = scavengePaused ? 310 : 356;
+            float x = (width - 472) / 2, y = (height - panelHeight) / 2;
+            GUI.Box(new Rect(x, y, 472, panelHeight), "");
             if (scavengePaused)
             {
                 GUI.Label(new Rect(x + 26, y + 25, 419, 36), "探索已暂停");
@@ -582,8 +598,15 @@ namespace OutpostLoop
                     scavengeSaved = scavengeCollection.SaveReturn(scavengeRun);
                 return;
             }
-            if (GUI.Button(new Rect(x + 26, y + 189, 420, 42), "再次出发  Enter")) RestartScavenge();
-            if (GUI.Button(new Rect(x + 26, y + 248, 420, 38), "回到开始页")) LeaveScavenge();
+            if (scavengeCollection.CrowbarAvailable)
+            {
+                GUI.Label(new Rect(x + 26, y + 184, 420, 28), scavengeEquipmentSaveFailed ?
+                    "装备保存失败 · 可重试或空手出发" : "空间存放 · 撬棍 ×1");
+                if (GUI.Button(new Rect(x + 26, y + 258, 420, 38), "带撬棍出发 · 占一格背包"))
+                    DepartWithCrowbar();
+            }
+            if (GUI.Button(new Rect(x + 26, y + 214, 420, 38), "空手出发  Enter")) RestartScavenge();
+            if (GUI.Button(new Rect(x + 26, y + 306, 420, 32), "回到开始页")) LeaveScavenge();
         }
 
         private static string DescribeItems(ScavengeItem items)

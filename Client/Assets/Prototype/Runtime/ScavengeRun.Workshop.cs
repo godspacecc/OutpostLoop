@@ -23,13 +23,13 @@ namespace OutpostLoop
             if (!CanUseStorage || !IsSingleItem(item)) return false;
             if (take)
             {
-                if ((Stored & item) == 0 || Count >= Capacity) return false;
+                if ((Stored & item) == 0 || (Inventory & item) != 0 || Count >= Capacity) return false;
                 Stored &= ~item;
                 Inventory |= item;
             }
             else
             {
-                if ((Inventory & item) == 0 || StorageUsed >= StorageCapacity) return false;
+                if ((Inventory & item) == 0 || (Stored & item) != 0 || StorageUsed >= StorageCapacity) return false;
                 Inventory &= ~item;
                 Stored |= item;
             }

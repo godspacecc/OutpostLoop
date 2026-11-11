@@ -33,6 +33,79 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootScavengeDepartsWithOrWithoutRecoveredCrowbar()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var type = typeof(PrototypeController);
+            var runField = type.GetField("scavengeRun", flags);
+            var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "outpostloop-boot-" + System.Guid.NewGuid());
+            var collection = new ScavengeCollection(directory);
+            type.GetField("scavengeCollection", flags).SetValue(controller, collection);
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                Click("StartScavenge");
+                yield return null;
+                var run = (ScavengeRun)runField.GetValue(controller);
+                void Walk(Vector2 point)
+                {
+                    for (int step = 0; step < 350 && Vector2.Distance(run.Player, point) > .1f; step++)
+                        run.Tick(.02f, Vector2.ClampMagnitude((point - run.Player) * 10, 1));
+                    Assert.That(Vector2.Distance(run.Player, point), Is.LessThan(.11f), $"目标 {point}，实际 {run.Player}，{run.Outcome}");
+                }
+                void Extract()
+                {
+                    Walk(new Vector2(run.Player.x, -6.5f));
+                    Walk(new Vector2(-9, -6.5f));
+                    Walk(new Vector2(-9, 8));
+                    Walk(ScavengeLayout.Exit);
+                    type.GetMethod("InteractScavenge", flags).Invoke(controller, null);
+                    Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
+                }
+
+                Assert.AreEqual(0, run.Count);
+                Walk(ScavengeLayout.Caches[1]);
+                Assert.IsTrue(run.Interact());
+                for (int step = 0; step < 35; step++) run.Tick(.02f, Vector2.zero);
+                Assert.IsTrue(run.Transfer(ScavengeItem.Crowbar, true));
+                Extract();
+                Assert.IsTrue(collection.CrowbarAvailable);
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
+                yield return null;
+                var empty = (ScavengeRun)runField.GetValue(controller);
+                Assert.AreNotSame(run, empty);
+                Assert.AreEqual(0, empty.Count);
+                Assert.IsTrue(collection.CrowbarAvailable);
+
+                run = empty;
+                Extract();
+                var depart = type.GetMethod("DepartWithCrowbar", flags);
+                depart.Invoke(controller, null);
+                var armed = (ScavengeRun)runField.GetValue(controller);
+                Assert.AreEqual(ScavengeItem.Crowbar, armed.Inventory);
+                Assert.AreEqual(1, armed.Count);
+                depart.Invoke(controller, null);
+                Assert.AreSame(armed, runField.GetValue(controller));
+
+                type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
+                Assert.IsFalse(new ScavengeCollection(directory).CrowbarAvailable);
+                Click("StartScavenge");
+                Assert.AreEqual(0, ((ScavengeRun)runField.GetValue(controller)).Count);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeOpensStorageAndPausesWorkshop()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

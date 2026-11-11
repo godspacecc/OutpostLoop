@@ -93,6 +93,8 @@ namespace OutpostLoop
         public int Health { get; private set; } = 3;
         public ScavengeItem Inventory { get; private set; }
         public ScavengeItem CarriedOut { get; private set; }
+        // 成功写入空间档案后标记本趟，旧结算不会再次补回已领走的装备。
+        internal bool ReturnSaved { get; set; }
         public int Count => CountItems(Inventory);
         public int OpenCache { get; private set; } = -1;
         public float SearchRemaining { get; private set; }
@@ -104,6 +106,11 @@ namespace OutpostLoop
         public float ShelterRemaining { get; private set; }
         public bool Rested { get; private set; }
         public bool NearShelter => Shelter.HasValue && Vector2.Distance(Player, Shelter.Value) <= 1.45f;
+
+        /// <summary>普通出发空手，只有空间成功交接装备时才携带撬棍。</summary>
+        public ScavengeRun() { }
+
+        internal ScavengeRun(ScavengeItem startingItem) => Inventory = startingItem;
 
         public int NearbyCache
         {
@@ -171,13 +178,13 @@ namespace OutpostLoop
                 SearchRemaining > 0 || !IsSingleItem(item)) return false;
             if (take)
             {
-                if ((contents[OpenCache] & item) == 0 || Count >= Capacity) return false;
+                if ((contents[OpenCache] & item) == 0 || (Inventory & item) != 0 || Count >= Capacity) return false;
                 Inventory |= item;
                 contents[OpenCache] &= ~item;
             }
             else
             {
-                if ((Inventory & item) == 0) return false;
+                if ((Inventory & item) == 0 || (contents[OpenCache] & item) != 0) return false;
                 Inventory &= ~item;
                 contents[OpenCache] |= item;
             }
@@ -279,36 +286,63 @@ namespace OutpostLoop
         }
     }
 
-    /// <summary>空间保留带回过的物品种类。同一种物品重复撤离只登记一次。</summary>
+    /// <summary>空间档案同时保存已发现物品种类和一根可领用的撬棍。</summary>
     public sealed class ScavengeCollection
     {
         private const string FileName = "scavenge-collection.json";
-        [Serializable] private sealed class Data { public int items; }
+        [Serializable] private sealed class Data
+        {
+            public int items;
+            // 旧档案没有独立装备库存。首次读旧档时按登记记录提供一根。
+            public bool hasEquipmentRecord;
+            public bool crowbarAvailable;
+        }
         private readonly JsonFileStore<Data> store;
         public ScavengeItem Items { get; private set; }
+        public bool CrowbarAvailable { get; private set; }
 
         public ScavengeCollection(string directory = null)
         {
             store = new JsonFileStore<Data>(directory);
             var read = store.Read(FileName);
-            if (read.Status == SaveFileStatus.Valid) Items = (ScavengeItem)read.Data.items & ScavengeRun.AllItems;
+            if (read.Status != SaveFileStatus.Valid) return;
+            Items = (ScavengeItem)read.Data.items & ScavengeRun.AllItems;
+            CrowbarAvailable = read.Data.hasEquipmentRecord ? read.Data.crowbarAvailable : (Items & ScavengeItem.Crowbar) != 0;
         }
 
         /// <summary>只提交成功撤离的结果，保存失败可以原地重试。</summary>
         public bool SaveReturn(ScavengeRun run)
         {
             if (run.Outcome != ScavengeOutcome.Extracted) return false;
-            var next = Items | run.CarriedOut;
-            if (next == Items) return true;
+            if (run.ReturnSaved) return true;
+            bool returnedCrowbar = (run.CarriedOut & ScavengeItem.Crowbar) != 0;
+            if (!Save(Items | run.CarriedOut, CrowbarAvailable || returnedCrowbar)) return false;
+            run.ReturnSaved = true;
+            return true;
+        }
+
+        /// <summary>先持久化扣除，再交接新行动。放弃或阵亡无需另写扣除记录。</summary>
+        public bool TryStartArmedRun(out ScavengeRun run)
+        {
+            run = null;
+            if (!CrowbarAvailable || !Save(Items, false)) return false;
+            run = new ScavengeRun(ScavengeItem.Crowbar);
+            return true;
+        }
+
+        private bool Save(ScavengeItem items, bool crowbarAvailable)
+        {
+            if (items == Items && crowbarAvailable == CrowbarAvailable) return true;
             try
             {
-                store.Save(FileName, new Data { items = (int)next });
-                Items = next;
+                store.Save(FileName, new Data { items = (int)items, hasEquipmentRecord = true, crowbarAvailable = crowbarAvailable });
+                Items = items;
+                CrowbarAvailable = crowbarAvailable;
                 return true;
             }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            catch (Exception error) when (error is IOException || error is InvalidDataException || error is UnauthorizedAccessException)
             {
-                Log.Warning("空间物品登记失败：" + error.GetType().Name);
+                Log.Warning("空间档案保存失败：" + error.GetType().Name);
                 return false;
             }
         }
