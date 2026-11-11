@@ -9,6 +9,17 @@ namespace OutpostLoop
         private bool FirearmSelected { get; set; }
         private Vector2 gunshot;
         private float gunshotRemaining;
+#if UNITY_EDITOR
+        // 编辑器美术样片可临时提供一套墙与绕行点，退出样片后回到地图配置。
+        private static Rect[] townPreviewWalls;
+        private static Vector2[] townPreviewCorners;
+
+        private static void SetTownPreviewGeometry(Rect[] walls, Vector2[] corners)
+        {
+            townPreviewWalls = walls;
+            townPreviewCorners = corners;
+        }
+#endif
 
         public bool IsTown { get; }
         public bool IsRain => IsTown && (Seed & 1) != 0;
@@ -25,11 +36,32 @@ namespace OutpostLoop
         internal Vector2[] CachePoints => IsTown ? ScavengeTown.Caches : ScavengeLayout.Caches;
         internal string[] CacheNames => IsTown ? ScavengeTown.Names : ScavengeLayout.CacheNames;
         internal Rect[] BuildGrounds => IsTown ? ScavengeTown.ShelterGrounds : ScavengeLayout.ShelterGrounds;
-        internal Rect[] RunWalls => IsTown ? ScavengeTown.Walls : ScavengeLayout.Walls;
+        internal Rect[] RunWalls
+        {
+            get
+            {
+                if (!IsTown) return ScavengeLayout.Walls;
+#if UNITY_EDITOR
+                if (townPreviewWalls != null) return townPreviewWalls;
+#endif
+                return ScavengeTown.Walls;
+            }
+        }
+
+        private static Vector2[] TownRouteCorners
+        {
+            get
+            {
+#if UNITY_EDITOR
+                if (townPreviewCorners != null) return townPreviewCorners;
+#endif
+                return ScavengeTown.Corners;
+            }
+        }
         internal Vector2 ExitPoint => IsTown ? ScavengeTown.Exit : ScavengeLayout.Exit;
 
         private Vector2 MoveInRun(Vector2 point, Vector2 step) => IsTown
-            ? ScavengeLayout.Move(point, step, ScavengeTown.Bounds, ScavengeTown.Walls)
+            ? ScavengeLayout.Move(point, step, ScavengeTown.Bounds, RunWalls)
             : ScavengeLayout.Move(point, step);
 
         private bool ClearRunLine(Vector2 from, Vector2 to, float clearance = 0) =>

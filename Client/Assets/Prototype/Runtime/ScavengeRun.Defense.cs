@@ -255,7 +255,7 @@ namespace OutpostLoop
             if (IsTown)
             {
                 var local = new List<Vector2>();
-                foreach (var point in ScavengeTown.Corners)
+                foreach (var point in TownRouteCorners)
                     if (Vector2.Distance(point, start) < 19f || Vector2.Distance(point, goal) < 19f) local.Add(point);
                 corners = local.ToArray();
             }

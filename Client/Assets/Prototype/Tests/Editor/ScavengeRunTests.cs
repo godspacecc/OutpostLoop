@@ -387,6 +387,27 @@ namespace OutpostLoop.Tests
     public sealed class ScavengeTownTests
     {
         [Test]
+        public void TownPreviewGeometryBlocksMovementAndCanBeRemoved()
+        {
+            const System.Reflection.BindingFlags hiddenStatic = System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.NonPublic;
+            var set = typeof(ScavengeRun).GetMethod("SetTownPreviewGeometry", hiddenStatic);
+            var run = new ScavengeRun(0, true);
+            var walls = new System.Collections.Generic.List<Rect>(Read<Rect[]>(run, "RunWalls"))
+                { new Rect(-61.8f, -54f, 1f, 5f) };
+            try
+            {
+                set.Invoke(null, new object[] { walls.ToArray(), System.Array.Empty<Vector2>() });
+                for (int i = 0; i < 32; i++) run.Tick(.02f, Vector2.right);
+                Assert.That(run.Player.x, Is.EqualTo(-62.2f).Within(.13f));
+                set.Invoke(null, new object[] { null, null });
+                for (int i = 0; i < 32; i++) run.Tick(.02f, Vector2.right);
+                Assert.Greater(run.Player.x, -60.5f);
+            }
+            finally { set.Invoke(null, new object[] { null, null }); }
+        }
+
+        [Test]
         public void SeedsVaryLootAndPatrolsAcrossTheSameTown()
         {
             var first = new ScavengeRun(0, true);
