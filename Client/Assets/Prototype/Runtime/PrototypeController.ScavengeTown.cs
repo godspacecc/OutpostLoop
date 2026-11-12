@@ -40,6 +40,12 @@ namespace OutpostLoop
             for (int i = 0; i < ScavengeTown.Buildings.Length; i++)
             {
                 var footprint = ScavengeTown.Buildings[i];
+                int room = survivalMode ? System.Array.IndexOf(SurvivalRooms.BuildingIds, i) : -1;
+                if (room >= 0)
+                {
+                    CreateSurvivalRoom(room, plaster, concrete, wood, asphalt);
+                    continue;
+                }
                 bool residential = i >= 3 && i < 7;
                 bool industrial = i >= 10 && i < 14;
                 float height = residential ? 3.9f : industrial ? 3.6f : 2.9f;
@@ -75,10 +81,13 @@ namespace OutpostLoop
         /// <summary>幸存者、固定白昼中的雨效和临时战斗声音均属于当前探索场景。</summary>
         private void CreateTownActorsAndWeather(Material canvas, Material teal)
         {
-            var survivor = Shape("本地幸存者", scavengeRoot, PrimitiveType.Capsule, At(ScavengeTown.Survivor, .76f),
-                new Vector3(.65f, .78f, .65f), teal);
-            Shape("幸存者头部", survivor, PrimitiveType.Sphere, new Vector3(0, .68f, 0),
-                new Vector3(.51f, .45f, .51f), canvas);
+            if (!survivalMode)
+            {
+                var survivor = Shape("本地幸存者", scavengeRoot, PrimitiveType.Capsule, At(ScavengeTown.Survivor, .76f),
+                    new Vector3(.65f, .78f, .65f), teal);
+                Shape("幸存者头部", survivor, PrimitiveType.Sphere, new Vector3(0, .68f, 0),
+                    new Vector3(.51f, .45f, .51f), canvas);
+            }
             var effects = new GameObject("镇区天气与声音");
             effects.transform.SetParent(scavengeRoot, false);
             townAmbience = effects.AddComponent<AudioSource>();

@@ -30,7 +30,7 @@ namespace OutpostLoop
         public bool SurvivorSpoken { get; private set; }
         public bool MedicineFound { get; private set; }
         public bool MedicineLeadKnown { get; private set; }
-        public bool CanTalk => IsTown && !SurvivorSpoken && Outcome == ScavengeOutcome.Exploring &&
+        public bool CanTalk => Survival == null && IsTown && !SurvivorSpoken && Outcome == ScavengeOutcome.Exploring &&
             Vector2.Distance(Player, ScavengeTown.Survivor) <= 1.8f && ClearRunLine(Player, ScavengeTown.Survivor);
         internal int MedicineCache => MedicineLeadKnown ? medicineCache : -1;
         internal Vector2[] CachePoints => IsTown ? ScavengeTown.Caches : ScavengeLayout.Caches;
@@ -40,6 +40,7 @@ namespace OutpostLoop
         {
             get
             {
+                if (Survival != null) return survivalWalls;
                 if (!IsTown) return ScavengeLayout.Walls;
 #if UNITY_EDITOR
                 if (townPreviewWalls != null) return townPreviewWalls;

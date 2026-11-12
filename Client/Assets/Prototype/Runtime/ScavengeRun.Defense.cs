@@ -146,8 +146,11 @@ namespace OutpostLoop
             patrol.NoiseRemaining = Mathf.Max(0, patrol.NoiseRemaining - dt);
             bool warehouse = !IsTown && patrol == patrols[0];
             float sight = IsTown ? (patrol.Fast ? 7f : 5.4f) : warehouse ? 5f : 2.65f;
+            if (Survival != null && Survival.Night)
+                sight = sight * .52f + Survival.Light * 6f;
             bool seesPlayer = (!warehouse || Player.x > 1.25f || patrol.Engaged) &&
                 CanSee(patrol, Player, IsTown || warehouse ? sight : 2f, IsTown || warehouse ? 1.65f : .9f);
+            if (Survival != null && AttackSurvivalDoor(patrol)) return;
             var shelter = Shelter.GetValueOrDefault();
             bool seesShelter = Shelter.HasValue && CanSee(patrol, shelter, sight, 1.55f);
             bool attackShelter = seesShelter && (!seesPlayer ||
@@ -165,6 +168,7 @@ namespace OutpostLoop
                     {
                         patrol.Cooldown = 1.05f;
                         if (attackShelter) HitShelter();
+                        else if (Survival != null) HitSurvivalPlayer();
                         else
                         {
                             Health--;
@@ -177,9 +181,9 @@ namespace OutpostLoop
             }
             else if (!patrol.Engaged)
             {
-                var sound = gunshotRemaining > 0 && Vector2.Distance(patrol.Position, gunshot) <= 16f ? gunshot :
+                var sound = gunshotRemaining > 0 && Vector2.Distance(patrol.Position, gunshot) <= (Survival == null ? 16f : 28f) ? gunshot :
                     Heard(patrol, firstNoise) ? firstNoise :
-                    Heard(patrol, secondNoise) ? secondNoise : null;
+                    Heard(patrol, secondNoise) ? secondNoise : HearSurvival(patrol.Position);
                 if (sound.HasValue)
                 {
                     patrol.Noise = sound;

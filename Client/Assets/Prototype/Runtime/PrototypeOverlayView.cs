@@ -347,6 +347,7 @@ namespace OutpostLoop
             sessionPanel.gameObject.SetActive(!starting);
             if (starting)
             {
+                startStage.Find("ContinueSurvival")?.gameObject.SetActive(controller.HasSurvivalSave);
                 var snapshot = Game.Game.Interface.GetSystem<ResourceUpdateSystem>().Snapshot;
                 startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
@@ -557,6 +558,13 @@ namespace OutpostLoop
             var town = Button(startStage, font, "StartScavengeTown", "大镇与镇郊 · 探索试玩", new Vector2(326, 52),
                 new Vector2(1623, -850), new Vector2(0, 1), controller.StartScavengeTown);
             town.fontSize = 24;
+            var survival = Button(startStage, font, "StartSurvival", "第一趟行动 · 三天生存", new Vector2(326, 52),
+                new Vector2(1279, -850), new Vector2(0, 1), controller.StartSurvival);
+            survival.fontSize = 24;
+            var resume = Button(startStage, font, "ContinueSurvival", "继续本趟生存", new Vector2(326, 52),
+                new Vector2(1279, -782), new Vector2(0, 1), controller.ContinueSurvival);
+            resume.fontSize = 24;
+            resume.transform.parent.gameObject.SetActive(controller.HasSurvivalSave);
 
             Fill("FooterRule", 96, 992, 1728, 2, line);
             StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);

@@ -33,6 +33,90 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootSurvivalOpensTownWithIndependentSurvivalClock()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var root = new System.IO.DirectoryInfo(Application.dataPath);
+            while (root != null && !System.IO.File.Exists(System.IO.Path.Combine(root.FullName, "AGENTS.md")))
+                root = root.Parent;
+            Assert.NotNull(root);
+            var saveDirectory = System.IO.Path.Combine(root.FullName, "Backup", "Artifacts", "FirstSurvival-20261112",
+                "BootSave-" + System.Guid.NewGuid().ToString("N"));
+            var type = typeof(PrototypeController);
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(saveDirectory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            Click("StartSurvival");
+            yield return null;
+            var field = type.GetField("scavengeRun", flags);
+            var poll = type.GetMethod("PollScavenge", flags);
+            var run = (ScavengeRun)field.GetValue(controller);
+            Assert.NotNull(run.Survival);
+            Assert.That(run.Survival.elapsed, Is.LessThan(2));
+            Assert.That(run.Survival.pack, Is.Empty);
+            Assert.NotNull(GameObject.Find("现有房门"));
+            Assert.NotNull(GameObject.Find("随身手电光束"));
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var settings = InputSystem.settings;
+            var editorInput = settings.editorInputBehaviorInPlayMode;
+            var background = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            try
+            {
+                var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+                player.SetValue(run, ScavengeTown.Caches[0]);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(0, run.OpenCache);
+                run.CloseSearch();
+
+                var door = SurvivalRooms.Door(0).center;
+                player.SetValue(run, door - Vector2.right);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsTrue(run.Survival.rooms[0].open);
+                player.SetValue(run, SurvivalRooms.Footprint(0).center);
+                Assert.IsTrue(run.ClaimSurvivalRoom());
+                Assert.That(run.Survival.pack, Is.Empty);
+                run.Survival.elapsed = 1600;
+                run.Survival.water = 43;
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                double paused = run.Survival.elapsed;
+                yield return null;
+                Assert.AreEqual(paused, run.Survival.elapsed);
+                type.GetMethod("SaveAndLeaveSurvival", flags).Invoke(controller, null);
+                yield return null;
+                Assert.IsNull(field.GetValue(controller));
+                Click("ContinueSurvival");
+                yield return null;
+                var resumed = (ScavengeRun)field.GetValue(controller);
+                Assert.NotNull(resumed);
+                Assert.AreNotSame(run, resumed);
+                Assert.That(resumed.Survival.elapsed, Is.InRange(paused, paused + 2));
+                Assert.That(resumed.Survival.water, Is.InRange(42f, 43f));
+                Assert.AreEqual(0, resumed.Survival.baseRoom);
+                Assert.IsTrue(resumed.Survival.rooms[0].open);
+                Assert.IsNull(resumed.Survival.weapon);
+                Assert.IsNull(resumed.Survival.torch);
+                resumed.Survival.elapsed = ScavengeSurvival.Goal;
+                player.SetValue(resumed, ScavengeTown.Exit);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(ScavengeOutcome.Extracted, resumed.Outcome);
+                Assert.IsTrue(resumed.Survival.Ready);
+                Assert.IsFalse(controller.HasSurvivalSave);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                settings.editorInputBehaviorInPlayMode = editorInput;
+                settings.backgroundBehavior = background;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeTownStartsWithWeatherAndLetsThePlayerSpeak()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
@@ -44,6 +128,7 @@ namespace OutpostLoop.Tests
             var type = typeof(PrototypeController);
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var field = type.GetField("scavengeRun", flags);
+            var poll = type.GetMethod("PollScavenge", flags);
             type.GetMethod("BeginScavenge", flags).Invoke(controller, new object[] { 0 });
             var rain = GameObject.Find("小雨").GetComponent<MeshRenderer>();
             Assert.IsFalse(rain.enabled);
@@ -55,27 +140,48 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(0, run.Count);
             Assert.NotNull(GameObject.Find("本地幸存者"));
             var keyboard = InputSystem.AddDevice<Keyboard>();
+            var settings = InputSystem.settings;
+            var editorInput = settings.editorInputBehaviorInPlayMode;
+            var background = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
             try
             {
                 typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, new Vector2(-30, -33));
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.E));
-                yield return null;
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsTrue(run.SurvivorSpoken);
                 Assert.IsTrue(run.MedicineLeadKnown);
                 typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, new Vector2(-70, -40));
                 yield return null;
                 Assert.IsTrue(run.Interact());
                 Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
-                yield return null;
+                DriveScavengeKey(controller, poll, keyboard, Key.Enter);
                 var next = (ScavengeRun)field.GetValue(controller);
                 Assert.AreNotSame(run, next);
                 Assert.IsTrue(next.IsTown);
                 Assert.IsFalse(next.MedicineLeadKnown);
                 Assert.AreEqual(0, next.Count);
             }
-            finally { InputSystem.RemoveDevice(keyboard); }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                settings.editorInputBehaviorInPlayMode = editorInput;
+                settings.backgroundBehavior = background;
+            }
             yield return new ExitPlayMode();
+        }
+
+        /// <summary>批处理编辑器没有 Game 视图焦点，输入注入与局内轮询在同一步执行。</summary>
+        private static void DriveScavengeKey(PrototypeController controller, System.Reflection.MethodInfo poll,
+            Keyboard keyboard, Key key)
+        {
+            InputSystem.Update();
+            InputState.Change(keyboard, new KeyboardState(), InputUpdateType.Dynamic);
+            InputSystem.Update();
+            InputState.Change(keyboard, new KeyboardState(key), InputUpdateType.Dynamic);
+            keyboard.MakeCurrent();
+            Assert.IsTrue(keyboard[key].wasPressedThisFrame, $"注入键 {key} 未进入当前输入步");
+            poll.Invoke(controller, null);
         }
 
         [UnityTest]

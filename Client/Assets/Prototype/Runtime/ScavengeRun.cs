@@ -9,7 +9,7 @@ namespace OutpostLoop
         None = 0, Supplies = 1, Crowbar = 2, Signal = 4, Materials = 8,
         DefenseParts = 16, RepairMaterials = 32, RepairKit = 64, Pistol = 128, Ammo = 256, ReserveMedicine = 512
     }
-    public enum ScavengeOutcome { Exploring, Extracted, Died }
+    public enum ScavengeOutcome { Exploring, Extracted, Died, WindowClosed }
     public enum ShelterPlacement { Available, MissingMaterials, AlreadyPlaced, Obstructed, TooFar, NeedsShelter }
 
     /// <summary>首张临时探索图，障碍范围同时用于渲染与地面通行。</summary>
@@ -121,10 +121,14 @@ namespace OutpostLoop
         public bool NearShelter => Shelter.HasValue && Vector2.Distance(Player, Shelter.Value) <= 1.45f;
 
         /// <summary>种子决定两个相互独立的物资位置选择，固定地标维持相同的路线。</summary>
-        public ScavengeRun(int seed = 0, bool town = false)
+        public ScavengeRun(int seed = 0, bool town = false) : this(seed, town, null) { }
+
+        internal ScavengeRun(int seed, bool town, ScavengeSurvival survival)
         {
             Seed = seed;
             IsTown = town;
+            Survival = survival;
+            if (survival != null) RefreshSurvivalWalls();
             Player = town ? ScavengeTown.Start : ScavengeLayout.Start;
             contents = new ScavengeItem[CachePoints.Length];
             discovered = new bool[contents.Length];
@@ -154,6 +158,7 @@ namespace OutpostLoop
                 float closestDistance = 1.65f * 1.65f;
                 for (int i = 0; i < CachePoints.Length; i++)
                 {
+                    if (Survival != null && !Survival.caches[i].active) continue;
                     var position = CachePoints[i];
                     float distance = (Player - position).sqrMagnitude;
                     if (distance > closestDistance || !ClearRunLine(Player, position)) continue;
@@ -164,17 +169,27 @@ namespace OutpostLoop
             }
         }
 
-        public bool IsDiscovered(int index) => discovered[index];
-        public bool IsSearched(int index) => known[index];
+        public bool IsDiscovered(int index) => Survival != null ? Survival.caches[index].known : discovered[index];
+        public bool IsSearched(int index) => Survival != null ? Survival.caches[index].searched : known[index];
         public ScavengeItem VisibleContents(int index) => known[index] ? contents[index] : ScavengeItem.None;
 
         /// <summary>推进一帧。移动离开容器或受到伤害会打断搜索。</summary>
         public void Tick(float dt, Vector2 input)
         {
             if (Outcome != ScavengeOutcome.Exploring || dt <= 0) return;
-            Player = MoveInRun(Player, Vector2.ClampMagnitude(input, 1) * (5 * dt));
+            float speed = Survival == null ? 5 : SurvivalSpeed(input);
+            Player = MoveInRun(Player, Vector2.ClampMagnitude(input, 1) * (speed * dt));
+            if (Survival != null)
+            {
+                TickSurvival(dt, input);
+                if (Outcome != ScavengeOutcome.Exploring) return;
+            }
             for (int i = 0; i < discovered.Length; i++)
-                if (!discovered[i] && CanReachCache(i)) discovered[i] = true;
+                if (!IsDiscovered(i) && CanReachCache(i))
+                {
+                    if (Survival == null) discovered[i] = true;
+                    else Survival.caches[i].known = true;
+                }
             if (Vector2.Distance(Player, ExitPoint) < 4 &&
                 ClearRunLine(Player, ExitPoint)) ExitKnown = true;
 
@@ -186,8 +201,12 @@ namespace OutpostLoop
                     SearchRemaining = Mathf.Max(0, SearchRemaining - dt);
                     if (SearchRemaining == 0)
                     {
-                        known[OpenCache] = true;
-                        if (IsTown && OpenCache == ScavengeTown.Manifest) RevealMedicineLead();
+                        if (Survival == null)
+                        {
+                            known[OpenCache] = true;
+                            if (IsTown && OpenCache == ScavengeTown.Manifest) RevealMedicineLead();
+                        }
+                        else Survival.caches[OpenCache].searched = true;
                     }
                 }
             }
@@ -295,7 +314,8 @@ namespace OutpostLoop
             return true;
         }
 
-        private bool CanReachCache(int index) => Vector2.Distance(Player, CachePoints[index]) <= 1.65f &&
+        private bool CanReachCache(int index) => (Survival == null || Survival.caches[index].active) &&
+            Vector2.Distance(Player, CachePoints[index]) <= 1.65f &&
             ClearRunLine(Player, CachePoints[index]);
 
         /// <summary>装备撬棍后才可近战。攻击有间隔、距离、方向和障碍约束。</summary>

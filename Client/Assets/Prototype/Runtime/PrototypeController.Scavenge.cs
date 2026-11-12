@@ -58,7 +58,12 @@ namespace OutpostLoop
 
         private void BeginScavenge(int seed)
         {
-            scavengeRun = new ScavengeRun(seed, scavengeTown);
+            scavengeRun = survivalMode
+                ? survivalResume != null ? ScavengeRun.RestoreSurvival(survivalResume) :
+                    new ScavengeRun(seed, true, ScavengeSurvival.Create(seed))
+                : new ScavengeRun(seed, scavengeTown);
+            survivalResume = null;
+            if (survivalMode) ResetSurvivalPresentation();
             scavengePaused = false;
             storageOpen = false;
             placingShelter = false;
@@ -70,6 +75,7 @@ namespace OutpostLoop
 
         private void LeaveScavenge()
         {
+            if (survivalMode) ReleaseSurvivalPresentation();
             Release(scavengeRoot.gameObject);
             scavengeRoot.gameObject.SetActive(false);
             scavengeRoot = null;
@@ -89,6 +95,7 @@ namespace OutpostLoop
         private void PollScavenge()
         {
             if (UtilityWindowOpen) return;
+            if (survivalMode) { PollSurvival(); return; }
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
             if (scavengeRun.Outcome != ScavengeOutcome.Exploring)
@@ -196,8 +203,17 @@ namespace OutpostLoop
                 if (patrol.Facing != Vector2.zero) model.rotation = Quaternion.LookRotation(At(patrol.Facing, 0));
             }
             for (int i = 0; i < scavengeCrates.Length; i++)
+            {
+                if (survivalMode)
+                {
+                    var cache = scavengeRun.Survival.caches[i];
+                    scavengeCrates[i].gameObject.SetActive(cache.active);
+                    scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
+                    continue;
+                }
                 scavengeCrates[i].localScale = new Vector3(1.3f,
                     scavengeRun.IsSearched(i) && scavengeRun.VisibleContents(i) == ScavengeItem.None ? .33f : .66f, .82f);
+            }
             shelterPreview.gameObject.SetActive(placingShelter);
             bool building = scavengeRun.ShelterRemaining > 0;
             shelterWorksite.gameObject.SetActive(scavengeRun.Shelter.HasValue && building);
@@ -210,6 +226,7 @@ namespace OutpostLoop
             SyncDefenseModels();
             UpdateScavengeCamera(snapCamera);
             UpdateTownWeather();
+            if (survivalMode) SyncSurvivalPresentation();
         }
 
         /// <summary>用临时几何体表达开阔路、仓门、矮墙和侧门。</summary>
@@ -269,10 +286,14 @@ namespace OutpostLoop
                     scavengeTown && ScavengeTown.IsFastPatrol(i) ? gold : rust);
                 Shape("敌人朝向", scavengeEnemies[i], PrimitiveType.Cube, new Vector3(0, .55f, .43f),
                     new Vector3(.65f, .15f, .45f), gold);
+                if (survivalMode)
+                    Shape("感染者头部", scavengeEnemies[i], PrimitiveType.Sphere, new Vector3(0, .89f, 0),
+                        new Vector3(.46f, .47f, .46f), rust);
             }
             CreateShelterModels(steel, gold, canvas);
             CreateDefenseModels(steel, gold);
             if (scavengeTown) CreateTownActorsAndWeather(canvas, teal);
+            if (survivalMode) CreateSurvivalPresentation();
         }
 
         /// <summary>用临时轮廓区分药房入口和废车，尺寸对齐通行障碍。</summary>
@@ -417,6 +438,7 @@ namespace OutpostLoop
             var run = scavengeRun;
             float width = Screen.width / scale;
             float height = Screen.height / scale;
+            if (survivalMode) { DrawSurvival(width, height); return; }
             if (run.Outcome != ScavengeOutcome.Exploring || scavengePaused)
             {
                 DrawScavengeSpace(width, height);
@@ -520,19 +542,24 @@ namespace OutpostLoop
                 if (!scavengeRun.IsDiscovered(i)) continue;
                 var marker = ScavengeMapPoint(map, scavengeRun.CachePoints[i]);
                 bool searched = scavengeRun.IsSearched(i);
+                bool empty = survivalMode ? scavengeRun.Survival.caches[i].items.Count == 0 :
+                    scavengeRun.VisibleContents(i) == ScavengeItem.None;
                 Color color = !searched ? new Color(.65f, .8f, .91f) :
-                    scavengeRun.VisibleContents(i) == ScavengeItem.None ? new Color(.55f, .55f, .55f) : new Color(.97f, .67f, .29f);
+                    empty ? new Color(.55f, .55f, .55f) : new Color(.97f, .67f, .29f);
                 ScavengeFill(new Rect(marker - Vector2.one * 2.5f, Vector2.one * 5), color);
             }
             if (scavengeTown && scavengeRun.MedicineCache >= 0 && !scavengeRun.MedicineFound)
                 ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.CachePoints[scavengeRun.MedicineCache]) -
                     Vector2.one * 3, Vector2.one * 6), new Color(.9f, .65f, 1f));
-            if (scavengeRun.ExitKnown)
+            if (scavengeRun.ExitKnown || (survivalMode && scavengeRun.Survival.Warning))
                 ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.ExitPoint) - Vector2.one * 4, Vector2.one * 8),
                     new Color(.29f, .80f, .74f));
             if (scavengeRun.Shelter is Vector2 shelter)
                 ScavengeFill(new Rect(ScavengeMapPoint(map, shelter) - Vector2.one * 3, Vector2.one * 6),
                     new Color(.66f, .88f, .52f));
+            if (survivalMode && scavengeRun.Survival.baseRoom >= 0)
+                ScavengeFill(new Rect(ScavengeMapPoint(map, SurvivalRooms.Footprint(scavengeRun.Survival.baseRoom).center) -
+                    Vector2.one * 3, Vector2.one * 6), new Color(.66f, .88f, .52f));
             ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.Player) - Vector2.one * 3, Vector2.one * 6),
                 new Color(1, .94f, .7f));
         }
