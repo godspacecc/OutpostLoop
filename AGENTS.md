@@ -11,3 +11,4 @@
 - 测试只运行真实非空 testClass 或完整 testMethod，声明范围和最大数量，includePassingTests=true；CLI 用完整 XML 保留通过项。禁止全套或无效筛选回退。
 - 不自动创建 worktree。修复并验证后使用中文提交并推送独立 OutpostLoop 仓库；用户于2026-11-07明确授权建仓和推送，不得使用 FirepowerLoop origin 代替。
 - 进度入口 Docs/执行总清单.md。整版玩法方案确认后，可在确认范围内自主安排开发批次和技术细节。
+- 项目使用 Codex Game Studios 的技能和岗位资料。涉及制作计划、开发、验收与交付时，先读 `.agents/skills/outpostloop-development/SKILL.md` 和当前里程碑。Codex 自行拆任务、按需切换岗位、修复并复验，直至达到交付条件。现有项目规则和用户确认范围优先于上游技能的模板路径、默认审批与任务前置格式。
