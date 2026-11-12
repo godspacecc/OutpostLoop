@@ -38,10 +38,13 @@ namespace OutpostLoop.Tests
             architecture.RegisterUtility<IDisplayResolutionApplier>(new DisplaySpy());
             try
             {
+                GameObject.Find("TrialsEntry").GetComponent<Button>().onClick.Invoke();
                 GameObject.Find("SettingsEntry").GetComponent<Button>().onClick.Invoke();
                 var ctrl = UIHelper.GetUICtrl<PrototypeSettingsCtrl>();
                 Assert.IsTrue(ctrl.IsShow());
                 GameObject.Find("PrimaryAction").GetComponent<Button>().onClick.Invoke();
+                float deadline = Time.realtimeSinceStartup + 15;
+                while (Object.FindObjectOfType<PrototypeController>().IsCrossing && Time.realtimeSinceStartup < deadline) yield return null;
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 architecture.GetModel<LocalizationModel>().SetLanguageCode("en");
                 Assert.AreEqual("Defense trial  →", GameObject.Find("PrimaryAction").GetComponentInChildren<Text>().text);
@@ -50,6 +53,8 @@ namespace OutpostLoop.Tests
                 Assert.IsFalse(architecture.GetSystem<DisplayPreviewTransaction>().IsActive);
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 GameObject.Find("PrimaryAction").GetComponent<Button>().onClick.Invoke();
+                deadline = Time.realtimeSinceStartup + 15;
+                while (Object.FindObjectOfType<PrototypeController>().IsCrossing && Time.realtimeSinceStartup < deadline) yield return null;
                 Assert.IsFalse(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 UIHelper.ShowUI<PrototypeSettingsCtrl>();
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);

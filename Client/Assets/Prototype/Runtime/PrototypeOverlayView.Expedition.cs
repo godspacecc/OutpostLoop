@@ -34,7 +34,7 @@ namespace OutpostLoop
 
             Fill("LegacyRule", 96, 874, 650, 2, line);
             var legacy = Button(startStage, font, "PrimaryAction", Game.Loc.T("PreviewText12"), new Vector2(260, 60),
-                new Vector2(226, -925), new Vector2(0, 1), controller.ActOnModal);
+                new Vector2(226, -925), new Vector2(0, 1), () => controller.CrossToWorld(controller.ActOnModal));
             legacy.fontSize = 25;
             legacyBalance = Label(StartRect("StartingBalance", 380, 890, 366, 70), font, "Label",
                 new Vector2(366, 70), Vector2.zero, 21);
@@ -45,7 +45,7 @@ namespace OutpostLoop
         {
             var rules = ExpeditionMapRules.For(map);
             var label = Button(startStage, font, "Depart" + map, $"{rules.Name} · {rules.Era}  →", new Vector2(650, 48),
-                new Vector2(421, -y), new Vector2(0, 1), () => controller.Depart(map));
+                new Vector2(421, -y), new Vector2(0, 1), () => controller.CrossToWorld(() => controller.Depart(map)));
             label.fontSize = 25;
             StartText(font, map + "Basic", $"基础 · {rules.BasicObjective}  +{rules.BasicFunds} 资金",
                 96, y + 25, 650, 32, 23, mint);

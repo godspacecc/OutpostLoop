@@ -135,6 +135,7 @@ namespace OutpostLoop
         }
         private void OnDisable()
         {
+            CancelCrossing();
             EnhancedTouchSupport.Disable();
             ignoreTouchUntilRelease = true;
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
@@ -169,7 +170,7 @@ namespace OutpostLoop
                 ActionId = Game.HotKeyActionIds.ToggleRuntimeLog,
                 Context = Game.HotKeyContext.Global,
                 Priority = 1,
-                CanExecute = () => this != null && isActiveAndEnabled && initialized && Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() != true,
+                CanExecute = () => this != null && isActiveAndEnabled && initialized && !crossing && Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() != true,
                 Execute = () =>
                 {
                     var log = Game.UIHelper.GetUICtrl<PrototypeLogCtrl>();
@@ -420,7 +421,7 @@ namespace OutpostLoop
 
         private void PollInputAndPresent()
         {
-            if(!initialized)return;
+            if(!initialized || crossing)return;
             if (scavengeRoot != null && scavengeRoot.gameObject.activeSelf)
             {
                 PollScavenge();
@@ -662,7 +663,7 @@ namespace OutpostLoop
         }
 
         /// <summary>设置和日志窗口打开时，暂停热键与局内按钮均不响应。</summary>
-        private bool CanTogglePause() => this != null && isActiveAndEnabled && initialized && started &&
+        private bool CanTogglePause() => this != null && isActiveAndEnabled && initialized && started && !crossing &&
             World.Run.Outcome == 0 && !UtilityWindowOpen;
 
         private bool UtilityWindowOpen => Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() == true ||
@@ -1048,6 +1049,7 @@ namespace OutpostLoop
 
         private void OnGUI()
         {
+            if (crossing) return;
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
             if (scavengeRoot != null && scavengeRoot.gameObject.activeSelf)
             {

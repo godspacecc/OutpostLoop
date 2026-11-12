@@ -49,7 +49,14 @@ namespace OutpostLoop.Tests
             var type = typeof(PrototypeController);
             type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(saveDirectory));
             type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            Assert.NotNull(GameObject.Find("CosmicSpace"));
+            Assert.IsNull(GameObject.Find("TrialDestinations"), "其他试玩不应遮住默认空间菜单");
             Click("StartSurvival");
+            Assert.IsTrue(controller.IsCrossing);
+            Assert.NotNull(GameObject.Find("WorldCrossing"));
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            Assert.IsNull(GameObject.Find("WorldCrossing"));
             yield return null;
             var field = type.GetField("scavengeRun", flags);
             var poll = type.GetMethod("PollScavenge", flags);
@@ -90,6 +97,7 @@ namespace OutpostLoop.Tests
                 yield return null;
                 Assert.IsNull(field.GetValue(controller));
                 Click("ContinueSurvival");
+            yield return WaitForCrossing();
                 yield return null;
                 var resumed = (ScavengeRun)field.GetValue(controller);
                 Assert.NotNull(resumed);
@@ -123,6 +131,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             Click("StartScavengeTown");
+            yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
             var type = typeof(PrototypeController);
@@ -196,6 +205,7 @@ namespace OutpostLoop.Tests
             var originalColor = camera.backgroundColor;
             var originalRotation = camera.transform.rotation;
             Click("StartScavenge");
+            yield return WaitForCrossing();
             yield return null;
             var type = typeof(PrototypeController);
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -268,6 +278,7 @@ namespace OutpostLoop.Tests
             try
             {
                 Click("StartScavenge");
+            yield return WaitForCrossing();
                 yield return null;
                 var run = (ScavengeRun)runField.GetValue(controller);
                 void Walk(Vector2 point)
@@ -321,6 +332,7 @@ namespace OutpostLoop.Tests
                 type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
                 Assert.IsNull(runField.GetValue(controller));
                 Click("StartScavenge");
+            yield return WaitForCrossing();
                 Assert.AreEqual(0, ((ScavengeRun)runField.GetValue(controller)).Count);
             }
             finally { InputSystem.RemoveDevice(keyboard); }
@@ -334,6 +346,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             Click("StartScavenge");
+            yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -388,6 +401,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             Click("StartScavenge");
+            yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
             typeof(PrototypeController).GetMethod("BeginScavenge", System.Reflection.BindingFlags.NonPublic |
@@ -454,6 +468,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             Click("StartScavenge");
+            yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
             var field = typeof(PrototypeController).GetField("scavengeRun",
@@ -508,6 +523,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             Click("StartScavenge");
+            yield return WaitForCrossing();
             yield return null;
             var character = GameObject.Find("探索角色");
             Assert.NotNull(character);
@@ -550,6 +566,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             Click("StartScavenge");
+            yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -591,11 +608,14 @@ namespace OutpostLoop.Tests
             var profile = new ExpeditionProfile(PrototypeExpeditionTests.ProfileDirectory());
             Game.Game.Interface.RegisterUtility(profile);
             yield return null;
+            Click("TrialsEntry");
             Assert.IsFalse(GameObject.Find("DepartIndustrial").GetComponent<Button>().interactable);
             Assert.IsFalse(GameObject.Find("TrainCommander").GetComponent<Button>().interactable);
             Click("DepartIndustrial");
+            yield return WaitForCrossing();
             Assert.IsNull(controller.World.Expedition);
             Click("DepartWilderness");
+            yield return WaitForCrossing();
             var world = controller.World;
             Assert.AreEqual(ExpeditionMap.Wilderness, world.Expedition.Map);
             Assert.IsFalse(GameObject.Find("OpenReturn").GetComponent<Button>().interactable);
@@ -604,6 +624,7 @@ namespace OutpostLoop.Tests
             yield return null;
             Assert.AreEqual(elapsed, world.Run.Elapsed);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             PrototypeExpeditionTests.ResearchSurvey(world);
             PrototypeExpeditionTests.Survive(world);
             yield return null;
@@ -614,30 +635,37 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(0, profile.Funds);
             Click("OpenReturn");
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.AreEqual(ExpeditionEnd.Returned, world.Expedition.End);
             Assert.AreEqual(25, profile.Funds);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.IsTrue(GameObject.Find("DepartWilderness").GetComponent<Button>().interactable);
             Assert.AreEqual(25, profile.Funds);
             Assert.IsTrue(GameObject.Find("DepartIndustrial").GetComponent<Button>().interactable);
             Assert.IsFalse(GameObject.Find("DepartBeacon").GetComponent<Button>().interactable);
             Click("DepartIndustrial");
+            yield return WaitForCrossing();
             var workshop = controller.World;
             Assert.AreEqual(ExpeditionMap.Industrial, workshop.Expedition.Map);
             PrototypeExpeditionTests.OpenWorkshop(workshop);
             yield return null;
             Click("OpenReturn");
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.AreEqual(75, profile.Funds);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.IsTrue(GameObject.Find("DepartBeacon").GetComponent<Button>().interactable);
             Click("DepartBeacon");
+            yield return WaitForCrossing();
             var beacon = controller.World;
             Assert.AreEqual(ExpeditionMap.Beacon, beacon.Expedition.Map);
             PrototypeExpeditionTests.CompleteBeacon(beacon);
             yield return null;
             Assert.AreEqual(295, profile.Funds);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Click("TrainScout");
             Assert.IsTrue(profile.ScoutTrained);
             Assert.AreEqual(220, profile.Funds);
@@ -699,6 +727,7 @@ namespace OutpostLoop.Tests
             Assert.IsNotNull(GameObject.Find("BaseArtwork")?.GetComponent<RawImage>()?.texture);
             Assert.IsNull(GameObject.Find("OpenPause"));
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.IsFalse(world.Run.Paused);
             Assert.AreEqual(800, world.Run.Funds);
             Assert.IsNotNull(GameObject.Find("Commander"));
@@ -729,6 +758,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(600, world.Run.Funds);
             Assert.AreEqual(1, world.Run.Levels[1]);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Click("OpenConstruction");
             Click("BuildTurret");
             Assert.IsTrue(ClickCell(controller, FindPlacement(world, ExpansionKind.Turret)));
@@ -743,14 +773,17 @@ namespace OutpostLoop.Tests
             Click("RestartRun");
             Assert.AreSame(world, controller.World, "重开需二次确认");
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.AreSame(world, controller.World);
             Assert.IsFalse(world.Run.Paused);
 
             world.Run.Damage(world.Run.Health);
             yield return null;
+            if (GameObject.Find("PrimaryAction") == null) Click("TrialsEntry");
             Assert.IsNotNull(GameObject.Find("PrimaryAction"));
             Assert.AreEqual(0, wallet.Wins);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.AreNotSame(world, controller.World);
             Assert.AreNotEqual(world.Seed, controller.World.Seed);
             Assert.IsTrue(controller.World.Run.Paused);
@@ -758,6 +791,7 @@ namespace OutpostLoop.Tests
             Assert.IsNull(controller.World.Headquarters);
 
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             ClickBase(controller, 4);
             var victory = controller.World;
             while (victory.Wave < 6 || victory.WaitingEnemies > 0)
@@ -772,6 +806,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(1, wallet.Wins);
             Assert.AreEqual(900, new PrototypeWallet(walletDirectory).StartingFunds);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.AreEqual(900, controller.World.Run.Funds);
             Assert.IsNull(controller.World.Headquarters);
             yield return new ExitPlayMode();
@@ -786,6 +821,7 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             var camera = controller.GetComponentInChildren<Camera>();
             Assert.IsFalse(camera.orthographic);
             var openingCamera = camera.transform.position;
@@ -855,6 +891,7 @@ namespace OutpostLoop.Tests
                 for (int i = 0; i < 5; i++) yield return null;
                 Assert.Less(Vector3.Distance(home, camera.transform.position), .001f, "暂停时不能移动或缩放镜头");
                 Click("PrimaryAction");
+            yield return WaitForCrossing();
                 for (int i = 0; i < 5; i++) yield return null;
                 Assert.Less(camera.transform.position.x, home.x);
                 controller.Restart(false);
@@ -879,6 +916,7 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             Click("DepartWilderness");
+            yield return WaitForCrossing();
             StringAssert.Contains("方向键平移镜头", GameObject.Find("ExpeditionGuide").transform.Find("Controls").GetComponent<Text>().text);
             var camera = controller.GetComponentInChildren<Camera>();
             var home = camera.transform.position;
@@ -942,6 +980,7 @@ namespace OutpostLoop.Tests
             try
             {
                 Click("DepartWilderness");
+            yield return WaitForCrossing();
                 var controls = GameObject.Find("ExpeditionGuide").transform.Find("Controls").GetComponent<Text>();
                 StringAssert.Contains("两指拖动平移", controls.text);
                 Assert.LessOrEqual(controls.preferredHeight, controls.rectTransform.rect.height, "完整镜头提示应在面板内");
@@ -982,6 +1021,7 @@ namespace OutpostLoop.Tests
                 yield return QueueTouchPair(screen, center - wide, center + wide, UnityEngine.InputSystem.TouchPhase.Moved);
                 Assert.AreEqual(paused, camera.transform.position, "暂停时屏蔽镜头手势");
                 Click("PrimaryAction");
+            yield return WaitForCrossing();
                 yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Moved);
                 Assert.AreEqual(paused, camera.transform.position, "暂停前的触点必须松开再起手");
                 yield return QueueTouchPair(screen, center - gap, center + gap, UnityEngine.InputSystem.TouchPhase.Ended);
@@ -1030,6 +1070,7 @@ namespace OutpostLoop.Tests
             try
             {
                 Click("PrimaryAction");
+            yield return WaitForCrossing();
                 Click("OpenConstruction");
                 Click("BuildHeadquarters");
                 var cell = new Vector2Int(-4, 0);
@@ -1106,6 +1147,7 @@ namespace OutpostLoop.Tests
                         yield return null;
                     }
                     Click("PrimaryAction");
+            yield return WaitForCrossing();
                     // 固定全图取景，使远处黑区与合法占地在测试窗口中可触及。
                     typeof(PrototypeController).GetField("mapView", System.Reflection.BindingFlags.Instance |
                         System.Reflection.BindingFlags.NonPublic).SetValue(controller, 1f);
@@ -1239,6 +1281,7 @@ namespace OutpostLoop.Tests
             var controller = Object.FindObjectOfType<PrototypeController>();
             var world = controller.World;
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             ClickBase(controller, -4);
             Click("BuildExtractor");
             var cell = FindPlacement(world, ExpansionKind.Extractor);
@@ -1262,6 +1305,7 @@ namespace OutpostLoop.Tests
             yield return null;
             Assert.AreEqual(remaining, station.ProductionLeft);
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             PrototypeWorldTests.Advance(world, 26);
             yield return null;
             Assert.NotNull(station.Personnel);
@@ -1300,6 +1344,7 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             Click("StartOldHarbor");
+            yield return WaitForCrossing();
             var harbor = controller.World;
             Assert.IsTrue(harbor.IsOldHarbor);
             Assert.IsNotNull(GameObject.Find("HarborBasin"));
@@ -1320,9 +1365,11 @@ namespace OutpostLoop.Tests
             harbor.Run.Damage(harbor.Run.Health);
             yield return null;
             Click("PrimaryAction");
+            yield return WaitForCrossing();
             Assert.IsFalse(controller.World.IsOldHarbor);
             Assert.IsNull(GameObject.Find("HarborBasin"));
             Click("StartOldHarbor");
+            yield return WaitForCrossing();
             Assert.IsTrue(controller.World.IsOldHarbor);
             Assert.AreNotEqual(harbor.Seed, controller.World.Seed);
             Assert.IsNull(controller.World.Headquarters);
@@ -1348,10 +1395,24 @@ namespace OutpostLoop.Tests
             return controller.ActOnBattlefield(camera.WorldToScreenPoint(new Vector3(point.x, 0, point.y)));
         }
 
+        /// <summary>等待真实穿越流程交还控制，不跳过动画、不使用测试专用启动口。</summary>
+        private static IEnumerator WaitForCrossing()
+        {
+            var owner = Object.FindObjectOfType<PrototypeController>();
+            float deadline = Time.realtimeSinceStartup + 15;
+            while (owner != null && owner.IsCrossing && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsFalse(owner != null && owner.IsCrossing, "穿越未在限定时间内结束");
+        }
+
         /// <summary>通过活动 EventSystem 分发 UGUI 左键事件，不绕过按钮监听器调用玩法。</summary>
         private static void Click(string name)
         {
             var target = GameObject.Find(name);
+            if (target == null && GameObject.Find("TrialsEntry") != null)
+            {
+                Click("TrialsEntry");
+                target = GameObject.Find(name);
+            }
             Assert.NotNull(target, name + " 应在当前窗口显示");
             Assert.NotNull(target.GetComponent<Button>());
             Assert.NotNull(EventSystem.current);

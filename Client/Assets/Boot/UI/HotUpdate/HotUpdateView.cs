@@ -32,13 +32,15 @@ namespace Boot.UI
         [SerializeField] private Button _copyDetailsButton;
         [SerializeField] private Button _quitButton;
 
-        [Header("信标主题")]
+        [Header("启动阶段提示（兼容旧预制体）")]
         // 主题控件是表现扩展，启动协议和独立测试视图只依赖原有必需引用。
         [SerializeField] private BootBeaconGraphic _beacon;
         [SerializeField] private Text _stageText;
         [SerializeField] private GameObject _busyIndicator;
         [SerializeField] private Text _copyNotice;
-        private static readonly Color SignalColor = new Color32(139, 214, 187, 255);
+        // 仅在启动中断时出现的恢复面板，正常抵达时不遮挡空间。
+        [SerializeField] private GameObject _recoveryShade;
+        private static readonly Color SignalColor = new Color32(193, 217, 235, 255);
         private static readonly Color WarningColor = new Color32(241, 188, 130, 255);
 
         public event Action OnRetryClicked;
@@ -109,7 +111,7 @@ namespace Boot.UI
 
         public void RenderBusy(string status)
         {
-            PresentSignal("启动检查", SignalColor, true);
+            PresentSignal("正在前往空间", SignalColor, true);
             _titleText.text = "正在启动";
             _titleText.gameObject.SetActive(false);
             _guidanceText.text = string.Empty;
@@ -125,7 +127,7 @@ namespace Boot.UI
 
         public void RenderNormal(string status)
         {
-            PresentSignal("正在启动", SignalColor, true);
+            PresentSignal("正在抵达空间", SignalColor, true);
             _titleText.text = "启动中";
             _titleText.gameObject.SetActive(false);
             _guidanceText.text = string.Empty;
@@ -160,7 +162,7 @@ namespace Boot.UI
                 throw new ArgumentNullException(nameof(failure));
             }
 
-            PresentSignal("启动中断", WarningColor, false);
+            PresentSignal("启动中断", WarningColor, false, true);
             _titleText.text = failure.PlayerTitle;
             _titleText.gameObject.SetActive(true);
             _guidanceText.text = failure.PlayerGuidance;
@@ -184,9 +186,19 @@ namespace Boot.UI
             }
         }
 
-        /// <summary>只切换信标、阶段文案和辅助提示，真实进度仍由下载事件写入。</summary>
-        private void PresentSignal(string stage, Color tint, bool checking)
+        /// <summary>只切换阶段文案和辅助提示（旧信标引用仅兼容测试预制体），真实进度仍由下载事件写入。</summary>
+        private void PresentSignal(string stage, Color tint, bool checking, bool failure = false)
         {
+            if (_recoveryShade)
+            {
+                _recoveryShade.SetActive(failure);
+                if (_stageText)
+                {
+                    var position = _stageText.rectTransform.anchoredPosition;
+                    _stageText.rectTransform.anchoredPosition = new Vector2(position.x, failure ? -372 : -533);
+                    _stageText.fontSize = failure ? 15 : 26;
+                }
+            }
             if (_beacon) _beacon.color = tint;
             if (_stageText)
             {

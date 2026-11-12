@@ -198,6 +198,7 @@ namespace OutpostLoop
         private RectTransform startStage, sessionPanel;
         private GameObject startScreen;
         private Button startUpdateEntry;
+        private Button sessionSettingsEntry;
         private Text startUpdateVersion, startUpdateStatus;
 
         internal static PrototypeOverlayView Create(string name)
@@ -213,10 +214,11 @@ namespace OutpostLoop
         internal void BuildModal(Font font, PrototypeController controller)
         {
             BuildStartScreen(font, controller);
-            Button(transform, font, "SettingsEntry", Loc.T("SettingsTitle"), new Vector2(180, 48),
-                new Vector2(-115, -40), new Vector2(1, 1), () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
+            sessionSettingsEntry = Button(transform, font, "SettingsEntry", Loc.T("SettingsTitle"), new Vector2(180, 48),
+                new Vector2(-115, -40), new Vector2(1, 1), () => UIHelper.ShowUI<PrototypeSettingsCtrl>()).GetComponentInParent<Button>();
             var updateLabel = Button(transform, font, "StartUpdateEntry", Loc.T("SettingsCheck"), new Vector2(270, 48),
-                new Vector2(-356, -40), new Vector2(1, 1), OpenUpdateCheck);
+                new Vector2(-170, -40), new Vector2(1, 1), OpenUpdateCheck);
+            StyleCosmicButton(updateLabel, 22);
             startUpdateEntry = updateLabel.GetComponentInParent<Button>();
             startUpdateVersion = Label(startUpdateEntry.transform, font, "StartUpdateVersion", new Vector2(270, 28),
                 new Vector2(0, -42), 16);
@@ -344,10 +346,14 @@ namespace OutpostLoop
             bool starting = mode == PrototypeOverlay.Start;
             startScreen.SetActive(starting);
             startUpdateEntry.gameObject.SetActive(starting);
+            sessionSettingsEntry.gameObject.SetActive(!starting);
             sessionPanel.gameObject.SetActive(!starting);
             if (starting)
             {
-                startStage.Find("ContinueSurvival")?.gameObject.SetActive(controller.HasSurvivalSave);
+                var resume = startStage.Find("ContinueSurvival").GetComponent<Button>();
+                resume.interactable = controller.HasSurvivalSave;
+                resume.GetComponentInChildren<Text>().color = controller.HasSurvivalSave
+                    ? new Color32(226,235,244,255) : new Color32(104,121,139,255);
                 var snapshot = Game.Game.Interface.GetSystem<ResourceUpdateSystem>().Snapshot;
                 startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
@@ -514,60 +520,87 @@ namespace OutpostLoop
             UIHelper.ShowUI<PrototypeSettingsCtrl>().CheckUpdateFromStart();
         }
 
-        /// <summary>用已确认的构图搭建开始页，基地画面跟随 Main 场景引用。</summary>
+        /// <summary>空间即开始页；旧试玩保留在次级窗口，不参与开场视觉构图。</summary>
         private void BuildStartScreen(Font font, PrototypeController controller)
         {
-            var ink = new Color32(244, 238, 224, 255);
-            var mint = new Color32(147, 214, 189, 255);
-            var muted = new Color32(170, 190, 177, 255);
-            var line = new Color32(60, 83, 73, 255);
+            var ink = new Color32(230, 237, 244, 255);
+            var silver = new Color32(186, 207, 224, 255);
+            var muted = new Color32(158, 178, 198, 255);
+            var line = new Color32(45, 61, 79, 255);
             startScreen = new GameObject("StartScreenBackground", typeof(RectTransform));
             startScreen.transform.SetParent(transform, false);
             var backgroundRect = (RectTransform)startScreen.transform;
             backgroundRect.anchorMin = Vector2.zero;
             backgroundRect.anchorMax = Vector2.one;
             backgroundRect.offsetMin = backgroundRect.offsetMax = Vector2.zero;
-            startScreen.AddComponent<Image>().color = new Color32(16, 26, 24, 255);
+            Boot.UI.CosmicBackdrop.Create(backgroundRect, "Space");
             startStage = Rect("StartLayout", backgroundRect, new Vector2(.5f,.5f), new Vector2(1920,1080), Vector2.zero);
-            StartText(font, "Brand", "OUTPOST LOOP", 96, 55, 420, 48, 23, mint, FontStyle.Bold);
-            StartText(font, "Brief", Loc.T("PreviewText9"), 1670, 55, 160, 48, 22, mint, alignment: TextAnchor.MiddleRight);
-            Fill("HeaderRule", 96, 122, 1728, 2, line);
-            BuildDeparture(font, controller, ink, mint, muted, line);
+            StartText(font, "Brand", "O U T P O S T   L O O P", 132, 210, 900, 84, 48, ink);
+            StartText(font, "SpaceCaption", "星海中的残存空间", 138, 304, 600, 40, 22, muted);
+            CosmicMenuButton(font, "StartSurvival", "开始游戏", 435,
+                () => controller.CrossToWorld(controller.StartSurvival));
+            CosmicMenuButton(font, "ContinueSurvival", "继续游戏", 521,
+                () => controller.CrossToWorld(controller.ContinueSurvival));
+            CosmicMenuButton(font, "SettingsEntry", "设置", 607, () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
+            CosmicMenuButton(font, "QuitGame", "退出", 693, QuitFromSpace);
+            StartText(font, "JourneyCaption", "第一趟行动 · 三天生存", 144, 818, 650, 40, 21, muted);
 
-            Fill("ArtFrame", 796, 160, 1028, 798, line);
-            var hero = StartRect("BaseArtwork", 798, 162, 1024, 794).gameObject.AddComponent<RawImage>();
-            hero.texture = controller.StartArtwork;
-            hero.color = hero.texture != null ? new Color(.84f, .89f, .85f) : (Color)new Color32(35, 57, 48, 255);
-            hero.raycastTarget = false;
-            // 按面板比例裁取中央构图，并避开原图底边的说明。
-            if (hero.texture != null)
-            {
-                float cropWidth = 1024f / 794f * .90f * hero.texture.height / hero.texture.width;
-                hero.uvRect = new Rect((1 - cropWidth) / 2, .06f, cropWidth, .90f);
-            }
-            Fill("SectorPlate", 833, 198, 166, 47, new Color32(21, 39, 33, 230));
-            StartText(font, "Sector", "SECTOR 01", 850, 198, 140, 47, 19, mint, FontStyle.Bold);
-            Fill("ArtworkCaptionPlate", 798, 883, 1024, 73, new Color32(17, 30, 25, 218));
-            StartText(font, "ArtworkCaption", Loc.T("PreviewText11"), 833, 891, 420, 50, 22, ink);
-            var harbor = Button(startStage, font, "StartOldHarbor", "旧港河堤 · 守城试玩", new Vector2(326, 52),
-                new Vector2(1623, -918), new Vector2(0, 1), controller.StartOldHarbor);
-            harbor.fontSize = 24;
-            var scavenge = Button(startStage, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(326, 52),
-                new Vector2(1279, -918), new Vector2(0, 1), controller.StartScavenge);
-            scavenge.fontSize = 24;
-            var town = Button(startStage, font, "StartScavengeTown", "大镇与镇郊 · 探索试玩", new Vector2(326, 52),
-                new Vector2(1623, -850), new Vector2(0, 1), controller.StartScavengeTown);
-            town.fontSize = 24;
-            var survival = Button(startStage, font, "StartSurvival", "第一趟行动 · 三天生存", new Vector2(326, 52),
-                new Vector2(1279, -850), new Vector2(0, 1), controller.StartSurvival);
-            survival.fontSize = 24;
-            var resume = Button(startStage, font, "ContinueSurvival", "继续本趟生存", new Vector2(326, 52),
-                new Vector2(1279, -782), new Vector2(0, 1), controller.ContinueSurvival);
-            resume.fontSize = 24;
-            resume.transform.parent.gameObject.SetActive(controller.HasSurvivalSave);
+            // 独立次级窗口保存已有试玩按钮与进度字段，避免改变已验证的玩法入口。
+            var mainStage = startStage;
+            var trials = Rect("TrialDestinations", mainStage, new Vector2(.5f,.5f), new Vector2(1920,1080), Vector2.zero);
+            trials.gameObject.AddComponent<Image>().color = new Color32(9, 17, 28, 248);
+            startStage = trials;
+            BuildDeparture(font, controller, ink, silver, muted, line);
+            StartText(font, "TrialsTitle", "其他试玩", 1000, 200, 680, 64, 42, ink);
+            StartText(font, "TrialsNote", "已有独立试玩入口", 1000, 280, 680, 60, 24, muted);
+            Button(trials, font, "StartOldHarbor", "旧港河堤 · 守城试玩", new Vector2(600, 70),
+                new Vector2(1320, -430), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartOldHarbor));
+            Button(trials, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(600, 70),
+                new Vector2(1320, -530), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavenge));
+            Button(trials, font, "StartScavengeTown", "大镇与镇郊 · 探索试玩", new Vector2(600, 70),
+                new Vector2(1320, -630), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavengeTown));
+            Button(trials, font, "CloseTrials", "返回空间", new Vector2(300, 60),
+                new Vector2(1600,-930), new Vector2(0,1), () => trials.gameObject.SetActive(false));
+            startStage = mainStage;
+            var trialEntry = Button(mainStage, font, "TrialsEntry", "其他试玩", new Vector2(220,50),
+                new Vector2(1715,-1008), new Vector2(0,1), () => trials.gameObject.SetActive(true));
+            StyleCosmicButton(trialEntry, 20);
+            trials.SetAsLastSibling();
+            trials.gameObject.SetActive(false);
+        }
 
-            Fill("FooterRule", 96, 992, 1728, 2, line);
-            StartText(font, "Controls", Loc.T("CommanderControls"), 96, 1003, 800, 50, 20, muted);
+        /// <summary>文字菜单保留足够点击面积，悬停与选中由 UGUI 统一处理。</summary>
+        private void CosmicMenuButton(Font font, string name, string title, float y, UnityEngine.Events.UnityAction action)
+        {
+            var label = Button(startStage, font, name, title, new Vector2(430,68),
+                new Vector2(344,-y), new Vector2(0,1), action);
+            StyleCosmicButton(label, 32);
+        }
+
+        private static void StyleCosmicButton(Text label, int size)
+        {
+            label.fontSize = size;
+            label.alignment = TextAnchor.MiddleLeft;
+            label.color = new Color32(226,235,244,255);
+            var button = label.GetComponentInParent<Button>();
+            button.image.color = Color.white;
+            var colors = button.colors;
+            colors.normalColor = new Color(.05f,.09f,.14f,.22f);
+            colors.highlightedColor = new Color(.25f,.37f,.48f,.7f);
+            colors.selectedColor = colors.highlightedColor;
+            colors.pressedColor = new Color(.38f,.52f,.64f,.8f);
+            colors.disabledColor = new Color(.05f,.09f,.14f,.1f);
+            button.colors = colors;
+        }
+
+        /// <summary>编辑器退出 Play；独立程序沿 Unity 正常退出路径关闭。</summary>
+        private static void QuitFromSpace()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
 
         // 开始页按 1920×1080 的左上角坐标布置，整页随安全区缩放。

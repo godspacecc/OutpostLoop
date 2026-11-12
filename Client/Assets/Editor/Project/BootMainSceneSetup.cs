@@ -55,12 +55,12 @@ namespace OutpostLoop.Editor
         }
 
         private static readonly Color BootInk = new Color32(237, 244, 239, 255);
-        private static readonly Color BootMuted = new Color32(158, 179, 170, 255);
-        private static readonly Color BootLine = new Color32(54, 77, 66, 255);
-        private static readonly Color BootMint = new Color32(139, 214, 187, 255);
+        private static readonly Color BootMuted = new Color32(169, 185, 201, 255);
+        private static readonly Color BootLine = new Color32(47, 64, 83, 255);
+        private static readonly Color BootMint = new Color32(193, 217, 235, 255);
         private static readonly Color BootAmber = new Color32(241, 188, 130, 255);
 
-        /// <summary>生成 1280×720 的信标布局，显示与操作继续使用原启动视图的字段。</summary>
+        /// <summary>生成 1280×720 的星海抵达布局，显示与操作继续使用原启动视图的字段。</summary>
         private static void BuildBootVisual(Canvas canvas, Launcher launcher)
         {
             var scaler = canvas.GetComponent<CanvasScaler>();
@@ -68,35 +68,34 @@ namespace OutpostLoop.Editor
             scaler.referenceResolution = new Vector2(1280, 720);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
-            var panel = Child(canvas.gameObject, "SignalPanel");
-            panel.AddComponent<Image>().color = new Color32(15, 25, 21, 255);
+            var panel = Child(canvas.gameObject, "CosmicArrivalPanel");
+            panel.AddComponent<Image>().color = new Color32(9, 15, 24, 255);
+            CosmicBackdrop.Create(panel.transform, "Arrival");
             var view = panel.AddComponent<HotUpdateView>();
             var layout = Centered(panel, "Layout", 1280, 720);
-            Text(layout, "Wordmark", 64, 31, 400, 32, 14, BootInk, TextAnchor.MiddleLeft, "◇  OUTPOST LOOP");
-            Text(layout, "Caption", 1060, 31, 156, 32, 14, BootMuted, TextAnchor.MiddleRight, "BOOT");
+            Text(layout, "Wordmark", 64, 31, 400, 32, 14, BootInk, TextAnchor.MiddleLeft, "O U T P O S T   L O O P");
+            Text(layout, "Caption", 1060, 31, 156, 32, 14, BootMuted, TextAnchor.MiddleRight, "抵达空间");
             Box(layout, "FooterRule", 64, 662, 1152, 1, BootLine);
             Set(view, "_versionText", Text(layout, "Version", 64, 668, 1152, 32, 14, BootMuted,
                 TextAnchor.MiddleLeft, "资源版本：检测中"));
 
-            var signal = Child(layout, "Beacon");
-            Rect(signal, 548, 173, 184, 184);
-            var beacon = signal.AddComponent<BootBeaconGraphic>();
-            beacon.color = BootMint;
-            beacon.raycastTarget = false;
-            Set(view, "_beacon", beacon);
-            Set(view, "_stageText", Text(layout, "Stage", 300, 372, 680, 32, 15, BootMint));
-            Set(view, "_statusText", Text(layout, "Status", 250, 401, 780, 55, 30, BootInk, value: "正在准备启动...", bold: true));
+            // 底部深色薄幕保证启动失败与下载数据同样可读。
+            var shade = Box(layout, "StatusShade", 200, 365, 880, 295, new Color32(6, 12, 22, 220));
+            Set(view, "_recoveryShade", shade);
+            shade.SetActive(false);
+            Set(view, "_stageText", Text(layout, "Stage", 300, 533, 680, 32, 26, BootMint));
+            Set(view, "_statusText", Text(layout, "Status", 250, 574, 780, 32, 17, BootInk, value: "正在准备启动...", bold: false));
             Set(view, "_titleText", Hidden(Text(layout, "Title", 250, 401, 780, 55, 30, BootInk, bold: true)));
             Set(view, "_guidanceText", Hidden(Text(layout, "Guidance", 320, 455, 640, 52, 16, BootMuted)));
             Set(view, "_detailsText", Hidden(Text(layout, "Details", 320, 588, 640, 68, 12, BootMuted, TextAnchor.UpperCenter)));
             Set(view, "_copyNotice", Text(layout, "CopyNotice", 320, 565, 640, 22, 13, BootMint));
 
-            var busy = Box(layout, "BusyIndicator", 604, 502, 72, 2, BootLine);
+            var busy = Box(layout, "BusyIndicator", 604, 620, 72, 2, BootLine);
             Box(busy, "Signal", 24, 0, 24, 2, BootMint);
             Set(view, "_busyIndicator", busy);
 
             var progress = Child(layout, "Progress");
-            var track = Box(progress, "Slider", 405, 478, 470, 4, BootLine);
+            var track = Box(progress, "Slider", 405, 612, 470, 4, BootLine);
             var slider = track.AddComponent<Slider>();
             slider.interactable = false;
             var fill = Child(track, "Fill");
@@ -106,13 +105,13 @@ namespace OutpostLoop.Editor
             slider.fillRect = (RectTransform)fill.transform;
             Set(view, "_progressArea", progress);
             Set(view, "_progressSlider", slider);
-            Set(view, "_progressText", Text(progress, "Percent", 797, 489, 78, 30, 15, BootMint, TextAnchor.MiddleRight, "0%"));
+            Set(view, "_progressText", Text(progress, "Percent", 797, 622, 78, 30, 15, BootMint, TextAnchor.MiddleRight, "0%"));
             progress.SetActive(false);
 
             var stats = Child(layout, "DownloadStats");
             Set(view, "_downloadStatsArea", stats);
-            Set(view, "_sizeText", Text(stats, "Size", 405, 489, 218, 30, 14, BootMuted, TextAnchor.MiddleLeft, "大小: -- / --"));
-            Set(view, "_speedText", Text(stats, "Speed", 623, 489, 174, 30, 14, BootMuted, value: "速度: --"));
+            Set(view, "_sizeText", Text(stats, "Size", 405, 622, 218, 30, 14, BootMuted, TextAnchor.MiddleLeft, "大小: -- / --"));
+            Set(view, "_speedText", Text(stats, "Speed", 623, 622, 174, 30, 14, BootMuted, value: "速度: --"));
             Set(view, "_fileCountText", Hidden(Text(stats, "Files", 405, 518, 470, 24, 14, BootMuted, value: "文件: -- / --")));
             stats.SetActive(false);
 
