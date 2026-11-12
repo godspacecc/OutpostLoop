@@ -17,7 +17,7 @@ foreach ($target in @('client', 'server')) {
 if ([Convert]::ToBase64String([IO.File]::ReadAllBytes("$stage/client/data/tbrule.bytes")) -ne [Convert]::ToBase64String([IO.File]::ReadAllBytes("$stage/server/data/tbrule.bytes"))) { throw 'Client/server data differ' }
 # 只覆盖已校验的生成文件，不删除目录或 Unity meta。
 $pairs = @(
-    @('client/code', 'Client/Assets/Foundation/Config/Generated'),
+    @('client/code', 'Client/Assets/Game/Scripts/Model/Config'),
     @('client/data', 'Client/Assets/Game/Config'),
     @('server/code', 'Server/Generated/Config'),
     @('server/data', 'Server/Config')
