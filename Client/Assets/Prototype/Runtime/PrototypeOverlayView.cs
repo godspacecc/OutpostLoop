@@ -350,10 +350,11 @@ namespace OutpostLoop
             sessionPanel.gameObject.SetActive(!starting);
             if (starting)
             {
-                var resume = startStage.Find("ContinueSurvival").GetComponent<Button>();
-                resume.interactable = controller.HasSurvivalSave;
-                resume.GetComponentInChildren<Text>().color = controller.HasSurvivalSave
-                    ? new Color32(226,235,244,255) : new Color32(104,121,139,255);
+                // 当前只保留一趟行动，续玩入口与首次开始入口互斥。
+                bool hasSave = controller.HasSurvivalSave;
+                startStage.Find("StartSurvival").gameObject.SetActive(!hasSave);
+                startStage.Find("ContinueSurvival").gameObject.SetActive(hasSave);
+                startStage.Find("RestartSurvival").gameObject.SetActive(hasSave);
                 var snapshot = Game.Game.Interface.GetSystem<ResourceUpdateSystem>().Snapshot;
                 startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
@@ -539,8 +540,10 @@ namespace OutpostLoop
             StartText(font, "SpaceCaption", "星海中的残存空间", 138, 304, 600, 40, 22, muted);
             CosmicMenuButton(font, "StartSurvival", "开始游戏", 435,
                 () => controller.CrossToWorld(controller.StartSurvival));
-            CosmicMenuButton(font, "ContinueSurvival", "继续游戏", 521,
+            CosmicMenuButton(font, "ContinueSurvival", "继续游戏", 435,
                 () => controller.CrossToWorld(controller.ContinueSurvival));
+            CosmicMenuButton(font, "RestartSurvival", "放弃并重新开始", 521,
+                () => controller.CrossToWorld(controller.StartSurvival));
             CosmicMenuButton(font, "SettingsEntry", "设置", 607, () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
             CosmicMenuButton(font, "QuitGame", "退出", 693, QuitFromSpace);
             StartText(font, "JourneyCaption", "第一趟行动 · 三天生存", 144, 818, 650, 40, 21, muted);
