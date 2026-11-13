@@ -103,6 +103,7 @@ namespace OutpostLoop
 
         private void ResetSurvivalPresentation()
         {
+            ResetSurvivalJourney();
             survivalContainer = null;
             survivalPackOpen = survivalBuildOpen = false;
             survivalScroll = Vector2.zero;
@@ -245,6 +246,7 @@ namespace OutpostLoop
             if (survivalConfirmNew || scavengeRun.Outcome != ScavengeOutcome.Exploring) return;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
+            if (PollSurvivalJourney(keyboard)) return;
             if (keyboard?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape))
             {
                 if (scavengeRun.Survival.action != SurvivalAction.None && !scavengePaused)
@@ -324,7 +326,7 @@ namespace OutpostLoop
 
         private void OpenSurvivalPack()
         {
-            bool open = !survivalPackOpen;
+            bool open = !survivalPackOpen || survivalContainer != null || scavengeRun.OpenCache >= 0;
             CloseSurvivalPanels();
             survivalPackOpen = open;
         }
@@ -369,6 +371,7 @@ namespace OutpostLoop
             if (SurvivalPanelOpen) { CloseSurvivalPanels(); return; }
             if (scavengeRun.AtExit)
             {
+                if (!scavengeRun.Survival.Ready) { survivalConfirmExit = true; return; }
                 if (scavengeRun.SurvivalExit()) CloseSurvivalSave();
                 return;
             }
@@ -396,6 +399,7 @@ namespace OutpostLoop
             float width = Screen.width / scale, height = Screen.height / scale;
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
             return SurvivalInfo.Contains(point) || SurvivalContext(width, height).Contains(point) ||
+                SurvivalJourneyContains(point, width, height) ||
                 ScavengeMapRect(width).Contains(point) || (SurvivalPanelOpen && SurvivalInventory(width, height).Contains(point)) ||
                 (scavengeRun.InsideSurvivalRoom >= 0 && new Rect(width - 205, height - 61, 184, 40).Contains(point)) ||
                 (scavengeRun.NearbySurvivalDoor >= 0 && new Rect(width - 205, height - 108, 184, 38).Contains(point));
@@ -404,6 +408,7 @@ namespace OutpostLoop
         private void DrawSurvival(float width, float height)
         {
             var state = scavengeRun.Survival;
+            if (DrawSurvivalJourneyModal(width, height)) return;
             if (survivalConfirmNew || scavengePaused || scavengeRun.Outcome != ScavengeOutcome.Exploring)
             {
                 DrawSurvivalModal(width, height);
@@ -442,6 +447,7 @@ namespace OutpostLoop
                 OpenSurvivalBuild();
 
             if (SurvivalPanelOpen) DrawSurvivalPanels(SurvivalInventory(width, height));
+            DrawSurvivalJourney(width, height);
             if (scavengeRun.ExitKnown || state.Warning) DrawScavengeExitLabel();
             DrawScavengeMap(width);
         }
@@ -464,7 +470,13 @@ namespace OutpostLoop
             }
             var container = opened >= 0 ? state.caches[opened] : survivalContainer;
             float half = panel.width / 2;
-            GUI.Label(new Rect(panel.x + 12, panel.y + 8, half - 16, 31), $"随身物品 {state.Used}/6");
+            GUI.Label(new Rect(panel.x + 12, panel.y + 8, half - 160, 31), $"随身 {state.Used}/6");
+            if (container != null && GUI.Button(new Rect(panel.x + half - 145, panel.y + 8, 133, 30), "使用 / 装备"))
+            {
+                CloseSurvivalPanels();
+                survivalPackOpen = true;
+                return;
+            }
             GUI.Label(new Rect(panel.x + half + 10, panel.y + 8, half - 20, 31),
                 opened >= 0 ? scavengeRun.CacheNames[opened] : container != null ? "容器" : "已装备");
             var scroll = new Rect(panel.x + 9, panel.y + 44, panel.width - 18, panel.height - 52);
@@ -525,7 +537,10 @@ namespace OutpostLoop
                 if ((equip || action != SurvivalAction.None) &&
                     GUI.Button(new Rect(width - 115, y, 55, 37), equip ? "装备" : "使用"))
                 {
-                    if (equip) state.Equip(i);
+                    if (equip)
+                    {
+                        if (!state.Equip(i)) scavengeRun.ReportSurvival("换下装备需要背包空格");
+                    }
                     else StartSurvivalAction(action, i);
                     return;
                 }
@@ -582,8 +597,8 @@ namespace OutpostLoop
         {
             var state = scavengeRun.Survival;
             ScavengeFill(new Rect(0, 0, width, height), new Color(.045f, .065f, .075f, .88f));
-            float x = (width - 460) / 2, y = (height - 290) / 2;
-            GUI.Box(new Rect(x, y, 460, 290), "");
+            float x = (width - 560) / 2, y = (height - 410) / 2;
+            GUI.Box(new Rect(x, y, 560, 410), "");
             if (survivalConfirmNew)
             {
                 GUI.Label(new Rect(x + 20, y + 25, 425, 35), "开始新行动会放弃原来的续玩档");
@@ -596,6 +611,10 @@ namespace OutpostLoop
                 GUI.Label(new Rect(x + 20, y + 25, 425, 35), "行动暂停");
                 if (GUI.Button(new Rect(x + 20, y + 75, 420, 42), "继续行动")) scavengePaused = false;
                 if (GUI.Button(new Rect(x + 20, y + 130, 420, 42), "保存并返回开始页")) SaveAndLeaveSurvival();
+                if (GUI.Button(new Rect(x + 20, y + 185, 420, 42), "操作与目标")) survivalHelpOpen = true;
+                GUI.Label(new Rect(x + 20, y + 246, 520, 64),
+                    "暂停期间时间停止。保存后可从开始页继续本趟。\n搜索和背包界面不会暂停世界，请先找安全位置。",
+                    new GUIStyle(GUI.skin.label) { wordWrap = true });
             }
             else
             {
@@ -607,15 +626,17 @@ namespace OutpostLoop
                 };
                 GUI.Label(new Rect(x + 20, y + 18, 420, 38), outcome);
                 GUI.Label(new Rect(x + 20, y + 57, 420, 28), $"存活 {SurvivalTime(state.elapsed)}  ·  {(state.Ready ? "已活满三天" : "未活满三天")}");
-                if (GUI.Button(new Rect(x + 20, y + 94, 420, 39), "用相同种子重试") && CloseSurvivalSave())
+                GUI.Label(new Rect(x + 20, y + 94, 520, 86), SurvivalResultDetails(),
+                    new GUIStyle(GUI.skin.label) { wordWrap = true });
+                if (GUI.Button(new Rect(x + 20, y + 190, 520, 39), "用相同种子重试 · 空手") && CloseSurvivalSave())
                     BeginScavenge(scavengeRun.Seed);
-                if (GUI.Button(new Rect(x + 20, y + 143, 420, 39), "换种子开始") && CloseSurvivalSave())
+                if (GUI.Button(new Rect(x + 20, y + 239, 520, 39), "换种子开始 · 空手") && CloseSurvivalSave())
                     RestartScavenge();
-                if (GUI.Button(new Rect(x + 20, y + 192, 420, 39), "返回开始页") && CloseSurvivalSave())
+                if (GUI.Button(new Rect(x + 20, y + 288, 520, 39), "返回开始页") && CloseSurvivalSave())
                     LeaveScavenge();
             }
             if (!string.IsNullOrEmpty(survivalSaveError))
-                GUI.Label(new Rect(x + 20, y + 244, 420, 32), survivalSaveError);
+                GUI.Label(new Rect(x + 20, y + 354, 520, 42), survivalSaveError);
         }
 
         private static string SurvivalTime(double seconds)

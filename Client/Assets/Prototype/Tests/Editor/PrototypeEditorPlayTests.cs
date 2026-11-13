@@ -33,6 +33,133 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootSurvivalHelpAndEarlyExitPreserveTheLiveRun()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/FirstJourneyUsability-20261113/TestSave-" + System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var poll = type.GetMethod("PollScavenge", flags);
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var settings = InputSystem.settings;
+            var editorInput = settings.editorInputBehaviorInPlayMode;
+            var background = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            try
+            {
+                Assert.That((string)type.GetMethod("SurvivalObjective", flags).Invoke(controller, null), Does.Contain("补给"));
+                // 帮助冻结时钟及移动；关闭帮助的 Esc 不会再次打开暂停。
+                type.GetField("survivalHelpOpen", flags).SetValue(controller, true);
+                yield return CaptureSurvivalEvidence("help", 1280, 720);
+                yield return CaptureSurvivalEvidence("help", 1920, 1080);
+                double elapsed = run.Survival.elapsed;
+                var position = run.Player;
+                DriveScavengeKey(controller, poll, keyboard, Key.W);
+                yield return null;
+                Assert.AreEqual(elapsed, run.Survival.elapsed);
+                Assert.AreEqual(position, run.Player);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                Assert.IsFalse((bool)type.GetField("survivalHelpOpen", flags).GetValue(controller));
+                Assert.IsFalse((bool)type.GetField("scavengePaused", flags).GetValue(controller));
+                type.GetField("scavengePaused", flags).SetValue(controller, true);
+                type.GetField("survivalHelpOpen", flags).SetValue(controller, true);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                Assert.IsFalse((bool)type.GetField("survivalHelpOpen", flags).GetValue(controller));
+                Assert.IsTrue((bool)type.GetField("scavengePaused", flags).GetValue(controller));
+                type.GetField("scavengePaused", flags).SetValue(controller, false);
+                yield return CaptureSurvivalEvidence("hud", 1920, 1080);
+
+                // 容器切到随身使用后必须关闭原搜索，物品只在动作完成时扣除。
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeTown.Caches[0]);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(0, run.OpenCache);
+                DriveScavengeKey(controller, poll, keyboard, Key.Tab);
+                Assert.AreEqual(-1, run.OpenCache);
+                Assert.IsTrue((bool)type.GetField("survivalPackOpen", flags).GetValue(controller));
+                run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Water));
+                run.Survival.water = 40;
+                yield return CaptureSurvivalEvidence("pack", 1280, 720);
+                type.GetMethod("StartSurvivalAction", flags).Invoke(controller, new object[] { SurvivalAction.Drink, 0 });
+                Assert.IsFalse((bool)type.GetField("survivalPackOpen", flags).GetValue(controller));
+                Assert.AreEqual(1, run.Survival.pack.Count);
+                for (int i = 0; i < 22; i++) run.Tick(.1f, Vector2.zero);
+                Assert.IsEmpty(run.Survival.pack);
+                Assert.That(run.Survival.water, Is.GreaterThan(74));
+
+                // 未达标按 E 先确认，取消后仍是同一趟；达标后原撤离规则仍有效。
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeTown.Exit);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsTrue((bool)type.GetField("survivalConfirmExit", flags).GetValue(controller));
+                yield return CaptureSurvivalEvidence("early-exit", 1280, 720);
+                elapsed = run.Survival.elapsed;
+                yield return null;
+                Assert.AreEqual(elapsed, run.Survival.elapsed);
+                Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                Assert.IsFalse((bool)type.GetField("survivalConfirmExit", flags).GetValue(controller));
+                Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
+                run.Survival.elapsed = ScavengeSurvival.Goal;
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
+                yield return CaptureSurvivalEvidence("result", 1280, 720);
+                Assert.That((string)type.GetMethod("SurvivalResultDetails", flags).Invoke(controller, null), Does.Contain("空间不存放"));
+                type.GetMethod("RestartScavenge", flags).Invoke(controller, null);
+                var retry = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+                Assert.AreNotSame(run, retry);
+                Assert.IsEmpty(retry.Survival.pack);
+                Assert.That(retry.Survival.elapsed, Is.LessThan(2));
+                Assert.IsFalse((bool)type.GetField("survivalHelpOpen", flags).GetValue(controller));
+                Assert.IsFalse((bool)type.GetField("survivalConfirmExit", flags).GetValue(controller));
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                settings.editorInputBehaviorInPlayMode = editorInput;
+                settings.backgroundBehavior = background;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>从真实 Game 视图保留含 IMGUI 的画面；仅切换已有分辨率并恢复原选项。</summary>
+        private static IEnumerator CaptureSurvivalEvidence(string name, int width, int height)
+        {
+            var assembly = typeof(UnityEditor.Editor).Assembly;
+            var type = assembly.GetType("UnityEditor.GameView");
+            var window = UnityEditor.EditorWindow.GetWindow(type);
+            var selected = type.GetProperty("selectedSizeIndex");
+            int previous = (int)selected.GetValue(window);
+            var sizesType = assembly.GetType("UnityEditor.GameViewSizes");
+            var sizes = typeof(UnityEditor.ScriptableSingleton<>).MakeGenericType(sizesType)
+                .GetProperty("instance").GetValue(null);
+            var group = sizesType.GetMethod("GetGroup").Invoke(sizes,
+                new[] { sizesType.GetProperty("currentGroupType").GetValue(sizes) });
+            var names = (string[])group.GetType().GetMethod("GetDisplayTexts").Invoke(group, null);
+            int index = System.Array.FindIndex(names, n => n.Contains($"{width}x{height}") && !n.Contains("Portrait"));
+            Assert.That(index, Is.GreaterThanOrEqualTo(0), "当前 Game 视图缺少所需横屏尺寸");
+            try
+            {
+                selected.SetValue(window, index);
+                for (int i = 0; i < 4; i++) yield return null;
+                Assert.AreEqual(width, Screen.width);
+                Assert.AreEqual(height, Screen.height);
+                ScreenCapture.CaptureScreenshot(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                    $"../../Backup/Artifacts/FirstJourneyUsability-20261113/{name}-{width}.png")));
+                for (int i = 0; i < 4; i++) yield return null;
+            }
+            finally { selected.SetValue(window, previous); }
+        }
+
+        [UnityTest]
         public IEnumerator BootSurvivalOpensTownWithIndependentSurvivalClock()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
