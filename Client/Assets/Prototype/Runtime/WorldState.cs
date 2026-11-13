@@ -36,8 +36,6 @@ namespace OutpostLoop
         private static readonly Vector2[] Posts = { Vector2.left, Vector2.right, Vector2.up, Vector2.down };
         public RunState Run { get; }
         public int Seed { get; }
-        /// <summary>旧港使用守城规则，仅替换地形与临时表现。</summary>
-        public bool IsOldHarbor { get; }
         private PrototypeConfig Rules => Run.Config;
         private bool Active => !Run.Paused && Run.Outcome == 0;
         public List<ResourceNode> Nodes { get; } = new List<ResourceNode>();
@@ -76,14 +74,9 @@ namespace OutpostLoop
         public WorldState(int seed, PrototypeConfig config = null, int startingFunds = PrototypeWallet.InitialFunds)
             : this(seed, config, startingFunds, null) { }
 
-        /// <summary>使用本地配置生成旧港河堤守城局。</summary>
-        public static WorldState CreateOldHarbor(int seed, int startingFunds) =>
-            new WorldState(seed, null, startingFunds, null, oldHarbor: true);
-
-        private WorldState(int seed, PrototypeConfig config, int startingFunds, ExpeditionState expedition, bool oldHarbor = false)
+        private WorldState(int seed, PrototypeConfig config, int startingFunds, ExpeditionState expedition)
         {
             Seed = seed;
-            IsOldHarbor = oldHarbor;
             Run = new RunState(config, startingFunds);
             Expedition = expedition;
             var buildings = new ExpansionSite[expedition == null ? ExpansionLimit + TurretLimit : 10];
@@ -101,7 +94,6 @@ namespace OutpostLoop
                 RefreshVision();
                 return;
             }
-            if (IsOldHarbor) RefreshNavigation();
             var west = new RectInt(-5, -1, 3, 3);
             var east = new RectInt(3, -1, 3, 3);
             for (int i = 0; i < Rules.ResourceNodeCount; i++)
@@ -184,7 +176,7 @@ namespace OutpostLoop
         /// <summary>启用后接收相对真实基地和占地重算的路线。</summary>
         private void RefreshNavigation()
         {
-            navigation.Rebuild(Buildings, Headquarters, IsOldHarbor ? OldHarborLayout.Obstacles : expeditionTerrain, ClosedWorkshopGate);
+            navigation.Rebuild(Buildings, Headquarters, expeditionTerrain, ClosedWorkshopGate);
             if (Headquarters.HasValue) coreAttackRoute = navigation.Field(Headquarters.Value, Rules.AttackRadius);
             Array.Clear(buildingRoutes, 0, buildingRoutes.Length);
         }
@@ -273,7 +265,6 @@ namespace OutpostLoop
             if (kind == ExpansionKind.Headquarters) return PreviewHeadquarters(cell, footprint);
             if (!Headquarters.HasValue) return PlacementIssue.Inactive;
             if (!Vision.Covers(footprint)) return PlacementIssue.NotVisible;
-            if (IsOldHarbor && OldHarborLayout.Blocks(footprint)) return PlacementIssue.Occupied;
             if (moving >= 0 && (kind != ExpansionKind.Turret || moving >= Buildings.Count ||
                 Buildings[moving].Kind != ExpansionKind.Turret || Buildings[moving].IsUnderConstruction))
                 return PlacementIssue.MissingTurret;
@@ -299,7 +290,6 @@ namespace OutpostLoop
         {
             if (Headquarters.HasValue) return PlacementIssue.Limit;
             if (!Vision.Covers(footprint)) return PlacementIssue.NotVisible;
-            if (IsOldHarbor && OldHarborLayout.Blocks(footprint)) return PlacementIssue.Occupied;
             var center = BattleGrid.Center(cell);
             if (center.sqrMagnitude > 28 * 28 || !InBuildArea(footprint, center)) return PlacementIssue.Outside;
             if ((center - CommanderPosition).sqrMagnitude > 12 * 12) return PlacementIssue.CommanderTooFar;
@@ -324,7 +314,6 @@ namespace OutpostLoop
             {
                 var station = new RectInt(cell, size);
                 if (!InBuildArea(station, center) || station.Overlaps(headquarters) || MineralOccupies(station)) continue;
-                if (IsOldHarbor && OldHarborLayout.Blocks(station)) continue;
                 bool visible = true;
                 foreach (var part in station.allPositionsWithin) visible &= futureSight.Sees(BattleGrid.Center(part));
                 if (!visible) continue;
@@ -647,13 +636,9 @@ namespace OutpostLoop
             if (!Headquarters.HasValue)
             {
                 if (!commanderTarget.HasValue) return;
-                if (IsOldHarbor) StepCommander(dt);
-                else
-                {
-                    var target = commanderTarget.Value;
-                    CommanderPosition = Vector2.MoveTowards(CommanderPosition, target, Rules.MoveSpeed * dt);
-                    if (CommanderPosition.Equals(target)) commanderTarget = null;
-                }
+                var target = commanderTarget.Value;
+                CommanderPosition = Vector2.MoveTowards(CommanderPosition, target, Rules.MoveSpeed * dt);
+                if (CommanderPosition.Equals(target)) commanderTarget = null;
                 RefreshVision();
                 return;
             }

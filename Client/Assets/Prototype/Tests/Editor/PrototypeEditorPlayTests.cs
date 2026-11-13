@@ -1462,47 +1462,6 @@ namespace OutpostLoop.Tests
             yield return new ExitPlayMode();
         }
 
-        /// <summary>用 Boot 的实际地图入口落站、出兵、观察来袭并回到开始页。</summary>
-        [UnityTest]
-        public IEnumerator BootOldHarborEntersBattleAndReturnsToStart()
-        {
-            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
-            yield return new EnterPlayMode();
-            yield return WaitForMain();
-            var controller = Object.FindObjectOfType<PrototypeController>();
-            Click("StartOldHarbor");
-            yield return WaitForCrossing();
-            var harbor = controller.World;
-            Assert.IsTrue(harbor.IsOldHarbor);
-            Assert.IsNotNull(GameObject.Find("HarborBasin"));
-            Assert.IsNotNull(GameObject.Find("HarborLevee"));
-            ClickBase(controller, 4);
-            Assert.IsNotNull(GameObject.Find("RoofGenerator"));
-            Click("BuildExtractor");
-            var extractor = FindPlacement(harbor, ExpansionKind.Extractor);
-            Assert.IsTrue(ClickCell(controller, extractor));
-            PrototypeWorldTests.Advance(harbor, 5.2f);
-            yield return null;
-            Click("ProducePersonnel");
-            PrototypeWorldTests.Advance(harbor, 26);
-            Assert.IsNotNull(harbor.Buildings[harbor.FindBuilding(extractor)].Personnel);
-            PrototypeWorldTests.Advance(harbor, 91);
-            yield return null;
-            Assert.GreaterOrEqual(harbor.Wave, 1);
-            harbor.Run.Damage(harbor.Run.Health);
-            yield return null;
-            Click("PrimaryAction");
-            yield return WaitForCrossing();
-            Assert.IsFalse(controller.World.IsOldHarbor);
-            Assert.IsNull(GameObject.Find("HarborBasin"));
-            Click("StartOldHarbor");
-            yield return WaitForCrossing();
-            Assert.IsTrue(controller.World.IsOldHarbor);
-            Assert.AreNotEqual(harbor.Seed, controller.World.Seed);
-            Assert.IsNull(controller.World.Headquarters);
-            yield return new ExitPlayMode();
-        }
-
         private static void ClickBase(PrototypeController controller, int cellX)
         {
             Click("OpenConstruction");

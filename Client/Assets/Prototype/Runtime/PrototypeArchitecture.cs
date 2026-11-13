@@ -39,10 +39,6 @@ namespace OutpostLoop
         public WorldState Begin(int seed,bool running)
             => SetWorld(new WorldState(seed, startingFunds: StartingFunds), running);
 
-        /// <summary>旧港地图沿用普通守城会话、资金和胜场结算。</summary>
-        internal WorldState BeginOldHarbor(int seed) =>
-            SetWorld(WorldState.CreateOldHarbor(seed, StartingFunds), true);
-
         internal WorldState BeginExpedition(int seed, ExpeditionMap map)
         {
             var next = WorldState.Depart(seed, map, Profile);

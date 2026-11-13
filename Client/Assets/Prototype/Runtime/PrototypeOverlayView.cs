@@ -556,8 +556,6 @@ namespace OutpostLoop
             BuildDeparture(font, controller, ink, silver, muted, line);
             StartText(font, "TrialsTitle", "其他试玩", 1000, 200, 680, 64, 42, ink);
             StartText(font, "TrialsNote", "已有独立试玩入口", 1000, 280, 680, 60, 24, muted);
-            Button(trials, font, "StartOldHarbor", "旧港河堤 · 守城试玩", new Vector2(600, 70),
-                new Vector2(1320, -430), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartOldHarbor));
             Button(trials, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(600, 70),
                 new Vector2(1320, -530), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavenge));
             Button(trials, font, "StartScavengeTown", "大镇与镇郊 · 探索试玩", new Vector2(600, 70),
