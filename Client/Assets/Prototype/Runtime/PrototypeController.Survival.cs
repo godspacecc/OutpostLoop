@@ -80,7 +80,16 @@ namespace OutpostLoop
             try
             {
                 // 结束标记与续玩档使用相同的原子替换，避免读取已结算的旧行动。
-                SurvivalStore.Save(SurvivalSaveName, available ? scavengeRun.CaptureSurvival() : new SurvivalSave());
+                var progress = JourneyProgress;
+                bool record = !available && scavengeRun?.Survival != null &&
+                    scavengeRun.Outcome != ScavengeOutcome.Exploring && !ReferenceEquals(journeyRecordedRun, scavengeRun);
+                if (record) progress = SurvivalJourneyProgress.Record(progress, scavengeRun, CaptureSurvivalCarriedSummary());
+                var data = available ? scavengeRun.CaptureSurvival() : new SurvivalSave();
+                data.journey = progress;
+                SurvivalStore.Save(SurvivalSaveName, data);
+                survivalJourney = progress;
+                journeyStoreOwner = SurvivalStore;
+                if (record) journeyRecordedRun = scavengeRun;
                 survivalHasSave = available;
                 survivalSaveChecked = true;
                 survivalSaveError = null;
@@ -89,7 +98,7 @@ namespace OutpostLoop
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException ||
                 error is ArgumentException || error is InvalidOperationException)
             {
-                survivalSaveError = available ? "保存失败，仍在本趟行动中。可以重试。" : "旧续玩档未能关闭，请重试。";
+                survivalSaveError = available ? "保存失败，仍在本趟行动中。可以重试。" : "结果或旧续玩档未能保存，请重试。";
                 return false;
             }
         }
@@ -99,7 +108,12 @@ namespace OutpostLoop
             if (WriteSurvivalSave(true)) LeaveScavenge();
         }
 
-        private bool CloseSurvivalSave() => !HasSurvivalSave || WriteSurvivalSave(false);
+        private bool CloseSurvivalSave()
+        {
+            if (scavengeRun?.Survival != null && scavengeRun.Outcome != ScavengeOutcome.Exploring &&
+                !ReferenceEquals(journeyRecordedRun, scavengeRun)) return WriteSurvivalSave(false);
+            return !HasSurvivalSave || WriteSurvivalSave(false);
+        }
 
         private void ResetSurvivalPresentation()
         {
@@ -229,6 +243,7 @@ namespace OutpostLoop
 
         private void ReleaseSurvivalPresentation()
         {
+            journeyRecordedRun = null;
             if (survivalSun != null) survivalSun.intensity = survivalSunBefore;
             RenderSettings.ambientLight = survivalAmbientBefore;
             Release(survivalAlarmClip);
@@ -632,8 +647,9 @@ namespace OutpostLoop
                     BeginScavenge(scavengeRun.Seed);
                 if (GUI.Button(new Rect(x + 20, y + 239, 520, 39), "换种子开始 · 空手") && CloseSurvivalSave())
                     RestartScavenge();
-                if (GUI.Button(new Rect(x + 20, y + 288, 520, 39), "返回开始页") && CloseSurvivalSave())
-                    LeaveScavenge();
+                if (GUI.Button(new Rect(x + 20, y + 288, 520, 39),
+                    scavengeRun.Outcome == ScavengeOutcome.Extracted ? "回到空间 · 查看行动记录" : "返回开始页 · 保留结果"))
+                    ReturnFromSurvival();
             }
             if (!string.IsNullOrEmpty(survivalSaveError))
                 GUI.Label(new Rect(x + 20, y + 354, 520, 42), survivalSaveError);

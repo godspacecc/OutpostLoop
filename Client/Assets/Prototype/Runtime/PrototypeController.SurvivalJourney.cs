@@ -51,7 +51,9 @@ namespace OutpostLoop
             if (state.food < 25) return "需要进食：按 Tab 使用包装食品。";
             if (state.energy < 25) return "需要休息：找有床的安全房间，走近床按 E 睡觉。";
             if (state.pack.Count == 0 && state.weapon == null && state.torch == null)
-                return "先找补给：靠近镇口容器按 E 搜索，点击拾取水和食品。";
+                return "先找补给：WASD 移动，靠近镇口容器按 E 搜索，点击拾取水和食品。";
+            if (state.elapsed < 120 && state.baseRoom < 0)
+                return "已找到物品：按 Tab 查看背包，点击使用或装备；暂时不用的物品可留着。";
             if (state.baseRoom < 0)
                 return "活过三天：寻找商铺后屋或住宅。进屋可设为基地，也可轮换落脚。";
             return "活过三天：按需补水、进食和睡眠，留意夜间巡逻与基地入口。";

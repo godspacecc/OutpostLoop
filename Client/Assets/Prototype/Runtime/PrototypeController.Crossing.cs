@@ -19,17 +19,26 @@ namespace OutpostLoop
         /// <summary>供入口与验收观察的只读过渡状态。</summary>
         public bool IsCrossing => crossing;
 
+        /// <summary>主菜单确认后才关闭旧续玩档，失败时保留菜单与原行动。</summary>
+        internal bool TryRestartSurvival()
+        {
+            if (crossing || !initialized || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return false;
+            if (!CloseSurvivalSave()) return false;
+            CrossToWorld(StartSurvival);
+            return true;
+        }
+
         /// <summary>菜单统一出发入口；规则仍由传入的现有行动执行。</summary>
-        internal void CrossToWorld(Action enter)
+        internal void CrossToWorld(Action enter, bool resume = false)
         {
             if (crossing || !initialized || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return;
             crossing = true;
             crossingRestorePause = World.Run.Paused;
-            crossingRoutine = StartCoroutine(CrossWorld(enter));
+            crossingRoutine = StartCoroutine(CrossWorld(enter, resume, !resume && JourneyProgress.visitedSpace));
         }
 
         /// <summary>先让穿越画面实际绘制，再创建世界；仅在准备完成后交还控制。</summary>
-        private IEnumerator CrossWorld(Action enter)
+        private IEnumerator CrossWorld(Action enter, bool resume, bool showCrossing)
         {
             crossingCanvas = new GameObject("WorldCrossing", typeof(RectTransform), typeof(Canvas),
                 typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -40,8 +49,13 @@ namespace OutpostLoop
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920,1080);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
-            var backdrop = CosmicBackdrop.Create(crossingCanvas.transform, "Crossing");
-            backdrop.GetComponent<RawImage>().raycastTarget = true;
+            if (showCrossing)
+            {
+                var backdrop = CosmicBackdrop.Create(crossingCanvas.transform, "Crossing");
+                backdrop.GetComponent<RawImage>().raycastTarget = true;
+            }
+            else
+                crossingCanvas.AddComponent<Image>().color = new Color32(9, 15, 24, 255);
             var labelRoot = new GameObject("CrossingStatus", typeof(RectTransform), typeof(Text));
             labelRoot.transform.SetParent(crossingCanvas.transform, false);
             var rect = (RectTransform)labelRoot.transform;
@@ -53,7 +67,7 @@ namespace OutpostLoop
             label.fontSize = 28;
             label.alignment = TextAnchor.MiddleCenter;
             label.color = new Color32(225,235,243,255);
-            label.text = "正在穿越\n正在接通世界";
+            label.text = showCrossing ? "正在穿越\n正在接通世界" : resume ? "正在恢复行动" : "正在进入游戏";
             label.raycastTarget = false;
             yield return null;
             yield return new WaitForSecondsRealtime(.45f);
@@ -68,13 +82,13 @@ namespace OutpostLoop
             if (failure != null)
             {
                 Debug.LogException(failure);
-                label.text = "穿越中断\n正在返回空间";
+                label.text = "加载中断\n正在返回菜单";
                 // 清理已创建的部分地图，让用户能再次从开始页进入。
                 if (scavengeRoot != null) LeaveScavenge();
                 Restart(false);
                 crossingRestorePause = true;
             }
-            else label.text = "正在穿越\n即将抵达";
+            else label.text = showCrossing ? "正在穿越\n即将抵达" : resume ? "正在恢复行动" : "即将醒来";
             yield return new WaitForSecondsRealtime(.55f);
             FinishCrossing();
         }

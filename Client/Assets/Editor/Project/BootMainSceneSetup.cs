@@ -70,11 +70,10 @@ namespace OutpostLoop.Editor
 
             var panel = Child(canvas.gameObject, "CosmicArrivalPanel");
             panel.AddComponent<Image>().color = new Color32(9, 15, 24, 255);
-            CosmicBackdrop.Create(panel.transform, "Arrival");
             var view = panel.AddComponent<HotUpdateView>();
             var layout = Centered(panel, "Layout", 1280, 720);
             Text(layout, "Wordmark", 64, 31, 400, 32, 14, BootInk, TextAnchor.MiddleLeft, "O U T P O S T   L O O P");
-            Text(layout, "Caption", 1060, 31, 156, 32, 14, BootMuted, TextAnchor.MiddleRight, "抵达空间");
+            Text(layout, "Caption", 1060, 31, 156, 32, 14, BootMuted, TextAnchor.MiddleRight, "正在启动");
             Box(layout, "FooterRule", 64, 662, 1152, 1, BootLine);
             Set(view, "_versionText", Text(layout, "Version", 64, 668, 1152, 32, 14, BootMuted,
                 TextAnchor.MiddleLeft, "资源版本：检测中"));

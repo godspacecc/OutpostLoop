@@ -79,6 +79,11 @@ namespace Boot.UI
             }
 
             ValidateRequiredReferences();
+            // Boot 只说明启动状态，空间在玩家首次回归后展示。
+            foreach (var backdrop in GetComponentsInChildren<CosmicBackdrop>(true))
+                backdrop.gameObject.SetActive(false);
+            var caption = transform.Find("Layout/Caption")?.GetComponent<Text>();
+            if (caption != null) caption.text = "正在启动";
             _retryButton.onClick.AddListener(() => { if (_apkActions) _apkPrimary?.Invoke(); else OnRetryClicked?.Invoke(); });
             _copyDetailsButton.onClick.AddListener(() => { if (_apkActions) _apkSecondary?.Invoke(); else OnCopyDetailsClicked?.Invoke(); });
             _quitButton.onClick.AddListener(() => { if (_apkActions) _apkCopy?.Invoke(); else OnQuitClicked?.Invoke(); });
@@ -111,7 +116,7 @@ namespace Boot.UI
 
         public void RenderBusy(string status)
         {
-            PresentSignal("正在前往空间", SignalColor, true);
+            PresentSignal("正在准备游戏", SignalColor, true);
             _titleText.text = "正在启动";
             _titleText.gameObject.SetActive(false);
             _guidanceText.text = string.Empty;
@@ -127,7 +132,7 @@ namespace Boot.UI
 
         public void RenderNormal(string status)
         {
-            PresentSignal("正在抵达空间", SignalColor, true);
+            PresentSignal("正在加载游戏", SignalColor, true);
             _titleText.text = "启动中";
             _titleText.gameObject.SetActive(false);
             _guidanceText.text = string.Empty;

@@ -33,6 +33,94 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootSpaceReturnPersistsResultsAndRejectsFailedSettlementWrites()
+        {
+            const string batch = "FirstSpaceReturn-20261113";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var type = typeof(PrototypeController);
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            var store = new Game.JsonFileStore<SurvivalSave>(directory);
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            type.GetField("survivalStore", flags).SetValue(controller, store);
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            Assert.IsTrue(controller.IsCrossing);
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            Assert.NotNull(run);
+            run.Survival.elapsed = ScavengeSurvival.Goal;
+            run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Water));
+            run.Survival.caches[0].known = true;
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeTown.Exit);
+            run.Tick(.01f, Vector2.zero);
+            // 以文件阻塞目录，真实制造写入失败；结算必须留在原会话并允许恢复后重试。
+            var blocked = directory + "-blocked";
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(blocked));
+            System.IO.File.WriteAllText(blocked, "test");
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(blocked));
+            type.GetMethod("InteractSurvival", flags).Invoke(controller, null);
+            Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
+            type.GetMethod("ReturnFromSurvival", flags).Invoke(controller, null);
+            Assert.AreSame(run, type.GetField("scavengeRun", flags).GetValue(controller));
+            Assert.IsNotEmpty((string)type.GetField("survivalSaveError", flags).GetValue(controller));
+            Assert.AreEqual(Game.SaveFileStatus.Missing, store.Read("town-survival-v1.json").Status);
+            type.GetField("survivalStore", flags).SetValue(controller, store);
+            type.GetMethod("ReturnFromSurvival", flags).Invoke(controller, null);
+            yield return null;
+            Assert.IsNull(type.GetField("scavengeRun", flags).GetValue(controller));
+            Assert.IsTrue(controller.JourneyProgress.completedFirst);
+            Assert.IsFalse(controller.HasSurvivalSave);
+            Assert.NotNull(GameObject.Find("JourneyRecordPanel"));
+            Assert.That(GameObject.Find("JourneyRecordBody").GetComponent<Text>().text, Does.Contain("密封饮水"));
+            yield return CaptureSurvivalEvidence("space-return", 1280, 720, batch);
+            yield return CaptureSurvivalEvidence("space-return", 1920, 1080, batch);
+            var saved = store.Read("town-survival-v1.json").Data;
+            Assert.IsFalse(saved.available);
+            Assert.IsTrue(saved.journey.completedFirst);
+            UnityEditor.SessionState.SetString("OutpostLoop.SpaceReturnTestSave", directory);
+            yield return new ExitPlayMode();
+
+            // 新建真实 Boot 会话，读取同一隔离存档，不能靠原控制器内存维持结果。
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            directory = UnityEditor.SessionState.GetString("OutpostLoop.SpaceReturnTestSave", "");
+            Assert.IsNotEmpty(directory);
+            UnityEditor.SessionState.EraseString("OutpostLoop.SpaceReturnTestSave");
+            type = typeof(PrototypeController);
+            flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            controller = Object.FindObjectOfType<PrototypeController>();
+            store = new Game.JsonFileStore<SurvivalSave>(directory);
+            type.GetField("survivalStore", flags).SetValue(controller, store);
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Assert.IsTrue(controller.JourneyProgress.completedFirst);
+            Assert.NotNull(GameObject.Find("JourneyRecordPanel"));
+            Assert.AreEqual("首次行动 · 达标回归", GameObject.Find("JourneyRecordTitle").GetComponent<Text>().text);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            Assert.IsEmpty(run.Survival.pack);
+            Assert.IsNull(run.Survival.weapon);
+            Assert.IsNull(run.Survival.torch);
+            type.GetMethod("SaveAndLeaveSurvival", flags).Invoke(controller, null);
+            yield return null;
+            saved = store.Read("town-survival-v1.json").Data;
+            Assert.IsTrue(saved.available);
+            Assert.IsTrue(saved.journey.completedFirst);
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            Assert.IsTrue(controller.JourneyProgress.completedFirst);
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootSurvivalHelpAndEarlyExitPreserveTheLiveRun()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
@@ -262,7 +350,8 @@ namespace OutpostLoop.Tests
             var type = typeof(PrototypeController);
             type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(saveDirectory));
             type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
-            Assert.NotNull(GameObject.Find("CosmicSpace"));
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Assert.IsNull(GameObject.Find("CosmicSpace"), "首次回归前保持普通标题页");
             Assert.IsNull(GameObject.Find("TrialDestinations"), "其他试玩不应遮住默认空间菜单");
             Click("StartSurvival");
             Assert.IsTrue(controller.IsCrossing);

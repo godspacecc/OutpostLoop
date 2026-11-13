@@ -9,6 +9,8 @@ namespace OutpostLoop
     internal sealed class SurvivalSave
     {
         public bool available;
+        // 局内续玩和局外结果共用一次原子写入，避免清档与结算之间丢失进度。
+        public SurvivalJourneyProgress journey;
         public int seed;
         public Vector2 player;
         public bool exitKnown;
