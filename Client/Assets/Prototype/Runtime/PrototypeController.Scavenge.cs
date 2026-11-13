@@ -25,6 +25,8 @@ namespace OutpostLoop
         private LineRenderer defenseRadius, defenseShot;
         private Color previousCameraColor;
         private float previousCameraFieldOfView;
+        // 河谷镇远景需要更远裁剪，离开时恢复原镜头配置。
+        private float previousScavengeFarClip;
         private static readonly ScavengeItem[] ScavengeItems =
         {
             ScavengeItem.Supplies, ScavengeItem.Crowbar, ScavengeItem.Signal, ScavengeItem.Materials,
@@ -44,10 +46,11 @@ namespace OutpostLoop
             CreateScavengeMap();
             previousCameraColor = gameCamera.backgroundColor;
             previousCameraFieldOfView = gameCamera.fieldOfView;
+            previousScavengeFarClip = gameCamera.farClipPlane;
             gameCamera.backgroundColor = new Color(.095f, .122f, .128f);
             gameCamera.orthographic = false;
             gameCamera.fieldOfView = ScavengeCameraFieldOfView;
-            gameCamera.farClipPlane = 100;
+            gameCamera.farClipPlane = survivalMode ? 1800 : 100;
             worldRoot.gameObject.SetActive(false);
             modal?.Hide();
             RestartScavenge();
@@ -85,6 +88,7 @@ namespace OutpostLoop
             ReleaseTownAudio();
             gameCamera.orthographic = false;
             gameCamera.fieldOfView = previousCameraFieldOfView;
+            gameCamera.farClipPlane = previousScavengeFarClip;
             gameCamera.backgroundColor = previousCameraColor;
             worldRoot.gameObject.SetActive(true);
             UpdateBattleCamera();

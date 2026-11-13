@@ -12,11 +12,23 @@ namespace OutpostLoop
         private void ResetSurvivalJourney()
         {
             survivalHelpOpen = survivalConfirmExit = false;
+            survivalRegionMapOpen = false;
         }
 
         /// <summary>确认和帮助期间暂停局时；关闭窗口的按键不再传给战场。</summary>
         private bool PollSurvivalJourney(Keyboard keyboard)
         {
+            if (keyboard?.mKey.wasPressedThisFrame == true && !survivalHelpOpen && !survivalConfirmExit && !scavengePaused)
+            {
+                survivalRegionMapOpen = !survivalRegionMapOpen;
+                return true;
+            }
+            if (survivalRegionMapOpen)
+            {
+                if (keyboard?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape))
+                    survivalRegionMapOpen = false;
+                return true;
+            }
             if (!survivalHelpOpen && !survivalConfirmExit) return false;
             if (keyboard?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape))
                 ResetSurvivalJourney();
@@ -25,7 +37,7 @@ namespace OutpostLoop
 
         /// <summary>常驻按钮和目标卡吞掉攻击输入，避免点击界面时挥击或开枪。</summary>
         private static bool SurvivalJourneyContains(Vector2 point, float width, float height) =>
-            new Rect(18, height - 61, 286, 40).Contains(point) ||
+            new Rect(18, height - 61, 437, 40).Contains(point) ||
             new Rect(410, 18, Mathf.Min(430, width - 650), 112).Contains(point);
 
         /// <summary>根据真实身体状态和行动阶段给出下一步提示，不提前展示世界观背景。</summary>
@@ -50,11 +62,12 @@ namespace OutpostLoop
         {
             float cardWidth = Mathf.Min(430, width - 650);
             GUI.Box(new Rect(410, 18, cardWidth, 112), "");
-            GUI.Label(new Rect(422, 24, cardWidth - 24, 26), "当前行动 · 在镇中生存三天");
+            GUI.Label(new Rect(422, 24, cardWidth - 24, 26), "河谷镇 · 在镇中生存三天");
             var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
             GUI.Label(new Rect(422, 52, cardWidth - 24, 70), SurvivalObjective(), wrapped);
             if (GUI.Button(new Rect(18, height - 61, 135, 40), "暂停  Esc")) scavengePaused = true;
             if (GUI.Button(new Rect(161, height - 61, 143, 40), "操作与目标")) survivalHelpOpen = true;
+            if (GUI.Button(new Rect(312, height - 61, 143, 40), "区域地图 M")) survivalRegionMapOpen = true;
 
             var state = scavengeRun.Survival;
             if (state.action == SurvivalAction.None) return;
@@ -88,6 +101,7 @@ namespace OutpostLoop
         /// <summary>主动查看帮助或提前撤离时给出明确后果；关闭后恢复原有暂停状态。</summary>
         private bool DrawSurvivalJourneyModal(float width, float height)
         {
+            if (survivalRegionMapOpen) { DrawRiverValleyRegion(width, height); return true; }
             if (!survivalHelpOpen && !survivalConfirmExit) return false;
             ScavengeFill(new Rect(0, 0, width, height), new Color(.045f, .065f, .075f, .95f));
             float x = (width - 680) / 2, y = (height - 470) / 2;

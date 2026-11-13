@@ -10,6 +10,9 @@ namespace OutpostLoop.RiverValley
     {
         [SerializeField] private TextAsset layoutAsset;
         [SerializeField] private Shader surfaceShader;
+        // 游戏接入时只生成外景，不创建第二套角色、镜头和碰撞。
+        private bool gameplayScenery;
+        private Rect? reservedArea;
 
         private const float HalfExtent = 1000;
         private readonly List<Edge> water = new List<Edge>();
@@ -109,18 +112,18 @@ namespace OutpostLoop.RiverValley
             surface = new Material(surfaceShader) { name = "河谷镇共用表面" };
             IndexRoutes();
             BuildTerrain();
-            scenery = new RiverValleyMesh(Section("街区与设施"), surface);
+            scenery = new RiverValleyMesh(Section("街区与设施"), surface, reservedArea);
             BuildRoutes();
             BuildBuildings();
             BuildSites();
             BuildLandscape();
             scenery.Finish();
-            CreateWalker();
-            SetCamera();
+            if (!gameplayScenery) { CreateWalker(); SetCamera(); }
         }
 
         private void Update()
         {
+            if (gameplayScenery) return;
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
             if (keyboard.mKey.wasPressedThisFrame) mapView = !mapView;
@@ -284,5 +287,22 @@ namespace OutpostLoop.RiverValley
         private static Vector2 Flat(Vector3 p) => new Vector2(p.x, p.z);
         private static Vector3 At(Vector2 p, float height) => new Vector3(p.x, height, p.y);
         private static Color32 Tint(string hex) => ColorUtility.TryParseHtmlString(hex, out var value) ? value : Color.magenta;
+
+        /// <summary>复用河谷镇原始布局，给生存街区留出模型区域；现有领域坐标和存档保持不变。</summary>
+        internal static RiverValleyTownPreview CreateScenery(Transform parent, TextAsset data, Shader shader, Rect district)
+        {
+            var root = new GameObject("河谷镇周边外景");
+            root.SetActive(false);
+            var preview = root.AddComponent<RiverValleyTownPreview>();
+            var anchor = Map(1890, 1885);
+            preview.gameplayScenery = true;
+            preview.layoutAsset = data;
+            preview.surfaceShader = shader;
+            preview.reservedArea = new Rect(district.position + anchor, district.size);
+            root.SetActive(true);
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = new Vector3(-anchor.x, -NaturalHeight(anchor), -anchor.y);
+            return preview;
+        }
     }
 }

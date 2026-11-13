@@ -10,6 +10,8 @@ namespace OutpostLoop.RiverValley
         private const int ChunkSize = 125;
         private readonly Transform root;
         private readonly Material material;
+        // 生存街区由独立碰撞与模型表达，外景网格不覆盖该矩形。
+        private readonly Rect? reservedArea;
         private readonly Dictionary<Vector2Int, Chunk> chunks = new Dictionary<Vector2Int, Chunk>();
 
         private sealed class Chunk
@@ -19,14 +21,16 @@ namespace OutpostLoop.RiverValley
             internal readonly List<int> Indices = new List<int>();
         }
 
-        internal RiverValleyMesh(Transform root, Material material)
+        internal RiverValleyMesh(Transform root, Material material, Rect? reservedArea = null)
         {
             this.root = root;
             this.material = material;
+            this.reservedArea = reservedArea;
         }
 
         internal void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color32 color)
         {
+            if (OverlapsReserved(a, b, c, d)) return;
             var chunk = GetChunk((a + b + c + d) / 4);
             int start = chunk.Vertices.Count;
             chunk.Vertices.Add(a);
@@ -44,6 +48,7 @@ namespace OutpostLoop.RiverValley
 
         internal void Triangle(Vector3 a, Vector3 b, Vector3 c, Color32 color)
         {
+            if (OverlapsReserved(a, b, c, c)) return;
             var chunk = GetChunk((a + b + c) / 3);
             int start = chunk.Vertices.Count;
             chunk.Vertices.Add(a);
@@ -107,6 +112,18 @@ namespace OutpostLoop.RiverValley
                 chunks.Add(key, chunk);
             }
             return chunk;
+        }
+
+        /// <summary>保留区内不生成外景面，避免地形、道路、树木穿入已有可玩模型。</summary>
+        private bool OverlapsReserved(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+        {
+            if (!reservedArea.HasValue) return false;
+            var area = reservedArea.Value;
+            float left = Mathf.Min(Mathf.Min(a.x, b.x), Mathf.Min(c.x, d.x));
+            float right = Mathf.Max(Mathf.Max(a.x, b.x), Mathf.Max(c.x, d.x));
+            float bottom = Mathf.Min(Mathf.Min(a.z, b.z), Mathf.Min(c.z, d.z));
+            float top = Mathf.Max(Mathf.Max(a.z, b.z), Mathf.Max(c.z, d.z));
+            return left <= area.xMax && right >= area.xMin && bottom <= area.yMax && top >= area.yMin;
         }
     }
 }

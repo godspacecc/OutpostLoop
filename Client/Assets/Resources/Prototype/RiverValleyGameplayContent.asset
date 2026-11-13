@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26815a05e70124f4f8c97dfdcaafead5, type: 3}
+  m_Name: RiverValleyGameplayContent
+  m_EditorClassIdentifier: 
+  layout: {fileID: 4900000, guid: 708db73dbb79e2c44b60333620d01c5c, type: 3}
+  surface: {fileID: 4800000, guid: f802036b8b9a75244a323bf08b13831e, type: 3}

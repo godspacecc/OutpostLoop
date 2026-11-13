@@ -131,7 +131,7 @@ namespace OutpostLoop.Tests
         }
 
         /// <summary>从真实 Game 视图保留含 IMGUI 的画面；仅切换已有分辨率并恢复原选项。</summary>
-        private static IEnumerator CaptureSurvivalEvidence(string name, int width, int height)
+        private static IEnumerator CaptureSurvivalEvidence(string name, int width, int height, string batch = "FirstJourneyUsability-20261113")
         {
             var assembly = typeof(UnityEditor.Editor).Assembly;
             var type = assembly.GetType("UnityEditor.GameView");
@@ -153,10 +153,96 @@ namespace OutpostLoop.Tests
                 Assert.AreEqual(width, Screen.width);
                 Assert.AreEqual(height, Screen.height);
                 ScreenCapture.CaptureScreenshot(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
-                    $"../../Backup/Artifacts/FirstJourneyUsability-20261113/{name}-{width}.png")));
+                    $"../../Backup/Artifacts/{batch}/{name}-{width}.png")));
                 for (int i = 0; i < 4; i++) yield return null;
             }
             finally { selected.SetValue(window, previous); }
+        }
+
+        [UnityTest]
+        public IEnumerator BootRiverValleySurvivalLoadsSceneryAndKeepsTheDistrictPlayable()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/RiverValleySurvival-20261113/TestSave-" + System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var scenery = GameObject.Find("河谷镇周边外景");
+            Assert.NotNull(scenery);
+            Assert.IsEmpty(scenery.GetComponentsInChildren<Camera>());
+            Assert.IsEmpty(scenery.GetComponentsInChildren<Collider>());
+            Assert.IsNull(GameObject.Find("外景步行角色"));
+            Assert.That(scenery.GetComponentsInChildren<MeshFilter>().Length, Is.GreaterThan(200));
+            Assert.NotNull(GameObject.Find("东侧街区边界"));
+            Assert.NotNull(GameObject.Find("河谷镇坡屋面"));
+            // 外景不得盖住平地、搜点或房间；每个网格顶点都应位于保留区以外。
+            bool intrudes = false;
+            var district = new Rect(-109, -96, 218, 192);
+            foreach (var filter in scenery.GetComponentsInChildren<MeshFilter>())
+            {
+                foreach (var vertex in filter.sharedMesh.vertices)
+                {
+                    var world = filter.transform.TransformPoint(vertex);
+                    if (district.Contains(new Vector2(world.x, world.z))) { intrudes = true; break; }
+                }
+                if (intrudes) break;
+            }
+            Assert.IsFalse(intrudes, "外景侵入可玩街区");
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            Assert.That(Vector2.Distance(run.Player, ScavengeTown.Start), Is.LessThan(.01f));
+            // 实际领域步行抵达镇口搜点，搜索完成后可取得固定饮水。
+            for (int step = 0; step < 80 && Vector2.Distance(run.Player, ScavengeTown.Caches[0]) > .4f; step++)
+                run.Tick(.05f, (ScavengeTown.Caches[0] - run.Player).normalized);
+            Assert.That(Vector2.Distance(run.Player, ScavengeTown.Caches[0]), Is.LessThan(.5f));
+            run.Interact();
+            for (int step = 0; step < 100 && run.SearchRemaining > 0; step++) run.Tick(.05f, Vector2.zero);
+            Assert.AreEqual(0, run.OpenCache);
+            Assert.That(run.Survival.caches[0].items.Exists(item => item.item == SurvivalItem.Water), Is.True);
+            Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.caches[0].items, 0, run.Survival.pack, 6));
+            run.CloseSearch();
+            type.GetMethod("SyncScavenge", flags).Invoke(controller, new object[] { true });
+            yield return CaptureSurvivalEvidence("town-street", 1920, 1080, "RiverValleySurvival-20261113");
+            type.GetField("survivalRegionMapOpen", flags).SetValue(controller, true);
+            double beforeMap = run.Survival.elapsed;
+            yield return CaptureSurvivalEvidence("region-map", 1280, 720, "RiverValleySurvival-20261113");
+            Assert.AreEqual(beforeMap, run.Survival.elapsed, "区域图应暂停局时");
+            type.GetField("survivalRegionMapOpen", flags).SetValue(controller, false);
+            // 边界以实体围栏表达，领域移动仍拒绝越界。
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, new Vector2(83, 0));
+            for (int step = 0; step < 20; step++) run.Tick(.05f, Vector2.right);
+            Assert.That(run.Player.x, Is.LessThanOrEqualTo(ScavengeTown.Bounds.xMax));
+            type.GetMethod("SyncScavenge", flags).Invoke(controller, new object[] { true });
+            yield return CaptureSurvivalEvidence("district-edge", 1280, 720, "RiverValleySurvival-20261113");
+            type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
+            yield return null;
+            Assert.IsNull(GameObject.Find("河谷镇周边外景"));
+            Assert.IsNull(GameObject.Find("东侧街区边界"));
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator RiverValleyStandalonePreviewRetainsItsWalkerAndCamera()
+        {
+            EditorSceneManager.OpenScene("Assets/Prototype/RiverValleyTown/RiverValleyTown.unity");
+            yield return new EnterPlayMode();
+            yield return null;
+            var preview = Object.FindObjectOfType<OutpostLoop.RiverValley.RiverValleyTownPreview>();
+            Assert.NotNull(preview);
+            Assert.NotNull(GameObject.Find("外景步行角色"));
+            Assert.NotNull(GameObject.Find("河谷镇斜俯视镜头"));
+            Assert.That(preview.GetComponentsInChildren<Collider>().Length, Is.GreaterThan(200));
+            var before = preview.WalkerPosition;
+            for (int step = 0; step < 20; step++) preview.Step(Vector2.up, 1.8f, .05f);
+            Assert.That(Vector3.Distance(before, preview.WalkerPosition), Is.GreaterThan(.5f));
+            yield return new ExitPlayMode();
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
         }
 
         [UnityTest]

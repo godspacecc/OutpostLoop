@@ -60,6 +60,7 @@ namespace OutpostLoop
                 ScavengeBox("建筑轮廓", At(footprint.center, .04f), new Vector3(footprint.width, .08f, footprint.height), concrete);
                 RegisterScavengeOccluder(wall.GetComponent<Renderer>(), roof.GetComponent<Renderer>(),
                     entrance.GetComponent<Renderer>(), canopy.GetComponent<Renderer>());
+                if (survivalMode) DressRiverValleyBuilding(footprint, height, residential, industrial, wood, steel, plaster);
             }
             ScavengeBox("仓库地坪", new Vector3(32.5f, .01f, 8f), new Vector3(27f, .035f, 24f), concrete);
             foreach (var section in ScavengeTown.WarehouseWalls)
@@ -73,6 +74,7 @@ namespace OutpostLoop
             for (int i = 0; i < 9; i++)
                 ScavengeBox("林带灌木", new Vector3(-78 + i * 3.8f, .21f, 58 + i % 3 * 2),
                     new Vector3(1.5f, .42f, 1.7f), farm);
+            if (survivalMode) CreateRiverValleySurvivalDistrict(soil, steel, wood);
 
             void Road(string name, float x, float z, float width, float length) =>
                 ScavengeBox(name, new Vector3(x, .015f, z), new Vector3(width, .035f, length), asphalt);

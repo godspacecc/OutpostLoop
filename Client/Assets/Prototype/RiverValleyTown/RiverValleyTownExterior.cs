@@ -434,8 +434,9 @@ namespace OutpostLoop.RiverValley
             }
         }
 
-        private static void Solid(string name, Vector3 position, Vector3 size, Quaternion rotation, Transform parent)
+        private void Solid(string name, Vector3 position, Vector3 size, Quaternion rotation, Transform parent)
         {
+            if (gameplayScenery) return;
             var item = new GameObject(name);
             item.transform.SetParent(parent,false);
             item.transform.SetPositionAndRotation(position,rotation);

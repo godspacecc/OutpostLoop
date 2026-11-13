@@ -62,7 +62,7 @@ namespace OutpostLoop.RiverValley
         {
             const int resolution = 400;
             const float pitch = HalfExtent * 2 / resolution;
-            var ground = new RiverValleyMesh(Section("地形与河床"), surface);
+            var ground = new RiverValleyMesh(Section("地形与河床"), surface, reservedArea);
             var positions = new Vector3[resolution + 1, resolution + 1];
             var colors = new Color32[resolution, resolution];
             for (int z = 0; z <= resolution; z++)
@@ -82,7 +82,7 @@ namespace OutpostLoop.RiverValley
             for (int z = 0; z < resolution; z++)
             for (int x = 0; x < resolution; x++)
                 ground.Quad(positions[x,z], positions[x + 1,z], positions[x + 1,z + 1], positions[x,z + 1], colors[x,z]);
-            ground.Finish(collision: true, shadows: false);
+            ground.Finish(collision: !gameplayScenery, shadows: false);
         }
 
         private bool InField(Vector2 point)
@@ -105,8 +105,8 @@ namespace OutpostLoop.RiverValley
 
         private void BuildRoutes()
         {
-            var waterSurface = new RiverValleyMesh(Section("主河与支流"), surface);
-            var crossings = new RiverValleyMesh(Section("桥面碰撞"), surface);
+            var waterSurface = new RiverValleyMesh(Section("主河与支流"), surface, reservedArea);
+            var crossings = new RiverValleyMesh(Section("桥面碰撞"), surface, reservedArea);
             foreach (var route in layout.routes)
             {
                 bool channel = IsChannel(route);
@@ -150,7 +150,7 @@ namespace OutpostLoop.RiverValley
                 }
             }
             waterSurface.Finish(shadows: false);
-            crossings.Finish(collision: true);
+            crossings.Finish(collision: !gameplayScenery);
         }
 
         private static Vector2[] SampleRoute(Route route)
