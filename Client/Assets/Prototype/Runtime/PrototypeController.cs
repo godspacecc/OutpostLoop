@@ -853,6 +853,13 @@ namespace OutpostLoop
             var ray = gameCamera.ScreenPointToRay(screenPoint);
             if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float distance)) return false;
             var hit = ray.GetPoint(distance);
+            if (survivalWorldGeometry != null)
+                for (int i = 0; i < 3; i++)
+                {
+                    float height = survivalWorldGeometry.Height(new Vector2(hit.x, hit.z));
+                    if (!new Plane(Vector3.up, Vector3.up * height).Raycast(ray, out distance)) break;
+                    hit = ray.GetPoint(distance);
+                }
             point = new Vector2(hit.x, hit.z);
             return true;
         }

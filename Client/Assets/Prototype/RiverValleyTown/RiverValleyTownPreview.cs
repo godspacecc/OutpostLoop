@@ -13,6 +13,9 @@ namespace OutpostLoop.RiverValley
         // 游戏接入时只生成外景，不创建第二套角色、镜头和碰撞。
         private bool gameplayScenery;
         private Rect? reservedArea;
+        private bool fullSurvivalWorld;
+        private Building[] openBuildings;
+        internal RiverValleyWorldGeometry WorldGeometry { get; private set; }
 
         private const float HalfExtent = 1000;
         private readonly List<Edge> water = new List<Edge>();
@@ -109,8 +112,18 @@ namespace OutpostLoop.RiverValley
         private void Awake()
         {
             layout = JsonUtility.FromJson<Layout>(layoutAsset.text);
+            if (fullSurvivalWorld) PrepareSurvivalWorld();
             surface = new Material(surfaceShader) { name = "河谷镇共用表面" };
             IndexRoutes();
+            if (fullSurvivalWorld)
+                for (int i = 0; i < openBuildings.Length; i++)
+                {
+                    var building = openBuildings[i];
+                    var center = Setback(Map(building.x, building.y), Quaternion.Euler(0,building.angle * Mathf.Rad2Deg,0),building.width,building.depth);
+                    var size = new Vector2(building.width,building.depth);
+                    WorldGeometry.Interiors[i] = new Rect(center - RiverValleyWorldGeometry.Anchor - size / 2,size);
+                    footprints.Add(new Footprint(center,size.magnitude / 2));
+                }
             BuildTerrain();
             scenery = new RiverValleyMesh(Section("街区与设施"), surface, reservedArea);
             BuildRoutes();
@@ -118,6 +131,13 @@ namespace OutpostLoop.RiverValley
             BuildSites();
             BuildLandscape();
             scenery.Finish();
+            if (fullSurvivalWorld)
+            {
+                foreach (var edge in water) WorldGeometry.Water.Add(new RiverValleyWorldGeometry.Channel(edge.A - RiverValleyWorldGeometry.Anchor, edge.B - RiverValleyWorldGeometry.Anchor, edge.Width));
+                foreach (var edge in bridgeDecks) WorldGeometry.Bridges.Add(new RiverValleyWorldGeometry.Channel(edge.A - RiverValleyWorldGeometry.Anchor, edge.B - RiverValleyWorldGeometry.Anchor, edge.Width));
+                foreach (var edge in roads) WorldGeometry.Roads.Add(new RiverValleyWorldGeometry.Channel(edge.A - RiverValleyWorldGeometry.Anchor, edge.B - RiverValleyWorldGeometry.Anchor, edge.Width));
+                WorldGeometry.Finish();
+            }
             if (!gameplayScenery) { CreateWalker(); SetCamera(); }
         }
 
@@ -170,7 +190,8 @@ namespace OutpostLoop.RiverValley
                 nearest = distance;
                 area = landmark.name;
             }
-            GUI.Box(new Rect(14, 14, 345, 33), $"河谷镇  /  {area}附近", hud);
+            GUI.Box(new Rect(14, 14, 390, 33), $"河谷镇  /  {area}附近", hud);
+            GUI.Box(new Rect(14, 52, 390, 33), "2×2 公里外景预览 · 本入口不含生存交互", hud);
             GUI.Box(new Rect(14, Screen.height - 47, 440, 33), "WASD 移动    Shift 跑步    滚轮 缩放    M 总览", hud);
             if (mapLabel == null)
                 mapLabel = new GUIStyle(hud) { alignment = TextAnchor.MiddleCenter, fontSize = 12,
@@ -303,6 +324,40 @@ namespace OutpostLoop.RiverValley
             root.transform.SetParent(parent, false);
             root.transform.localPosition = new Vector3(-anchor.x, -NaturalHeight(anchor), -anchor.y);
             return preview;
+        }
+
+        /// <summary>整图行动复用原布局；六处重点建筑改由可进入室内模块表达。</summary>
+        internal static RiverValleyTownPreview CreateWorld(Transform parent, TextAsset data, Shader shader)
+        {
+            var root = new GameObject("河谷镇整图");
+            root.SetActive(false);
+            var preview = root.AddComponent<RiverValleyTownPreview>();
+            preview.gameplayScenery = preview.fullSurvivalWorld = true;
+            preview.layoutAsset = data; preview.surfaceShader = shader;
+            root.SetActive(true);
+            root.transform.SetParent(parent, false);
+            var anchor = RiverValleyWorldGeometry.Anchor;
+            root.transform.localPosition = new Vector3(-anchor.x, 0, -anchor.y);
+            return preview;
+        }
+
+        private void PrepareSurvivalWorld()
+        {
+            WorldGeometry = new RiverValleyWorldGeometry();
+            openBuildings = new Building[6];
+            var targets = new[] { new Vector2(1870,1885), new Vector2(1770,1610), new Vector2(2088,1765),
+                new Vector2(2750,2075), new Vector2(2280,1308), new Vector2(1140,1810) };
+            for (int i = 0; i < targets.Length; i++)
+            {
+                float best = float.MaxValue;
+                foreach (var building in layout.buildings)
+                {
+                    if (building.width < 6 || building.depth < 6 || Array.IndexOf(openBuildings, building) >= 0) continue;
+                    float distance = (new Vector2(building.x, building.y) - targets[i]).sqrMagnitude;
+                    if (distance < best) { best = distance; openBuildings[i] = building; }
+                }
+                if (openBuildings[i] == null) throw new InvalidOperationException("河谷镇缺少重点建筑。");
+            }
         }
     }
 }

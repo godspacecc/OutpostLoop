@@ -200,7 +200,7 @@ namespace OutpostLoop
                     Mathf.Min(patrol.Start.y, patrol.End.y), Mathf.Max(patrol.Start.y, patrol.End.y))) : endpoint;
             var goal = patrol.Engaged ? patrol.LastSeen : patrol.Noise ??
                 (Vector2.Distance(patrol.Position, patrolAxis) > .12f &&
-                    ClearRunLine(patrol.Position, patrolAxis, .34f) ? patrolAxis : endpoint);
+                    ClearRunRoute(patrol.Position, patrolAxis, .34f) ? patrolAxis : endpoint);
             MovePatrol(patrol, goal, dt);
             if (!patrol.Engaged && !patrol.Noise.HasValue && Vector2.Distance(patrol.Position, endpoint) < .13f)
                 patrol.TowardEnd = !patrol.TowardEnd;
@@ -234,7 +234,7 @@ namespace OutpostLoop
         {
             patrol.RouteCooldown = Mathf.Max(0, patrol.RouteCooldown - dt);
             var waypoint = goal;
-            if (!ClearRunLine(patrol.Position, goal, .34f))
+            if (!ClearRunRoute(patrol.Position, goal, .34f))
             {
                 if (patrol.RouteCooldown == 0 || Vector2.Distance(patrol.Position, patrol.RoutePoint) < .14f)
                 {
@@ -269,7 +269,7 @@ namespace OutpostLoop
             var visited = new bool[count];
             for (int i = 0; i < count; i++)
             {
-                distance[i] = ClearRunLine(start, corners[i], .34f) ?
+                distance[i] = ClearRunRoute(start, corners[i], .34f) ?
                     Vector2.Distance(start, corners[i]) : float.PositiveInfinity;
                 first[i] = i;
             }
@@ -285,7 +285,7 @@ namespace OutpostLoop
                 visited[index] = true;
                 var point = corners[index];
                 float total = closest + Vector2.Distance(point, goal);
-                if (total < best && ClearRunLine(point, goal, .34f))
+                if (total < best && ClearRunRoute(point, goal, .34f))
                 {
                     best = total;
                     result = corners[first[index]];
@@ -294,7 +294,7 @@ namespace OutpostLoop
                 {
                     if (visited[i]) continue;
                     float next = closest + Vector2.Distance(point, corners[i]);
-                    if (next >= distance[i] || !ClearRunLine(point, corners[i], .34f)) continue;
+                    if (next >= distance[i] || !ClearRunRoute(point, corners[i], .34f)) continue;
                     distance[i] = next;
                     first[i] = first[index];
                 }

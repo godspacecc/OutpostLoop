@@ -43,7 +43,7 @@ namespace OutpostLoop.RiverValley
             return closest;
         }
 
-        private static float NaturalHeight(Vector2 point)
+        internal static float NaturalHeight(Vector2 point)
         {
             float hill = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(480, 1120, point.magnitude));
             float broad = Mathf.PerlinNoise(8.3f + point.x / 540, 10.4f + point.y / 510);

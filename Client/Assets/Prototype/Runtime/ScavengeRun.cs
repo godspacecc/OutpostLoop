@@ -123,13 +123,16 @@ namespace OutpostLoop
         /// <summary>种子决定两个相互独立的物资位置选择，固定地标维持相同的路线。</summary>
         public ScavengeRun(int seed = 0, bool town = false) : this(seed, town, null) { }
 
-        internal ScavengeRun(int seed, bool town, ScavengeSurvival survival)
+        internal ScavengeRun(int seed, bool town, ScavengeSurvival survival, RiverValley.RiverValleyWorldGeometry geometry = null)
         {
             Seed = seed;
             IsTown = town;
             Survival = survival;
+            FullTown = geometry;
+            RoomSet = new SurvivalRoomSet(geometry == null ? null : new[] { geometry.Interiors[0], geometry.Interiors[1] });
+            if (survival?.layoutVersion > 0 && geometry == null) throw new System.InvalidOperationException("整图存档缺少对应地图几何。");
             if (survival != null) RefreshSurvivalWalls();
-            Player = town ? ScavengeTown.Start : ScavengeLayout.Start;
+            Player = geometry != null ? geometry.Start : town ? ScavengeTown.Start : ScavengeLayout.Start;
             contents = new ScavengeItem[CachePoints.Length];
             discovered = new bool[contents.Length];
             known = new bool[contents.Length];
@@ -138,6 +141,14 @@ namespace OutpostLoop
                 var random = new System.Random(seed);
                 ScavengeTown.FillLoot(contents, random, out medicineCache);
                 patrols = ScavengeTown.CreatePatrols(random);
+                if (geometry != null)
+                    for (int i = 0; i < patrols.Length; i++)
+                    {
+                        int cache = ScavengeSurvival.ActiveCaches[1 + i % (ScavengeSurvival.ActiveCaches.Length - 1)];
+                        var point = geometry.FindWalkable(geometry.Caches[cache] + Vector2.right * 12);
+                        if (Vector2.Distance(point, geometry.Start) < 35) point = geometry.FindWalkable(point + Vector2.up * 45);
+                        patrols[i] = new ScavengePatrol(point, geometry.FindWalkable(point + Vector2.up * 8), ScavengeTown.IsFastPatrol(i));
+                    }
                 return;
             }
             patrols = CreateTrialPatrols();

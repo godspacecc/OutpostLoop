@@ -29,6 +29,9 @@ namespace OutpostLoop
         private float survivalSunBefore;
         private Color survivalAmbientBefore;
         private Vector2 survivalScroll;
+        // 单次操作提示限时显示，避免离开房间后仍长时间显示开门反馈。
+        private int survivalFeedbackVersion = -1;
+        private float survivalFeedbackUntil;
 
         internal bool HasSurvivalSave
         {
@@ -53,7 +56,7 @@ namespace OutpostLoop
             var save = read.Data;
             return save.run != null && save.run.elapsed >= 0 && save.run.elapsed < ScavengeSurvival.Deadline &&
                 save.patrols?.Length == ScavengeTown.PatrolCount && save.run.rooms?.Length == SurvivalRooms.BuildingIds.Length &&
-                save.run.caches?.Length == ScavengeTown.Caches.Length ? save : null;
+                save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= 1 ? save : null;
         }
 
         internal void StartSurvival() => EnterSurvival(false);
@@ -71,6 +74,7 @@ namespace OutpostLoop
                 return;
             }
             survivalConfirmNew = !resume && HasSurvivalSave;
+            survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? 1;
             survivalMode = true;
             StartScavenge(true);
         }
@@ -118,6 +122,7 @@ namespace OutpostLoop
         private void ResetSurvivalPresentation()
         {
             ResetSurvivalJourney();
+            survivalFeedbackVersion = -1;
             survivalContainer = null;
             survivalPackOpen = survivalBuildOpen = false;
             survivalScroll = Vector2.zero;
@@ -128,23 +133,23 @@ namespace OutpostLoop
 
         private void CreateSurvivalRoom(int room, Material walls, Material floor, Material wood, Material roof)
         {
-            var rect = SurvivalRooms.Footprint(room);
-            ScavengeBox("房间地面", At(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor);
-            foreach (var wall in SurvivalRooms.Walls(room))
+            var rect = CurrentSurvivalRooms.Footprint(room);
+            ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor);
+            foreach (var wall in CurrentSurvivalRooms.Walls(room))
             {
-                var section = ScavengeBox("现有外墙", At(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls);
+                var section = ScavengeBox("现有外墙", SurvivalPosition(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls);
                 RegisterScavengeOccluder(section.GetComponent<Renderer>());
             }
-            var cover = ScavengeBox("屋顶", At(rect.center, 2.92f), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
+            var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, 2.92f), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
             RegisterScavengeOccluder(cover.GetComponent<Renderer>());
-            var door = SurvivalRooms.Door(room);
-            survivalDoors[room] = ScavengeBox("现有房门", At(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
+            var door = CurrentSurvivalRooms.Door(room);
+            survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
                 new Vector3(.5f, .13f, 0), new Vector3(.35f, .13f, 1.08f), floor);
-            var bed = SurvivalRooms.Bed(room);
-            ScavengeBox("床架", At(bed, .20f), new Vector3(1.2f, .4f, 2), wood);
-            ScavengeBox("床垫", At(bed, .48f), new Vector3(1.1f, .22f, 1.9f), floor);
-            ScavengeBox("储物柜", At(SurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood);
+            var bed = CurrentSurvivalRooms.Bed(room);
+            ScavengeBox("床架", SurvivalPosition(bed, .20f), new Vector3(1.2f, .4f, 2), wood);
+            ScavengeBox("床垫", SurvivalPosition(bed, .48f), new Vector3(1.1f, .22f, 1.9f), floor);
+            ScavengeBox("储物柜", SurvivalPosition(CurrentSurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood);
         }
 
         private void CreateSurvivalPresentation()
@@ -206,17 +211,17 @@ namespace OutpostLoop
             survivalTorch.enabled = state.Light > 0;
             survivalTorch.range = Mathf.Lerp(3, 12, state.Light);
             survivalTorch.intensity = Mathf.Lerp(.4f, 2.6f, state.Light);
-            survivalTorch.transform.SetPositionAndRotation(At(scavengeRun.Player, 1.05f),
+            survivalTorch.transform.SetPositionAndRotation(SurvivalPosition(scavengeRun.Player, 1.05f),
                 Quaternion.LookRotation(At(state.facing, -.12f)));
             for (int i = 0; i < survivalDoors.Length; i++)
             {
                 var room = state.rooms[i];
-                var hinge = SurvivalRooms.Door(i);
+                var hinge = CurrentSurvivalRooms.Door(i);
                 var door = survivalDoors[i];
                 var render = door.GetComponent<Renderer>();
                 render.enabled = room.durability > 0;
                 survivalDoorBraces[i].gameObject.SetActive(room.fortified && room.durability > 0);
-                door.position = At(room.open ? new Vector2(hinge.center.x + .8f, hinge.yMin) : hinge.center, 1.02f);
+                door.position = SurvivalPosition(room.open ? new Vector2(hinge.center.x + .8f, hinge.yMin) : hinge.center, 1.02f);
                 door.rotation = Quaternion.Euler(0, room.open ? 90 : 0, 0);
                 var audio = survivalAlarms[i];
                 if (room.durability < survivalDoorDurability[i] && !scavengePaused &&
@@ -232,9 +237,9 @@ namespace OutpostLoop
             {
                 var drop = state.drops[i];
                 if (i == survivalDropMarkers.Count)
-                    survivalDropMarkers.Add(ScavengeBox("地面物品", At(drop.point, .13f),
+                    survivalDropMarkers.Add(ScavengeBox("地面物品", SurvivalPosition(drop.point, .13f),
                         new Vector3(.43f, .26f, .37f), survivalDropMaterial));
-                survivalDropMarkers[i].position = At(drop.point, .13f);
+                survivalDropMarkers[i].position = SurvivalPosition(drop.point, .13f);
                 survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0);
             }
             for (int i = state.drops.Count; i < survivalDropMarkers.Count; i++)
@@ -320,7 +325,7 @@ namespace OutpostLoop
             {
                 var patrol = scavengeRun.Patrols[i];
                 if (!patrol.Alive) continue;
-                var head = gameCamera.WorldToScreenPoint(At(patrol.Position, 1.34f));
+                var head = gameCamera.WorldToScreenPoint(SurvivalPosition(patrol.Position, 1.34f));
                 if (head.z <= 0 || Vector2.Distance(cursor, head) > 12 * HudScale || head.z >= best) continue;
                 target = i;
                 best = head.z;
@@ -397,7 +402,7 @@ namespace OutpostLoop
             if (cabinet >= 0)
             {
                 survivalContainer = scavengeRun.Survival.rooms[cabinet].storage;
-                survivalContainer.point = SurvivalRooms.Cabinet(cabinet);
+                survivalContainer.point = CurrentSurvivalRooms.Cabinet(cabinet);
                 return;
             }
             survivalContainer = NearbySurvivalDrop();
@@ -444,8 +449,14 @@ namespace OutpostLoop
             if (GUI.Button(new Rect(30, 114, 148, 34), $"背包 {state.Used}/6  Tab")) OpenSurvivalPack();
             GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
 
+            if (survivalFeedbackVersion != scavengeRun.SurvivalFeedbackVersion)
+            {
+                survivalFeedbackVersion = scavengeRun.SurvivalFeedbackVersion;
+                survivalFeedbackUntil = Time.unscaledTime + 4;
+            }
             string notice = state.sleeping ? "正在睡觉 · 移动键起身" : state.action != SurvivalAction.None ?
-                $"{SurvivalActionName(state.action)} · {state.actionTime:0.0} 秒" : scavengeRun.SurvivalFeedback;
+                $"{SurvivalActionName(state.action)} · {state.actionTime:0.0} 秒" :
+                Time.unscaledTime <= survivalFeedbackUntil ? scavengeRun.SurvivalFeedback : "";
             if (!string.IsNullOrEmpty(notice)) GUI.Box(new Rect(width / 2 - 180, height - 103, 360, 34), notice);
             if (state.Warning)
                 GUI.Box(new Rect(width / 2 - 155, 20, 310, 35), state.Ready ? "前往撤离点" : "即将达标 · 请向撤离点靠拢");
@@ -465,6 +476,7 @@ namespace OutpostLoop
             DrawSurvivalJourney(width, height);
             if (scavengeRun.ExitKnown || state.Warning) DrawScavengeExitLabel();
             DrawScavengeMap(width);
+            DrawFullRiverValleyEntrances();
         }
 
         private void DrawSurvivalPanels(Rect panel)
@@ -643,10 +655,11 @@ namespace OutpostLoop
                 GUI.Label(new Rect(x + 20, y + 57, 420, 28), $"存活 {SurvivalTime(state.elapsed)}  ·  {(state.Ready ? "已活满三天" : "未活满三天")}");
                 GUI.Label(new Rect(x + 20, y + 94, 520, 86), SurvivalResultDetails(),
                     new GUIStyle(GUI.skin.label) { wordWrap = true });
-                if (GUI.Button(new Rect(x + 20, y + 190, 520, 39), "用相同种子重试 · 空手") && CloseSurvivalSave())
+                if (GUI.Button(new Rect(x + 20, y + 190, 520, 39), survivalLayoutVersion == 0 ?
+                    "用相同种子重试 · 旧版街区" : "用相同种子重试 · 空手") && CloseSurvivalSave())
                     BeginScavenge(scavengeRun.Seed);
-                if (GUI.Button(new Rect(x + 20, y + 239, 520, 39), "换种子开始 · 空手") && CloseSurvivalSave())
-                    RestartScavenge();
+                if (GUI.Button(new Rect(x + 20, y + 239, 520, 39), "换种子开始 · 河谷镇整图"))
+                    StartFreshSurvivalFromResult();
                 if (GUI.Button(new Rect(x + 20, y + 288, 520, 39),
                     scavengeRun.Outcome == ScavengeOutcome.Extracted ? "回到空间 · 查看行动记录" : "返回开始页 · 保留结果"))
                     ReturnFromSurvival();

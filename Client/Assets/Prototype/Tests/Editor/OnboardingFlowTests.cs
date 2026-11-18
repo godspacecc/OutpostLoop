@@ -66,7 +66,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(savedPosition, resumed.Player);
             Assert.AreEqual(1, resumed.Survival.pack.Count);
             resumed.Survival.elapsed = ScavengeSurvival.Goal;
-            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(resumed, ScavengeTown.Exit);
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(resumed, resumed.ExitPoint);
             resumed.Tick(.01f, Vector2.zero);
             Assert.IsTrue(resumed.SurvivalExit());
             Call(controller, "ReturnFromSurvival");

@@ -33,8 +33,14 @@ namespace OutpostLoop
         public bool CanTalk => Survival == null && IsTown && !SurvivorSpoken && Outcome == ScavengeOutcome.Exploring &&
             Vector2.Distance(Player, ScavengeTown.Survivor) <= 1.8f && ClearRunLine(Player, ScavengeTown.Survivor);
         internal int MedicineCache => MedicineLeadKnown ? medicineCache : -1;
-        internal Vector2[] CachePoints => IsTown ? ScavengeTown.Caches : ScavengeLayout.Caches;
-        internal string[] CacheNames => IsTown ? ScavengeTown.Names : ScavengeLayout.CacheNames;
+        // 本趟整图几何；旧地图为空，不使用全局可变布局切换。
+        internal RiverValley.RiverValleyWorldGeometry FullTown { get; }
+        // 动态房门由当前房间集合生成。
+        internal SurvivalRoomSet RoomSet { get; }
+        // 小地图与实际移动共用边界。
+        internal Rect MapBounds => FullTown?.Bounds ?? (IsTown ? ScavengeTown.Bounds : new Rect(-12,-10,24,21));
+        internal Vector2[] CachePoints => FullTown?.Caches ?? (IsTown ? ScavengeTown.Caches : ScavengeLayout.Caches);
+        internal string[] CacheNames => FullTown?.CacheNames ?? (IsTown ? ScavengeTown.Names : ScavengeLayout.CacheNames);
         internal Rect[] BuildGrounds => IsTown ? ScavengeTown.ShelterGrounds : ScavengeLayout.ShelterGrounds;
         internal Rect[] RunWalls
         {
@@ -49,24 +55,49 @@ namespace OutpostLoop
             }
         }
 
-        private static Vector2[] TownRouteCorners
+        private Vector2[] TownRouteCorners
         {
             get
             {
+                if (FullTown != null) return FullTown.Corners;
 #if UNITY_EDITOR
                 if (townPreviewCorners != null) return townPreviewCorners;
 #endif
                 return ScavengeTown.Corners;
             }
         }
-        internal Vector2 ExitPoint => IsTown ? ScavengeTown.Exit : ScavengeLayout.Exit;
+        internal Vector2 ExitPoint => FullTown?.Exit ?? (IsTown ? ScavengeTown.Exit : ScavengeLayout.Exit);
 
-        private Vector2 MoveInRun(Vector2 point, Vector2 step) => IsTown
-            ? ScavengeLayout.Move(point, step, ScavengeTown.Bounds, RunWalls)
-            : ScavengeLayout.Move(point, step);
+        /// <summary>逐轴滑动并检查实体与河道，保持旧图原有移动规则。</summary>
+        private Vector2 MoveInRun(Vector2 point, Vector2 step)
+        {
+            if (FullTown == null) return IsTown ? ScavengeLayout.Move(point, step, ScavengeTown.Bounds, RunWalls) : ScavengeLayout.Move(point, step);
+            var next = ScavengeLayout.Move(point, step, FullTown.Bounds, RunWalls);
+            if (!FullTown.Walkable(new Vector2(next.x, point.y))) next.x = point.x;
+            if (!FullTown.Walkable(new Vector2(next.x, next.y))) next.y = point.y;
+            return next;
+        }
 
-        private bool ClearRunLine(Vector2 from, Vector2 to, float clearance = 0) =>
-            ScavengeLayout.ClearLine(from, to, clearance, RunWalls);
+        /// <summary>房门、墙体和可见实体遮挡视线，水面本身不遮挡。</summary>
+        private bool ClearRunLine(Vector2 from, Vector2 to, float clearance = 0)
+        {
+            if (!ScavengeLayout.ClearLine(from, to, clearance, RunWalls)) return false;
+            if (FullTown == null) return true;
+            int steps = Mathf.CeilToInt(Vector2.Distance(from, to) * 2);
+            for (int i = 1; i <= steps; i++) if (!FullTown.ClearBody(Vector2.Lerp(from, to, (float)i / steps), clearance)) return false;
+            return true;
+        }
+
+        /// <summary>寻路同时检查河道和桥面；战斗视线仍只被实体阻挡。</summary>
+        private bool ClearRunRoute(Vector2 from, Vector2 to, float clearance = .34f)
+        {
+            if (!ClearRunLine(from, to, clearance)) return false;
+            if (FullTown == null) return true;
+            int steps = Mathf.CeilToInt(Vector2.Distance(from, to) * 2);
+            for (int i = 1; i <= steps; i++)
+                if (!FullTown.TerrainWalkable(Vector2.Lerp(from, to, (float)i / steps), clearance)) return false;
+            return true;
+        }
 
         private void RevealMedicineLead() => MedicineLeadKnown = true;
 

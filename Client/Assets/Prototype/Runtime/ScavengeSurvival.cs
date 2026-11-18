@@ -125,6 +125,8 @@ namespace OutpostLoop
         public static readonly int[] ActiveCaches = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14 };
 
         public double elapsed;
+        // 0 为旧小街区存档，1 为确认的河谷镇整图；恢复时按原版地图读取。
+        public int layoutVersion;
         public float health = 100, water = 80, food = 80, energy = 80;
         public float dehydration, starvation, bleedClock, lastHit = -11, attackCooldown;
         public bool bleeding, sleeping, torchOn;
@@ -149,15 +151,15 @@ namespace OutpostLoop
         public bool Weak => water < 25 || energy < 25;
 
         /// <summary>固定起点补给，其余在可绕行路线和高风险区域内重排。</summary>
-        public static ScavengeSurvival Create(int seed)
+        public static ScavengeSurvival Create(int seed, bool fullTown = false)
         {
             var result = new ScavengeSurvival { caches = new SurvivalContainer[ScavengeTown.Caches.Length] };
             for (int i = 0; i < result.caches.Length; i++)
                 result.caches[i] = new SurvivalContainer
                     { point = ScavengeTown.Caches[i], active = Array.IndexOf(ActiveCaches, i) >= 0 };
             var random = new System.Random(seed);
-            int[] nearby = { 1, 2, 3, 4, 5, 6, 7 };
-            int[] distant = { 8, 10, 12, 14 };
+            int[] nearby = fullTown ? new[] { 1, 2, 3, 4, 5 } : new[] { 1, 2, 3, 4, 5, 6, 7 };
+            int[] distant = fullTown ? new[] { 6, 7, 8, 10, 12, 14 } : new[] { 8, 10, 12, 14 };
             void Add(int index, SurvivalItem item, int count = 1) =>
                 result.caches[index].items.Add(new SurvivalStack(item, count));
             void Distribute(SurvivalItem item, int count, int[] locations)
@@ -177,7 +179,8 @@ namespace OutpostLoop
             Distribute(SurvivalItem.Food, 4, nearby);
             Distribute(SurvivalItem.Food, 3, distant);
             Distribute(SurvivalItem.Bandage, 3, nearby);
-            Distribute(SurvivalItem.Aid, 2, distant);
+            if (fullTown) { Add(6, SurvivalItem.Aid); Add(12, SurvivalItem.Aid); }
+            else Distribute(SurvivalItem.Aid, 2, distant);
             Add(3, SurvivalItem.Crowbar);
             Add(5, SurvivalItem.Torch);
             Add(10, SurvivalItem.Battery);

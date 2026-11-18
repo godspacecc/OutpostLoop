@@ -21,9 +21,34 @@ namespace OutpostLoop.RiverValley
 
         private void BuildBuilding(Building building)
         {
+            if (!fullSurvivalWorld) { BuildBuildingParts(building); return; }
+            var shared = scenery;
+            scenery = new RiverValleyMesh(Section("封闭建筑"), surface);
+            try { BuildBuildingParts(building); scenery.Finish(); }
+            finally { scenery = shared; }
+        }
+
+        private void BuildBuildingParts(Building building)
+        {
             Vector2 center = Map(building.x, building.y);
             Quaternion rotation = Quaternion.Euler(0, building.angle * Mathf.Rad2Deg, 0);
             center = Setback(center, rotation, building.width, building.depth);
+            if (fullSurvivalWorld)
+            {
+                int slot = Array.IndexOf(openBuildings, building);
+                if (slot >= 0)
+                {
+                    var size = new Vector2(building.width, building.depth);
+                    WorldGeometry.Interiors[slot] = new Rect(center - RiverValleyWorldGeometry.Anchor - size / 2, size);
+                    return;
+                }
+                // 原外景的旋转建筑偶有重叠；重点室内采用轴对齐墙体后，腾出同一可见空间，避免暗碰撞。
+                float c = Mathf.Abs(Mathf.Cos(building.angle)), s = Mathf.Abs(Mathf.Sin(building.angle));
+                var extent = new Vector2(c * building.width + s * building.depth, s * building.width + c * building.depth);
+                var bounds = new Rect(center - RiverValleyWorldGeometry.Anchor - extent / 2,extent);
+                foreach (var interior in WorldGeometry.Interiors)
+                    if (bounds.Overlaps(new Rect(interior.position - Vector2.one, interior.size + Vector2.one * 2))) return;
+            }
             var random = new System.Random(Mathf.RoundToInt(building.x * 37 + building.y * 11));
             float width = building.width, depth = building.depth;
             bool shop = building.style == "shop";
@@ -436,6 +461,12 @@ namespace OutpostLoop.RiverValley
 
         private void Solid(string name, Vector3 position, Vector3 size, Quaternion rotation, Transform parent)
         {
+            if (fullSurvivalWorld)
+            {
+                WorldGeometry.Solids.Add(new RiverValleyWorldGeometry.Solid(new Vector2(position.x,position.z) - RiverValleyWorldGeometry.Anchor,
+                    new Vector2(size.x,size.z), rotation.eulerAngles.y * Mathf.Deg2Rad));
+                return;
+            }
             if (gameplayScenery) return;
             var item = new GameObject(name);
             item.transform.SetParent(parent,false);

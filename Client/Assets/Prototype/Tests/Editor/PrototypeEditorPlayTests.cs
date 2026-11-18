@@ -56,7 +56,7 @@ namespace OutpostLoop.Tests
             run.Survival.elapsed = ScavengeSurvival.Goal;
             run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Water));
             run.Survival.caches[0].known = true;
-            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeTown.Exit);
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, run.ExitPoint);
             run.Tick(.01f, Vector2.zero);
             // 以文件阻塞目录，真实制造写入失败；结算必须留在原会话并允许恢复后重试。
             var blocked = directory + "-blocked";
@@ -168,7 +168,7 @@ namespace OutpostLoop.Tests
                 yield return CaptureSurvivalEvidence("hud", 1920, 1080);
 
                 // 容器切到随身使用后必须关闭原搜索，物品只在动作完成时扣除。
-                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeTown.Caches[0]);
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, run.CachePoints[0]);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.AreEqual(0, run.OpenCache);
                 DriveScavengeKey(controller, poll, keyboard, Key.Tab);
@@ -185,7 +185,7 @@ namespace OutpostLoop.Tests
                 Assert.That(run.Survival.water, Is.GreaterThan(74));
 
                 // 未达标按 E 先确认，取消后仍是同一趟；达标后原撤离规则仍有效。
-                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, ScavengeTown.Exit);
+                typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, run.ExitPoint);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsTrue((bool)type.GetField("survivalConfirmExit", flags).GetValue(controller));
                 yield return CaptureSurvivalEvidence("early-exit", 1280, 720);
@@ -248,8 +248,9 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
-        public IEnumerator BootRiverValleySurvivalLoadsSceneryAndKeepsTheDistrictPlayable()
+        public IEnumerator BootRiverValleyFullTownHasSixInteriorsAndKeepsLegacySaves()
         {
+            const string batch = "RiverValleyFocus-20261118";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -257,61 +258,166 @@ namespace OutpostLoop.Tests
             var type = typeof(PrototypeController);
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
-                "../../Backup/Artifacts/RiverValleySurvival-20261113/TestSave-" + System.Guid.NewGuid().ToString("N")));
-            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            var store = new Game.JsonFileStore<SurvivalSave>(directory);
+            type.GetField("survivalStore", flags).SetValue(controller, store);
             type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
             Click("StartSurvival");
             yield return WaitForCrossing();
-            var scenery = GameObject.Find("河谷镇周边外景");
-            Assert.NotNull(scenery);
-            Assert.IsEmpty(scenery.GetComponentsInChildren<Camera>());
-            Assert.IsEmpty(scenery.GetComponentsInChildren<Collider>());
-            Assert.IsNull(GameObject.Find("外景步行角色"));
-            Assert.That(scenery.GetComponentsInChildren<MeshFilter>().Length, Is.GreaterThan(200));
-            Assert.NotNull(GameObject.Find("东侧街区边界"));
-            Assert.NotNull(GameObject.Find("河谷镇坡屋面"));
-            // 外景不得盖住平地、搜点或房间；每个网格顶点都应位于保留区以外。
-            bool intrudes = false;
-            var district = new Rect(-109, -96, 218, 192);
-            foreach (var filter in scenery.GetComponentsInChildren<MeshFilter>())
-            {
-                foreach (var vertex in filter.sharedMesh.vertices)
-                {
-                    var world = filter.transform.TransformPoint(vertex);
-                    if (district.Contains(new Vector2(world.x, world.z))) { intrudes = true; break; }
-                }
-                if (intrudes) break;
-            }
-            Assert.IsFalse(intrudes, "外景侵入可玩街区");
-            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
-            Assert.That(Vector2.Distance(run.Player, ScavengeTown.Start), Is.LessThan(.01f));
-            // 实际领域步行抵达镇口搜点，搜索完成后可取得固定饮水。
-            for (int step = 0; step < 80 && Vector2.Distance(run.Player, ScavengeTown.Caches[0]) > .4f; step++)
-                run.Tick(.05f, (ScavengeTown.Caches[0] - run.Player).normalized);
-            Assert.That(Vector2.Distance(run.Player, ScavengeTown.Caches[0]), Is.LessThan(.5f));
-            run.Interact();
-            for (int step = 0; step < 100 && run.SearchRemaining > 0; step++) run.Tick(.05f, Vector2.zero);
-            Assert.AreEqual(0, run.OpenCache);
-            Assert.That(run.Survival.caches[0].items.Exists(item => item.item == SurvivalItem.Water), Is.True);
-            Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.caches[0].items, 0, run.Survival.pack, 6));
-            run.CloseSearch();
-            type.GetMethod("SyncScavenge", flags).Invoke(controller, new object[] { true });
-            yield return CaptureSurvivalEvidence("town-street", 1920, 1080, "RiverValleySurvival-20261113");
-            type.GetField("survivalRegionMapOpen", flags).SetValue(controller, true);
-            double beforeMap = run.Survival.elapsed;
-            yield return CaptureSurvivalEvidence("region-map", 1280, 720, "RiverValleySurvival-20261113");
-            Assert.AreEqual(beforeMap, run.Survival.elapsed, "区域图应暂停局时");
-            type.GetField("survivalRegionMapOpen", flags).SetValue(controller, false);
-            // 边界以实体围栏表达，领域移动仍拒绝越界。
-            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, new Vector2(83, 0));
-            for (int step = 0; step < 20; step++) run.Tick(.05f, Vector2.right);
-            Assert.That(run.Player.x, Is.LessThanOrEqualTo(ScavengeTown.Bounds.xMax));
-            type.GetMethod("SyncScavenge", flags).Invoke(controller, new object[] { true });
-            yield return CaptureSurvivalEvidence("district-edge", 1280, 720, "RiverValleySurvival-20261113");
-            type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
-            yield return null;
-            Assert.IsNull(GameObject.Find("河谷镇周边外景"));
+            var field = type.GetField("scavengeRun", flags);
+            var run = (ScavengeRun)field.GetValue(controller);
+            Assert.NotNull(run.FullTown);
+            Assert.AreEqual(1, run.Survival.layoutVersion);
+            Assert.AreEqual(2000, run.MapBounds.width);
+            Assert.AreEqual(2000, run.MapBounds.height);
+            Assert.AreEqual(6, run.FullTown.Interiors.Length);
             Assert.IsNull(GameObject.Find("东侧街区边界"));
+            Assert.NotNull(GameObject.Find("河谷镇整图"));
+            int alive = 0, fast = 0;
+            foreach(var patrol in run.Patrols) { if(patrol.Alive)alive++; if(patrol.Fast)fast++; }
+            Assert.AreEqual(12, alive); Assert.AreEqual(2, fast);
+            int waterCount=0,foodCount=0,nearWater=0,nearFood=0;
+            foreach(int index in ScavengeSurvival.ActiveCaches)
+                foreach(var item in run.Survival.caches[index].items)
+                {
+                    if(item.item==SurvivalItem.Water){waterCount+=item.count;if(index<=5)nearWater+=item.count;}
+                    if(item.item==SurvivalItem.Food){foodCount+=item.count;if(index<=5)nearFood+=item.count;}
+                }
+            Assert.AreEqual(12,waterCount);Assert.AreEqual(8,foodCount);
+            Assert.GreaterOrEqual(nearWater,7);Assert.GreaterOrEqual(nearFood,5);
+            var threat=run.Patrols[0];
+            threat.Position=run.Player+Vector2.right*.2f;
+            for(int step=0;step<30;step++)run.Tick(.05f,Vector2.zero);
+            Assert.Less(run.Survival.health,100,"整图感染者应能发现并攻击玩家");
+            run.Survival.health=100;run.Survival.bleeding=false;
+            // 停用敌人仅隔离几何验收；不把它当作真人整局生存证据。
+            foreach(var patrol in run.Patrols)patrol.Health=0;
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            for(int step=0;step<30 && Vector2.Distance(run.Player,run.CachePoints[0])>.3f;step++)
+                run.Tick(.05f,(run.CachePoints[0]-run.Player).normalized);
+            run.Interact();
+            Assert.AreEqual(0,run.OpenCache);
+            for(int step=0;step<30 && run.SearchRemaining>0;step++)run.Tick(.05f,Vector2.zero);
+            Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.caches[0].items,0,run.Survival.pack,6));
+            Assert.IsTrue(run.Survival.pack.Exists(item=>item.item==SurvivalItem.Water));
+            run.CloseSearch();
+            foreach(int cache in ScavengeSurvival.ActiveCaches)
+            {
+                string blocked="";
+                foreach(var solid in run.FullTown.Solids)
+                    if(solid.Contains(run.CachePoints[cache],.1f))blocked += $" {solid.Center}/{solid.Half}/{solid.Angle}";
+                Assert.IsTrue(run.FullTown.Walkable(run.CachePoints[cache], .1f),run.CacheNames[cache]+"不可达 "+run.CachePoints[cache]+blocked);
+            }
+            for(int i=0;i<6;i++)
+            {
+                var rooms=new SurvivalRoomSet(run.FullTown.Interiors);
+                var door=rooms.Door(i).center;
+                player.SetValue(run,door-Vector2.right*1.2f);
+                if(i<2)Assert.IsTrue(run.ToggleSurvivalDoor());
+                for(int step=0;step<15;step++)run.Tick(.05f,Vector2.right);
+                Assert.Greater(run.Player.x,door.x+.5f,"重点建筑入口不能通行 "+i);
+                if(i<2)
+                {
+                    Assert.AreEqual(i,run.InsideSurvivalRoom);
+                    Assert.IsTrue(run.ClaimSurvivalRoom());
+                    player.SetValue(run,run.RoomSet.Bed(i));
+                    run.Survival.energy=40;
+                    Assert.IsTrue(run.SleepSurvival());
+                    run.Tick(.1f,Vector2.zero);
+                    Assert.Greater(run.Survival.energy,40);
+                    run.WakeSurvival("验收起身");
+                    player.SetValue(run,run.RoomSet.Cabinet(i));
+                    type.GetMethod("InteractSurvival",flags).Invoke(controller,null);
+                    Assert.AreSame(run.Survival.rooms[i].storage,type.GetField("survivalContainer",flags).GetValue(controller));
+                    Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.pack,0,run.Survival.rooms[i].storage.items,12));
+                    Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.rooms[i].storage.items,0,run.Survival.pack,6));
+                    type.GetMethod("CloseSurvivalPanels",flags).Invoke(controller,null);
+                    player.SetValue(run,door+Vector2.right*1.2f);
+                    Assert.IsTrue(run.ToggleSurvivalDoor());
+                    Assert.IsFalse(ScavengeLayout.ClearLine(door-Vector2.right,door+Vector2.right,.1f,run.RunWalls));
+                    Assert.IsTrue(run.ToggleSurvivalDoor());
+                }
+                type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+                yield return CaptureSurvivalEvidence("interior-"+i,1280,720,batch);
+            }
+            // 三桥的河中段可走，离开桥面落入河道则禁止通行。
+            var bridges=new List<Vector2>();
+            foreach(var bridge in run.FullTown.Bridges)
+            {
+                var center=(bridge.A+bridge.B)/2;
+                if(run.FullTown.WaterMargin(center)>-3)continue;
+                if(bridges.Exists(other=>Vector2.Distance(other,center)<140))continue;
+                Assert.IsTrue(run.FullTown.Walkable(center,.34f),"桥面不可走");
+                bridges.Add(center);
+                var segmentStart=bridge.A;
+                player.SetValue(run,segmentStart);
+                foreach(var section in run.FullTown.Bridges)
+                {
+                    if(Vector2.Distance((section.A+section.B)/2,center)>140)continue;
+                    player.SetValue(run,section.A);
+                    for(int step=0;step<250 && Vector2.Distance(run.Player,section.B)>.25f;step++)
+                        run.Tick(.05f,(section.B-run.Player).normalized);
+                    Assert.That(Vector2.Distance(run.Player,section.B),Is.LessThan(.6f),"桥梁路段不能实际步行通过");
+                }
+                var normal=(bridge.B-bridge.A).normalized;
+                normal=new Vector2(-normal.y,normal.x);
+                bool checkedWater=false;
+                for(int offset=4;offset<=60&&!checkedWater;offset+=4)
+                    for(int side=-1;side<=1&&!checkedWater;side+=2)
+                    {
+                        var water=center+normal*(bridge.Width/2+offset)*side;
+                        if(run.FullTown.WaterMargin(water)>-2)continue;
+                        bool onBridge=false;
+                        foreach(var other in run.FullTown.Bridges)
+                            if(other.Distance(water)<=other.Width/2) { onBridge=true; break; }
+                        if(onBridge)continue;
+                        Assert.IsFalse(run.FullTown.Walkable(water,.34f),"离开桥面仍能穿河");
+                        checkedWater=true;
+                    }
+                Assert.IsTrue(checkedWater,"未找到桥边河道验证点");
+                player.SetValue(run,center);
+                type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+                yield return CaptureSurvivalEvidence("bridge-"+bridges.Count,1920,1080,batch);
+            }
+            Assert.AreEqual(3,bridges.Count,"未覆盖三座实际桥梁");
+            type.GetField("survivalRegionMapOpen",flags).SetValue(controller,true);
+            double elapsed=run.Survival.elapsed;
+            yield return CaptureSurvivalEvidence("full-region",1280,720,batch);
+            Assert.AreEqual(elapsed,run.Survival.elapsed);
+            type.GetField("survivalRegionMapOpen",flags).SetValue(controller,false);
+            var savedPosition=run.Player;
+            type.GetMethod("SaveAndLeaveSurvival",flags).Invoke(controller,null);
+            yield return null;
+            Assert.AreEqual(1,store.Read("town-survival-v1.json").Data.run.layoutVersion);
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run=(ScavengeRun)field.GetValue(controller);
+            Assert.NotNull(run.FullTown);
+            Assert.That(Vector2.Distance(savedPosition,run.Player),Is.LessThan(.01f));
+            type.GetMethod("LeaveScavenge",flags).Invoke(controller,null);
+            yield return null;
+            var legacy=new ScavengeRun(41,true,ScavengeSurvival.Create(41));
+            store.Save("town-survival-v1.json",legacy.CaptureSurvival());
+            type.GetField("survivalSaveChecked",flags).SetValue(controller,false);
+            type.GetMethod("RefreshOverlay",flags).Invoke(controller,null);
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run=(ScavengeRun)field.GetValue(controller);
+            Assert.IsNull(run.FullTown);
+            Assert.AreEqual(0,run.Survival.layoutVersion);
+            Assert.AreEqual(ScavengeTown.Start,run.Player);
+            Assert.NotNull(GameObject.Find("河谷镇周边外景"));
+            run.Survival.elapsed=ScavengeSurvival.Goal;
+            player.SetValue(run,run.ExitPoint);
+            run.Tick(.01f,Vector2.zero);
+            Assert.IsTrue(run.SurvivalExit());
+            type.GetMethod("StartFreshSurvivalFromResult",flags).Invoke(controller,null);
+            yield return WaitForCrossing();
+            run=(ScavengeRun)field.GetValue(controller);
+            Assert.NotNull(run.FullTown);
+            Assert.AreEqual(1,run.Survival.layoutVersion);
+            Assert.IsEmpty(run.Survival.pack);
             yield return new ExitPlayMode();
         }
 
@@ -377,16 +483,16 @@ namespace OutpostLoop.Tests
             try
             {
                 var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
-                player.SetValue(run, ScavengeTown.Caches[0]);
+                player.SetValue(run, run.CachePoints[0]);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.AreEqual(0, run.OpenCache);
                 run.CloseSearch();
 
-                var door = SurvivalRooms.Door(0).center;
+                var door = run.RoomSet.Door(0).center;
                 player.SetValue(run, door - Vector2.right);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsTrue(run.Survival.rooms[0].open);
-                player.SetValue(run, SurvivalRooms.Footprint(0).center);
+                player.SetValue(run, run.RoomSet.Footprint(0).center);
                 Assert.IsTrue(run.ClaimSurvivalRoom());
                 Assert.That(run.Survival.pack, Is.Empty);
                 run.Survival.elapsed = 1600;
@@ -411,7 +517,7 @@ namespace OutpostLoop.Tests
                 Assert.IsNull(resumed.Survival.weapon);
                 Assert.IsNull(resumed.Survival.torch);
                 resumed.Survival.elapsed = ScavengeSurvival.Goal;
-                player.SetValue(resumed, ScavengeTown.Exit);
+                player.SetValue(resumed, resumed.ExitPoint);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.AreEqual(ScavengeOutcome.Extracted, resumed.Outcome);
                 Assert.IsTrue(resumed.Survival.Ready);

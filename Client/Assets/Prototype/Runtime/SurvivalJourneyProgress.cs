@@ -27,7 +27,7 @@ namespace OutpostLoop
             // 阵亡不带回本趟情报；已回归的历史情报继续保留。
             if (extracted)
                 for (int i = 0; i < state.caches.Length; i++)
-                    if (state.caches[i].known && !known.Contains(ScavengeTown.Names[i])) known.Add(ScavengeTown.Names[i]);
+                    if (state.caches[i].known && !known.Contains(run.CacheNames[i])) known.Add(run.CacheNames[i]);
             return new SurvivalJourneyProgress
             {
                 completedFirst = previous?.completedFirst == true || (extracted && state.Ready),

@@ -24,7 +24,7 @@ namespace OutpostLoop
         private void UpdateScavengeCamera(bool snap)
         {
             var lookAhead = ScavengeGroundRotation * Vector3.forward * 1.5f;
-            var desired = At(scavengeRun.Player, 0) + lookAhead;
+            var desired = SurvivalPosition(scavengeRun.Player, 0) + lookAhead;
             scavengeCameraFocus = snap ? desired : Vector3.Lerp(scavengeCameraFocus, desired,
                 1 - Mathf.Exp(-10f * Time.unscaledDeltaTime));
             float distance = Mathf.Max(ScavengeCameraDistance, 25f / gameCamera.aspect);
@@ -39,8 +39,8 @@ namespace OutpostLoop
         private void UpdateScavengeOccluders()
         {
             var origin = gameCamera.transform.position;
-            var torso = At(scavengeRun.Player, .95f);
-            var feet = At(scavengeRun.Player, .22f);
+            var torso = SurvivalPosition(scavengeRun.Player, .95f);
+            var feet = SurvivalPosition(scavengeRun.Player, .22f);
             int cache = scavengeRun.OpenCache >= 0 ? scavengeRun.OpenCache : scavengeRun.NearbyCache;
             foreach (var segment in scavengeOccluders)
             {
@@ -50,7 +50,7 @@ namespace OutpostLoop
                     if (part == null || !part.enabled || !part.gameObject.activeInHierarchy) continue;
                     var bounds = part.bounds;
                     hidden = BlocksView(bounds, origin, torso) || BlocksView(bounds, origin, feet) ||
-                        (cache >= 0 && BlocksView(bounds, origin, At(scavengeRun.CachePoints[cache], .36f)));
+                        (cache >= 0 && BlocksView(bounds, origin, SurvivalPosition(scavengeRun.CachePoints[cache], .36f)));
                     if (hidden) break;
                 }
                 foreach (var part in segment)

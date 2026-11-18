@@ -36,8 +36,10 @@ namespace OutpostLoop
         internal ScavengeSurvival Survival { get; }
         internal bool SurvivalSprint { get; set; }
         internal string SurvivalFeedback { get; private set; }
+        // 即使连续出现相同提示，表现层也能重新显示短暂反馈。
+        internal int SurvivalFeedbackVersion { get; private set; }
         private Rect[] survivalWalls;
-        internal void RefreshSurvivalWalls() => survivalWalls = SurvivalRooms.Collision(Survival.rooms);
+        internal void RefreshSurvivalWalls() => survivalWalls = RoomSet.Collision(Survival.rooms, FullTown == null);
 
         private float SurvivalSpeed(Vector2 input)
         {
@@ -65,7 +67,7 @@ namespace OutpostLoop
                 for (int i = 0; i < Survival.rooms.Length; i++)
                 {
                     var room = Survival.rooms[i];
-                    if (room.ringing > 0 && Vector2.Distance(Player, SurvivalRooms.Door(i).center) <= 20)
+                    if (room.ringing > 0 && Vector2.Distance(Player, RoomSet.Door(i).center) <= 20)
                     {
                         WakeSurvival("被附近警报惊醒");
                         break;
@@ -87,15 +89,15 @@ namespace OutpostLoop
             return true;
         }
 
-        internal int NearbySurvivalDoor => NearbySurvivalPoint(i => SurvivalRooms.Door(i).center, 1.65f);
-        internal int NearbySurvivalBed => NearbySurvivalInterior(SurvivalRooms.Bed);
-        internal int NearbySurvivalCabinet => NearbySurvivalInterior(SurvivalRooms.Cabinet);
+        internal int NearbySurvivalDoor => NearbySurvivalPoint(i => RoomSet.Door(i).center, 1.65f);
+        internal int NearbySurvivalBed => NearbySurvivalInterior(RoomSet.Bed);
+        internal int NearbySurvivalCabinet => NearbySurvivalInterior(RoomSet.Cabinet);
         internal int InsideSurvivalRoom
         {
             get
             {
                 for (int i = 0; i < Survival.rooms.Length; i++)
-                    if (SurvivalRooms.Footprint(i).Contains(Player)) return i;
+                    if (RoomSet.Footprint(i).Contains(Player)) return i;
                 return -1;
             }
         }
@@ -129,7 +131,7 @@ namespace OutpostLoop
             var room = Survival.rooms[index];
             if (room.open)
             {
-                var area = SurvivalRooms.Door(index);
+                var area = RoomSet.Door(index);
                 area = Rect.MinMaxRect(area.xMin - .38f, area.yMin - .38f, area.xMax + .38f, area.yMax + .38f);
                 if (area.Contains(Player)) return ReportSurvival("离开门洞后再关门");
                 foreach (var patrol in patrols)
@@ -155,7 +157,7 @@ namespace OutpostLoop
 
         private bool HasRoomThreat(int room)
         {
-            var footprint = SurvivalRooms.Footprint(room);
+            var footprint = RoomSet.Footprint(room);
             foreach (var patrol in patrols)
                 if (patrol.Alive && (footprint.Contains(patrol.Position) ||
                     (patrol.Engaged && Vector2.Distance(patrol.Position, Player) < 8))) return true;
@@ -191,10 +193,10 @@ namespace OutpostLoop
             for (int i = 0; i < Survival.rooms.Length; i++)
             {
                 var room = Survival.rooms[i];
-                var door = SurvivalRooms.Door(i).center;
-                if (Survival.sleepRoom == i && SurvivalRooms.Footprint(i).Contains(patrol.Position))
+                var door = RoomSet.Door(i).center;
+                if (Survival.sleepRoom == i && RoomSet.Footprint(i).Contains(patrol.Position))
                     WakeSurvival("感染者进屋了");
-                if (!room.Blocks || !patrol.Engaged || !SurvivalRooms.Footprint(i).Contains(patrol.LastSeen) ||
+                if (!room.Blocks || !patrol.Engaged || !RoomSet.Footprint(i).Contains(patrol.LastSeen) ||
                     Vector2.Distance(patrol.Position, door) > 1.35f) continue;
 
                 if (patrol.Cooldown > 0) return true;
@@ -222,14 +224,14 @@ namespace OutpostLoop
         {
             if (Survival == null) return null;
             for (int i = 0; i < Survival.rooms.Length; i++)
-                if (Survival.rooms[i].ringing > 0 && Vector2.Distance(listener, SurvivalRooms.Door(i).center) <= 20)
-                    return SurvivalRooms.Door(i).center;
+                if (Survival.rooms[i].ringing > 0 && Vector2.Distance(listener, RoomSet.Door(i).center) <= 20)
+                    return RoomSet.Door(i).center;
             float range = Survival.action is SurvivalAction.Fortify or SurvivalAction.Repair or SurvivalAction.Alarm ? 14 :
                 SurvivalSprint ? 6 : 0;
             if (range > 0 && Vector2.Distance(listener, Player) <= range) return Player;
             for (int i = 0; i < Survival.rooms.Length; i++)
-                if (Survival.rooms[i].impact > 0 && Vector2.Distance(listener, SurvivalRooms.Door(i).center) <= 9)
-                    return SurvivalRooms.Door(i).center;
+                if (Survival.rooms[i].impact > 0 && Vector2.Distance(listener, RoomSet.Door(i).center) <= 9)
+                    return RoomSet.Door(i).center;
             return null;
         }
 
@@ -425,6 +427,7 @@ namespace OutpostLoop
         internal bool ReportSurvival(string text, bool success = false)
         {
             SurvivalFeedback = text;
+            SurvivalFeedbackVersion++;
             return success;
         }
 
@@ -449,9 +452,9 @@ namespace OutpostLoop
             return snapshot;
         }
 
-        internal static ScavengeRun RestoreSurvival(SurvivalSave save)
+        internal static ScavengeRun RestoreSurvival(SurvivalSave save, RiverValley.RiverValleyWorldGeometry geometry = null)
         {
-            var restored = new ScavengeRun(save.seed, true, save.run)
+            var restored = new ScavengeRun(save.seed, true, save.run, geometry)
             {
                 Player = save.player, ExitKnown = save.exitKnown,
                 gunshot = save.gunshot, gunshotRemaining = save.gunshotRemaining

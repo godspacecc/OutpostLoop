@@ -62,8 +62,8 @@ namespace OutpostLoop
         private void BeginScavenge(int seed)
         {
             scavengeRun = survivalMode
-                ? survivalResume != null ? ScavengeRun.RestoreSurvival(survivalResume) :
-                    new ScavengeRun(seed, true, ScavengeSurvival.Create(seed))
+                ? survivalResume != null ? ScavengeRun.RestoreSurvival(survivalResume, survivalWorldGeometry) :
+                    new ScavengeRun(seed, true, CreateSurvivalState(seed), survivalWorldGeometry)
                 : new ScavengeRun(seed, scavengeTown);
             survivalResume = null;
             if (survivalMode) ResetSurvivalPresentation();
@@ -79,6 +79,8 @@ namespace OutpostLoop
         private void LeaveScavenge()
         {
             if (survivalMode) ReleaseSurvivalPresentation();
+            survivalWorldGeometry = null;
+            currentSurvivalRooms = null;
             Release(scavengeRoot.gameObject);
             scavengeRoot.gameObject.SetActive(false);
             scavengeRoot = null;
@@ -197,13 +199,13 @@ namespace OutpostLoop
         /// <summary>画面只读取角色、敌情、探索物和撤离状态。</summary>
         private void SyncScavenge(bool snapCamera = false)
         {
-            scavengePlayer.position = At(scavengeRun.Player, .76f);
+            scavengePlayer.position = SurvivalPosition(scavengeRun.Player, .76f);
             for (int i = 0; i < scavengeEnemies.Length; i++)
             {
                 var patrol = scavengeRun.Patrols[i];
                 var model = scavengeEnemies[i];
                 model.gameObject.SetActive(patrol.Alive);
-                model.position = At(patrol.Position, .7f);
+                model.position = SurvivalPosition(patrol.Position, .7f);
                 if (patrol.Facing != Vector2.zero) model.rotation = Quaternion.LookRotation(At(patrol.Facing, 0));
             }
             for (int i = 0; i < scavengeCrates.Length; i++)
@@ -211,6 +213,7 @@ namespace OutpostLoop
                 if (survivalMode)
                 {
                     var cache = scavengeRun.Survival.caches[i];
+                    scavengeCrates[i].position = SurvivalPosition(scavengeRun.CachePoints[i], .33f);
                     scavengeCrates[i].gameObject.SetActive(cache.active);
                     scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
                     continue;
@@ -228,6 +231,7 @@ namespace OutpostLoop
                 shelterModel.position = At(shelter, 0);
             }
             SyncDefenseModels();
+            if (survivalWorldGeometry != null) scavengeExit.position = SurvivalPosition(scavengeRun.ExitPoint, .05f);
             UpdateScavengeCamera(snapCamera);
             UpdateTownWeather();
             if (survivalMode) SyncSurvivalPresentation();
@@ -248,7 +252,8 @@ namespace OutpostLoop
             var canvas = ScavengeMaterial(new Color(.91f, .87f, .67f));
             var pad = ScavengeMaterial(new Color(.31f, .42f, .36f));
 
-            if (scavengeTown) CreateTownGeography(soil, road, concrete, steel, pad);
+            if (survivalMode && survivalLayoutVersion == 1) CreateFullRiverValleyMap(soil, concrete, steel, pad);
+            else if (scavengeTown) CreateTownGeography(soil, road, concrete, steel, pad);
             else
             {
                 var outskirts = ScavengeMaterial(new Color(.17f, .21f, .21f));
@@ -272,8 +277,8 @@ namespace OutpostLoop
                 ScavengeBox("仓门", new Vector3(.84f, .06f, -3.1f), new Vector3(.85f, .07f, 2.65f), gold);
                 ScavengeBox("侧门", new Vector3(5.35f, .06f, 7), new Vector3(2.45f, .07f, .8f), gold);
             }
-            var cachePoints = scavengeTown ? ScavengeTown.Caches : ScavengeLayout.Caches;
-            var exitPoint = scavengeTown ? ScavengeTown.Exit : ScavengeLayout.Exit;
+            var cachePoints = survivalWorldGeometry?.Caches ?? (scavengeTown ? ScavengeTown.Caches : ScavengeLayout.Caches);
+            var exitPoint = survivalWorldGeometry?.Exit ?? (scavengeTown ? ScavengeTown.Exit : ScavengeLayout.Exit);
             scavengeCrates = new Transform[cachePoints.Length];
             scavengeEnemies = new Transform[scavengeTown ? ScavengeTown.PatrolCount : 2];
             for (int i = 0; i < scavengeCrates.Length; i++)
@@ -534,7 +539,7 @@ namespace OutpostLoop
             var panel = ScavengeMapRect(width);
             GUI.Box(panel, "");
             var map = new Rect(panel.x + 9, panel.y + 8, 134, 118);
-            var bounds = scavengeTown ? ScavengeTown.Bounds : new Rect(-12, -10, 24, 21);
+            var bounds = scavengeRun.MapBounds;
             foreach (var wall in scavengeRun.RunWalls)
             {
                 var topLeft = ScavengeMapPoint(map, new Vector2(wall.xMin, wall.yMax));
@@ -562,7 +567,7 @@ namespace OutpostLoop
                 ScavengeFill(new Rect(ScavengeMapPoint(map, shelter) - Vector2.one * 3, Vector2.one * 6),
                     new Color(.66f, .88f, .52f));
             if (survivalMode && scavengeRun.Survival.baseRoom >= 0)
-                ScavengeFill(new Rect(ScavengeMapPoint(map, SurvivalRooms.Footprint(scavengeRun.Survival.baseRoom).center) -
+                ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.RoomSet.Footprint(scavengeRun.Survival.baseRoom).center) -
                     Vector2.one * 3, Vector2.one * 6), new Color(.66f, .88f, .52f));
             ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.Player) - Vector2.one * 3, Vector2.one * 6),
                 new Color(1, .94f, .7f));
@@ -570,7 +575,7 @@ namespace OutpostLoop
 
         private Vector2 ScavengeMapPoint(Rect map, Vector2 position)
         {
-            var bounds = scavengeTown ? ScavengeTown.Bounds : new Rect(-12, -10, 24, 21);
+            var bounds = scavengeRun.MapBounds;
             return new Vector2(map.x + (position.x - bounds.xMin) * map.width / bounds.width,
                 map.y + (bounds.yMax - position.y) * map.height / bounds.height);
         }
