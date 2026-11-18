@@ -199,7 +199,7 @@ namespace OutpostLoop
         /// <summary>画面只读取角色、敌情、探索物和撤离状态。</summary>
         private void SyncScavenge(bool snapCamera = false)
         {
-            scavengePlayer.position = SurvivalPosition(scavengeRun.Player, .76f);
+            scavengePlayer.position = SurvivalPosition(scavengeRun.Player, 0);
             for (int i = 0; i < scavengeEnemies.Length; i++)
             {
                 var patrol = scavengeRun.Patrols[i];
@@ -287,7 +287,7 @@ namespace OutpostLoop
             scavengeExit = ScavengeBox("路灯", At(exitPoint, 1.15f), new Vector3(.16f, 2.3f, .16f), steel);
             ScavengeBox("灯箱", At(exitPoint, 2.33f), new Vector3(.8f, .25f, .56f), teal);
             ScavengeBox("裂口底座", At(exitPoint, .02f), new Vector3(2.4f, .04f, 2.4f), teal);
-            scavengePlayer = Shape("探索角色", scavengeRoot, PrimitiveType.Capsule, Vector3.zero, new Vector3(.65f, .78f, .65f), canvas);
+            scavengePlayer = CreateScavengePlayer();
             for (int i = 0; i < scavengeEnemies.Length; i++)
             {
                 scavengeEnemies[i] = Shape(scavengeTown ? "感染者 " + i : i == 0 ? "巡逻敌人" : "路边巡逻敌人", scavengeRoot, PrimitiveType.Capsule,
