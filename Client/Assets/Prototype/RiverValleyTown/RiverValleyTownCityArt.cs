@@ -41,15 +41,21 @@ namespace OutpostLoop.RiverValley
                         batch.Add(building.style == "work" ? "wall" : "window", Local(-width / 2 + width * (bay + .5f) / count, level * 3 + 1.5f, side * (depth / 2 - .13f)),
                             new Vector3(width / count, 3, .26f), rotation * Quaternion.Euler(0, side < 0 ? 180 : 0, 0));
                 }
-                int sideBays = Mathf.Max(1, Mathf.CeilToInt(depth / 2.5f));
-                for (int bay = 0; bay < sideBays; bay++)
-                    batch.Add("wall", Local(side * (width / 2 - .12f), level * 3 + 1.5f, -depth / 2 + depth * (bay + .5f) / sideBays),
-                        new Vector3(depth / sideBays, 3, .24f), rotation * Quaternion.Euler(0, 90, 0));
+                // 店面/住宅原件自带侧墙，仅补中央空段，避免外侧共面闪烁。
+                float sideDepth = generic ? depth : Mathf.Max(0,depth-2*Mathf.Min(depth/2,5));
+                if (sideDepth > .01f)
+                {
+                    int sideBays = Mathf.Max(1, Mathf.CeilToInt(sideDepth / 2.5f));
+                    for (int bay = 0; bay < sideBays; bay++)
+                        batch.Add("wall", Local(side * (width / 2 - .12f), level * 3 + 1.5f, -sideDepth / 2 + sideDepth * (bay + .5f) / sideBays),
+                            new Vector3(sideDepth / sideBays, 3, .24f), rotation * Quaternion.Euler(0, 90, 0));
+                }
             }
             // 屋顶采用 City 专用屋顶原件，避免把室内地板当作外露屋面。
             batch.Add("roof", Local(0,height + .12f,0), new Vector3(width,.24f,depth),rotation);
             if (publicBuilding && Vector2.Distance(center, Map(2280,1308)) < 65)
                 batch.Add("hospitalSign",Local(0,2.4f,-depth/2-.08f),new Vector3(3.34f,.66f,.14f),rotation);
+            AddCityBuildingDressing(batch,building,center,rotation,height);
             batch.Finish();
             Solid("City封闭建筑",Local(0,height/2,0),new Vector3(width,height,depth),rotation,buildingColliders);
             footprints.Add(new Footprint(center,Mathf.Sqrt(width*width+depth*depth)/2));

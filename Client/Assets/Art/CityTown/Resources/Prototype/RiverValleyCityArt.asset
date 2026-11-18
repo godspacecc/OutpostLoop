@@ -167,6 +167,61 @@ MonoBehaviour:
     materials:
     - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
     sourceSize: {x: 5, y: 2.140427, z: 0.44459152}
+  - key: aircon
+    mesh: {fileID: 4300000, guid: a34763d0bab3d2e44968eaa00862a169, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.8228704, y: 0.99515975, z: 0.6513996}
+  - key: roofAircon
+    mesh: {fileID: 4300000, guid: 7dbd565144ce70e4f8acca6473af2b46, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.94802475, y: 0.59211963, z: 0.4674797}
+  - key: roofVent
+    mesh: {fileID: 4300000, guid: 0b5e7fa5aa2a4924fad7956b3b7aca8b, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.86809826, y: 1.6302991, z: 2.726616}
+  - key: shopSign
+    mesh: {fileID: 4300000, guid: 25d4e79a10e8f6b48bb939311e73264a, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.3005973, y: 1.5509467, z: 0.13954091}
+  - key: coffeeSign
+    mesh: {fileID: 4300000, guid: 6bc83fdbe8df41845922c9c384b62bfd, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 2.1940098, y: 1.3457232, z: 1.6251984}
+  - key: warningSign
+    mesh: {fileID: 4300000, guid: dfcc49fd3f1db79479d46360b0efaa5f, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.8126602, y: 0.45827216, z: 0.054336548}
+  - key: parkingLines
+    mesh: {fileID: 4300000, guid: 2f131f756954de14c8b2ec3dfb538537, type: 2}
+    materials:
+    - {fileID: 2100000, guid: 839dd76cb4b04d24a83c6e56702f386e, type: 2}
+    sourceSize: {x: 10, y: 0, z: 4.9999924}
+  - key: entranceSign
+    mesh: {fileID: 4300000, guid: e78b52c8f7115a846b793e8a4725b1f4, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 1, y: 0.43607748, z: 0.06296158}
+  - key: leaves
+    mesh: {fileID: 4300000, guid: 442328d9bee7ff24cb14ef0651ae0b6a, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 2.4332695, y: 0.31377786, z: 1.8879573}
+  - key: cardboard
+    mesh: {fileID: 4300000, guid: d926347b814843544880fc76e5e79d74, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 1.0096729, y: 0.91667753, z: 1.0443743}
+  - key: barrel
+    mesh: {fileID: 4300000, guid: a1a2395bed780754f920b2651d193b5b, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 0.69488275, y: 1.0454395, z: 0.72611094}
   - key: wallSide
     mesh: {fileID: 4300000, guid: eb9ed3e4b97e90448b54c66102f4f07d, type: 2}
     materials:

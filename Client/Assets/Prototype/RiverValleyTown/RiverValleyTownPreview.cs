@@ -133,8 +133,6 @@ namespace OutpostLoop.RiverValley
             BuildBuildings();
             BuildSites();
             BuildLandscape();
-            cityEnvironment?.Finish();
-            scenery.Finish();
             if (fullSurvivalWorld)
             {
                 foreach (var edge in water) WorldGeometry.Water.Add(new RiverValleyWorldGeometry.Channel(edge.A - RiverValleyWorldGeometry.Anchor, edge.B - RiverValleyWorldGeometry.Anchor, edge.Width));
@@ -142,6 +140,9 @@ namespace OutpostLoop.RiverValley
                 foreach (var edge in roads) WorldGeometry.Roads.Add(new RiverValleyWorldGeometry.Channel(edge.A - RiverValleyWorldGeometry.Anchor, edge.B - RiverValleyWorldGeometry.Anchor, edge.Width));
                 WorldGeometry.Finish();
             }
+            if (cityArt != null) BuildCityDressing();
+            cityEnvironment?.Finish();
+            scenery.Finish();
             if (!gameplayScenery) { CreateWalker(); SetCamera(); }
         }
 

@@ -149,7 +149,12 @@ namespace OutpostLoop
             var bed = CurrentSurvivalRooms.Bed(room);
             ScavengeBox("床架", SurvivalPosition(bed, .20f), new Vector3(1.2f, .4f, 2), wood);
             ScavengeBox("床垫", SurvivalPosition(bed, .48f), new Vector3(1.1f, .22f, 1.9f), floor);
-            ScavengeBox("储物柜", SurvivalPosition(CurrentSurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood);
+            var cabinet = ScavengeBox("储物柜", SurvivalPosition(CurrentSurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood);
+            if (survivalLayoutVersion == 1 && survivalCityArt != null)
+            {
+                cabinet.rotation=Quaternion.Euler(0,180,0);
+                OutpostLoop.RiverValley.RiverValleyShelfDressing.Fill(cabinet,survivalCityArt,false);
+            }
         }
 
         private void CreateSurvivalPresentation()

@@ -19,7 +19,7 @@ public static class CityTownArtBuilder
         {"car","SM_Veh_Car_Sedan_01"},{"van","SM_Veh_Car_Van_01"},{"ambulance","SM_Veh_Car_Ambo_01"},
         {"pine","SM_Gen_Env_Tree_Pine_01"},{"tree","SM_Gen_Env_Tree_01"},{"treeAlt","SM_Gen_Env_Tree_03"},{"bush","SM_Gen_Env_Bush_04"},
         {"bin","SM_Prop_Trashbin_01"},{"lampBase","SM_Prop_LightPole_Base_01"},{"lampArm","SM_Prop_LightPole_Arm_01"},{"lampHead","SM_Prop_LightPole_Lights_01"},
-        {"hospitalSign","SM_Prop_Sign_Hospital_01"},{"fence","SM_Env_Fence_01"}};
+        {"hospitalSign","SM_Prop_Sign_Hospital_01"},{"fence","SM_Env_Fence_01"},{"aircon","SM_Prop_Aircon_01"},{"roofAircon","SM_Prop_Roof_Aircon_01"},{"roofVent","SM_Prop_Vents_Exhaust_01"},{"shopSign","SM_Prop_Sign_DeliPizza_01"},{"coffeeSign","SM_Prop_LargeSign_Coffee_01"},{"warningSign","SM_Prop_Sign_Warning_01"},{"parkingLines","SM_Env_Road_ParkingLines_01"},{"entranceSign","SM_Prop_Sign_Entrance_01"},{"leaves","SM_Gen_Env_Leaves_Pile_01"},{"cardboard","SM_Gen_Prop_Cardboard_Box_Preset_01"},{"barrel","SM_Gen_Prop_Barrel_Metal_01"}};
     public static void Run()
     {
         foreach(var part in new[]{"Meshes","Materials","Textures","Resources/Prototype"})Directory.CreateDirectory(Root+"/"+part);
@@ -52,7 +52,7 @@ public static class CityTownArtBuilder
         var wall=entries.First(e=>e.key=="wall");var wallSide=UnityEngine.Object.Instantiate(wall.mesh);Rotate(wallSide);AssetDatabase.CreateAsset(wallSide,Root+"/Meshes/wallSide.asset");entries.Add(new RiverValleyCityArtCatalog.Entry {key="wallSide",mesh=wallSide,materials=wall.materials,sourceSize=new Vector3(wall.sourceSize.z,wall.sourceSize.y,wall.sourceSize.x)});
         Rotate(entries.First(e=>e.key=="door").mesh);
         catalog.entries=entries.ToArray();AssetDatabase.CreateAsset(catalog,Root+"/Resources/Prototype/RiverValleyCityArt.asset");AssetDatabase.SaveAssets();
-        File.WriteAllText(Path.GetFullPath(Path.Combine(Application.dataPath,"../../../CityTownReplacement-20261118/baked-assets.txt")),report.ToString());
+        File.WriteAllText(Path.GetFullPath(Path.Combine(Application.dataPath,"../../../"+(Environment.GetEnvironmentVariable("OUTPOST_ART_BATCH")??"CityTownReplacement-20261118")+"/baked-assets.txt")),report.ToString());
     }
     static void Rotate(Mesh mesh)
     {

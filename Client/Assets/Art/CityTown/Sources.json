@@ -33,7 +33,23 @@
     "lampArm": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_LightPole_Arm_01.prefab",
     "lampHead": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_LightPole_Lights_01.prefab",
     "hospitalSign": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Sign_Hospital_01.prefab",
-    "fence": "Assets/Synty/PolygonCity/Prefabs/Environments/SM_Env_Fence_01.prefab"
+    "fence": "Assets/Synty/PolygonCity/Prefabs/Environments/SM_Env_Fence_01.prefab",
+    "aircon": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Aircon_01.prefab",
+    "roofAircon": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Roof_Aircon_01.prefab",
+    "roofVent": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Vents_Exhaust_01.prefab",
+    "shopSign": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Sign_DeliPizza_01.prefab",
+    "coffeeSign": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_LargeSign_Coffee_01.prefab",
+    "warningSign": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Sign_Warning_01.prefab",
+    "parkingLines": "Assets/Synty/PolygonCity/Prefabs/Environments/SM_Env_Road_ParkingLines_01.prefab",
+    "entranceSign": "Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Sign_Entrance_01.prefab",
+    "leaves": "Assets/Synty/PolygonGeneric/Prefabs/Environment/SM_Gen_Env_Leaves_Pile_01.prefab",
+    "cardboard": "Assets/Synty/PolygonGeneric/Prefabs/Props/SM_Gen_Prop_Cardboard_Box_Preset_01.prefab",
+    "barrel": "Assets/Synty/PolygonGeneric/Prefabs/Props/SM_Gen_Prop_Barrel_Metal_01.prefab"
   },
-  "adaptation": "原网格与UV；归一化后派生网格，原色贴图，内置Standard材质；墙体额外烘焙侧向版本。原包脚本、碰撞与演示场景未采用。"
+  "adaptation": "原网格与UV；归一化后派生网格，原色贴图，内置Standard材质；墙体额外烘焙侧向版本。原包脚本、碰撞与演示场景未采用。",
+  "dressingApproval": "2026-11-18 用户要求继续完善环境，沿用已确认 City 方向",
+  "referenceOnly": {
+    "parkingLines": "含整块路面，未用于本轮前场；改为按地形生成车位线",
+    "entranceSign": "本轮仅核查候选，未新增入口"
+  }
 }

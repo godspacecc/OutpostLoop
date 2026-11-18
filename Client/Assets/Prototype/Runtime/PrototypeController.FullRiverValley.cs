@@ -72,6 +72,9 @@ namespace OutpostLoop
                     var point = new Vector2(area.xMin + 6, area.center.y + side * Mathf.Min(5,area.height / 3));
                     var size = i == 3 ? new Vector3(3,1.5f,2) : new Vector3(2.1f,.75f,1.1f);
                     var prop = ScavengeBox(i == 3 ? "仓库货架" : "室内服务设施",SurvivalPosition(point,size.y/2),size,i==3?wood:floor);
+                    // 货架正面朝向探索镜头一侧，避免只看见背板。
+                    prop.rotation=Quaternion.Euler(0,180,0);
+                    if (survivalCityArt != null) RiverValleyShelfDressing.Fill(prop,survivalCityArt,i==3);
                     survivalWorldGeometry.Solids.Add(new RiverValleyWorldGeometry.Solid(point,new Vector2(size.x,size.z),0));
                     RegisterScavengeOccluder(prop.GetComponent<Renderer>());
                 }

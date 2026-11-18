@@ -11,7 +11,7 @@ namespace OutpostLoop.Tests
         [Test]
         public void BakedArtKeepsUnitFootprintsAndWorkingMaterials()
         {
-            var catalog=RiverValleyCityArtCatalog.Load();Assert.NotNull(catalog);Assert.AreEqual(30,catalog.entries.Length);
+            var catalog=RiverValleyCityArtCatalog.Load();Assert.NotNull(catalog);Assert.AreEqual(41,catalog.entries.Length);
             Assert.AreEqual(catalog.entries.Length,catalog.entries.Select(e=>e.key).Distinct().Count());
             foreach(var entry in catalog.entries)
             {
@@ -38,6 +38,10 @@ namespace OutpostLoop.Tests
                 Object.DestroyImmediate(before.gameObject);
                 var after=RiverValleyTownPreview.CreateWorld(parent.transform,content.layout,content.surface);
                 typeof(RiverValleyTownPreview).GetMethod("Awake",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(after,null);
+                Assert.That(after.CityDressingFixtureCount,Is.GreaterThan(200));
+                Assert.That(after.CityDressingSurfaceCount,Is.GreaterThan(0));
+                Assert.That(after.CityDistrictPadCount,Is.GreaterThanOrEqualTo(4));
+                foreach(var sample in after.DressingGroundSamples)Assert.IsTrue(after.WorldGeometry.Walkable(sample,.34f),"地表陈设覆盖障碍 "+sample);
                 Assert.That(after.CityBuildingCount,Is.GreaterThan(200));Assert.That(after.CityTreeCount,Is.GreaterThan(100));Assert.That(after.CityVehicleCount,Is.GreaterThan(0));Assert.That(after.CityRoadSegmentCount,Is.GreaterThan(100));
                 Assert.AreEqual(solids.Length,after.WorldGeometry.Solids.Count,"替换不得增删障碍");
                 for(int i=0;i<solids.Length;i++) {var actual=after.WorldGeometry.Solids[i];Assert.AreEqual(solids[i].Center,actual.Center,"位置 "+i);Assert.AreEqual(solids[i].Half,actual.Half,"占地 "+i);Assert.AreEqual(solids[i].Angle,actual.Angle,"旋转 "+i);}
@@ -46,6 +50,26 @@ namespace OutpostLoop.Tests
                 CollectionAssert.AreEqual(caches,after.WorldGeometry.Caches);
             }
             finally {Object.DestroyImmediate(parent);}
+        }
+        [Test]
+        public void FilledShelvesKeepContentsWithinExistingCollisionFootprint()
+        {
+            var catalog=RiverValleyCityArtCatalog.Load();
+            foreach(bool warehouse in new[]{false,true})
+            {
+                var prop=GameObject.CreatePrimitive(PrimitiveType.Cube);
+                try
+                {
+                    catalog.Replace(prop.transform,warehouse?"shelf":"desk");
+                    var before=prop.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+                    RiverValleyShelfDressing.Fill(prop.transform,catalog,warehouse);
+                    var mesh=prop.GetComponent<MeshFilter>().sharedMesh;Assert.Greater(mesh.vertexCount,before);
+                    Assert.That(mesh.bounds.min.x,Is.GreaterThanOrEqualTo(-.501f));Assert.That(mesh.bounds.max.x,Is.LessThanOrEqualTo(.501f));
+                    Assert.That(mesh.bounds.min.z,Is.GreaterThanOrEqualTo(-.501f));Assert.That(mesh.bounds.max.z,Is.LessThanOrEqualTo(.501f));
+                    Assert.AreEqual(1,prop.GetComponents<MeshRenderer>().Length,"内容与柜台保持同一遮挡对象");
+                }
+                finally {Object.DestroyImmediate(prop);}
+            }
         }
     }
 }

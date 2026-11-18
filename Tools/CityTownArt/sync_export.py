@@ -9,6 +9,8 @@ if __name__=='__main__':
  for child in source.rglob('*'):
   if child.is_file():
    dest=target/child.relative_to(source);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(child,dest)
+   if child.suffix=='.mat':
+    text=dest.read_text(encoding='utf-8-sig');dest.write_text('\n'.join(line.rstrip() for line in text.splitlines())+'\n',encoding='utf-8')
  guid=re.search(r'guid: ([a-f0-9]{32})',Path('Client/Assets/Prototype/RiverValleyTown/RiverValleyCityArtCatalog.cs.meta').read_text()).group(1)
  catalog=target/'Resources/Prototype/RiverValleyCityArt.asset'
  text=catalog.read_text(encoding='utf-8-sig');text=re.sub(r'(m_Script: \{fileID: 11500000, guid: )[a-f0-9]+',lambda match:match[1]+guid,text)

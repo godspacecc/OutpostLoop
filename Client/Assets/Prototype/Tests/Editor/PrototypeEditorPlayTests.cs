@@ -250,7 +250,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyFullTownHasSixInteriorsAndKeepsLegacySaves()
         {
-            const string batch = "CityTownReplacement-20261118";
+            const string batch = "CityTownDressing-20261118";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -278,7 +278,7 @@ namespace OutpostLoop.Tests
             Assert.Greater(city.CityBuildingCount,200);
             var meshFilters=GameObject.Find("河谷镇整图").GetComponentsInChildren<MeshFilter>();
             System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Directory.GetParent(directory).FullName,"scene-counts.txt"),
-                "City buildings="+city.CityBuildingCount+"\nCity trees="+city.CityTreeCount+"\nCity vehicles="+city.CityVehicleCount+"\nCity road segments="+city.CityRoadSegmentCount+"\nMesh filters="+meshFilters.Length);
+                "City fixture dressing="+city.CityDressingFixtureCount+"\nCity surfaces="+city.CityDressingSurfaceCount+"\nCity low dressing="+city.CityDressingGroundCount+"\nDistrict pads="+city.CityDistrictPadCount+"\nCity buildings="+city.CityBuildingCount+"\nCity trees="+city.CityTreeCount+"\nCity vehicles="+city.CityVehicleCount+"\nCity road segments="+city.CityRoadSegmentCount+"\nMesh filters="+meshFilters.Length);
             yield return CaptureSurvivalEvidence("street-start",1920,1080,batch);
             int alive = 0, fast = 0;
             foreach(var patrol in run.Patrols) { if(patrol.Alive)alive++; if(patrol.Fast)fast++; }
@@ -353,6 +353,22 @@ namespace OutpostLoop.Tests
                 type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
                 yield return CaptureSurvivalEvidence("interior-"+i,1280,720,batch);
             }
+            // 受控定位只验证区域陈设可见性，六入口步行另由上方断言覆盖。
+            foreach(int area in new[]{3,4})
+            {
+                var point=city.DressingDistrictCenters[area];
+                Assert.AreNotEqual(Vector2.zero,point,"重点区域应有独立前场 "+area);
+                Assert.IsTrue(run.FullTown.Walkable(point,.34f));
+                player.SetValue(run,point);
+                type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+                yield return CaptureSurvivalEvidence(area==3?"warehouse-yard":"hospital-parking",1920,1080,batch);
+            }
+            var warehouse=run.FullTown.Interiors[3];
+            var stockView=new Vector2(warehouse.xMin+6,warehouse.center.y-8.2f);
+            Assert.IsTrue(run.FullTown.Walkable(stockView,.34f));
+            player.SetValue(run,stockView);
+            type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+            yield return CaptureSurvivalEvidence("warehouse-stock",1920,1080,batch);
             // 三桥的河中段可走，离开桥面落入河道则禁止通行。
             var bridges=new List<Vector2>();
             foreach(var bridge in run.FullTown.Bridges)

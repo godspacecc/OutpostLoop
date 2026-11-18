@@ -1,6 +1,6 @@
 from pathlib import Path
-import tarfile,re,json,hashlib
-root=Path('Backup/Artifacts/PlayerMotion-20261118/PreviewProject');out=Path('Backup/Artifacts/CityTownReplacement-20261118')
+import tarfile,re,json,hashlib,sys
+root=Path('Backup/Artifacts/PlayerMotion-20261118/PreviewProject');out=Path(sys.argv[1]) if len(sys.argv)>1 else Path('Backup/Artifacts/CityTownReplacement-20261118');out.mkdir(parents=True,exist_ok=True)
 # 只选择已授权城市/通用环境原件，依赖闭包只读来自用户自有缓存。
 select={
 'roof':'SM_Bld_Apartment_Roof_01','shop':'SM_Bld_Shop_01','shopAlt':'SM_Bld_Shop_03','residential':'SM_Bld_Apartment_01',
@@ -10,7 +10,7 @@ select={
 'car':'SM_Veh_Car_Sedan_01','van':'SM_Veh_Car_Van_01','ambulance':'SM_Veh_Car_Ambo_01',
 'pine':'SM_Gen_Env_Tree_Pine_01','tree':'SM_Gen_Env_Tree_01','treeAlt':'SM_Gen_Env_Tree_03','bush':'SM_Gen_Env_Bush_04',
 'bin':'SM_Prop_Trashbin_01','lampBase':'SM_Prop_LightPole_Base_01','lampArm':'SM_Prop_LightPole_Arm_01','lampHead':'SM_Prop_LightPole_Lights_01',
-'hospitalSign':'SM_Prop_Sign_Hospital_01','fence':'SM_Env_Fence_01'}
+'hospitalSign':'SM_Prop_Sign_Hospital_01','fence':'SM_Env_Fence_01','aircon':'SM_Prop_Aircon_01','roofAircon':'SM_Prop_Roof_Aircon_01','roofVent':'SM_Prop_Vents_Exhaust_01','shopSign':'SM_Prop_Sign_DeliPizza_01','coffeeSign':'SM_Prop_LargeSign_Coffee_01','warningSign':'SM_Prop_Sign_Warning_01','parkingLines':'SM_Env_Road_ParkingLines_01','entranceSign':'SM_Prop_Sign_Entrance_01','leaves':'SM_Gen_Env_Leaves_Pile_01','cardboard':'SM_Gen_Prop_Cardboard_Box_Preset_01','barrel':'SM_Gen_Prop_Barrel_Metal_01'}
 pkg=next(Path('C:/Users/Administrator/AppData/Roaming/Unity/Asset Store-5.x/SyntyStudios').rglob('assetstore_package_20000945.unitypackage'))
 with tarfile.open(pkg,'r:gz') as t:
  by={m.name:m for m in t};paths={}
