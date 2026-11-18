@@ -8,7 +8,10 @@ namespace OutpostLoop.RiverValley
         private void OnDestroy()
         {
             if (TryGetComponent<MeshFilter>(out var filter))
-                Destroy(filter.sharedMesh);
+                {
+                if (Application.isPlaying) Destroy(filter.sharedMesh);
+                else DestroyImmediate(filter.sharedMesh);
+            }
         }
     }
 }

@@ -403,8 +403,12 @@ namespace OutpostLoop
                         new Vector3(.08f, 1.36f, .08f), steel);
         }
 
-        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material) =>
-            Shape(name, scavengeRoot, PrimitiveType.Cube, point, size, material);
+        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material)
+        {
+            var target = Shape(name, scavengeRoot, PrimitiveType.Cube, point, size, material);
+            ApplyRiverValleyCityVisual(target,name,size);
+            return target;
+        }
 
         private Material ScavengeMaterial(Color color)
         {

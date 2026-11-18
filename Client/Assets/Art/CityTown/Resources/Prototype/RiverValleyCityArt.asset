@@ -1,0 +1,175 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47cf08de531316443b239c66297d6115, type: 3}
+  m_Name: RiverValleyCityArt
+  m_EditorClassIdentifier: 
+  entries:
+  - key: roof
+    mesh: {fileID: 4300000, guid: 88dc0e4792e3f6846af80a0df1f13f89, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 5.309677, y: 0.4998675, z: 5.9175124}
+  - key: shop
+    mesh: {fileID: 4300000, guid: 1a17e440e227ea543852cd95525ad30c, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    - {fileID: 2100000, guid: 282c786d806055e439714c567993fa6b, type: 2}
+    sourceSize: {x: 5, y: 3.0538864, z: 5.5358915}
+  - key: shopAlt
+    mesh: {fileID: 4300000, guid: 86f8d363d862ac2429803548c373b61b, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    - {fileID: 2100000, guid: 282c786d806055e439714c567993fa6b, type: 2}
+    sourceSize: {x: 10.087342, y: 3.0835724, z: 5.4931254}
+  - key: residential
+    mesh: {fileID: 4300000, guid: c14105a838295fa4d80efbf85dbedda8, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 5, y: 3, z: 5.195599}
+  - key: wall
+    mesh: {fileID: 4300000, guid: e1d594475ecf1694c9e49c02b1ba3a57, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c0d4fbbc9ba6456448e3eea682797bdd, type: 2}
+    - {fileID: 2100000, guid: 7a8bf4ff260dc854da95a1cb479efcbd, type: 2}
+    sourceSize: {x: 2.4999914, y: 3.0057428, z: 0.225}
+  - key: window
+    mesh: {fileID: 4300000, guid: 9e4c830021f4b8041b159ecbdc73f6de, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    - {fileID: 2100000, guid: c0d4fbbc9ba6456448e3eea682797bdd, type: 2}
+    - {fileID: 2100000, guid: 7a8bf4ff260dc854da95a1cb479efcbd, type: 2}
+    - {fileID: 2100000, guid: f1601350e99cbec459c0a780fc173ed8, type: 2}
+    sourceSize: {x: 2.4999926, y: 3.0057428, z: 0.25561157}
+  - key: floor
+    mesh: {fileID: 4300000, guid: 53b92affd4dc39941b28c3654f71ade5, type: 2}
+    materials:
+    - {fileID: 2100000, guid: 668d2f31772a63949a67c57aaa7e43ee, type: 2}
+    sourceSize: {x: 2.4999914, y: 0.000000033974647, z: 2.4999998}
+  - key: ceiling
+    mesh: {fileID: 4300000, guid: 2c4952ecc7c6019439e0cc9239460c8d, type: 2}
+    materials:
+    - {fileID: 2100000, guid: 7a8bf4ff260dc854da95a1cb479efcbd, type: 2}
+    sourceSize: {x: 2.4999914, y: 4.6718183e-15, z: 2.4999998}
+  - key: door
+    mesh: {fileID: 4300000, guid: 4d724f2592e2123419c32e885230e28f, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 1.0028172, y: 1.9668593, z: 0.24729721}
+  - key: crate
+    mesh: {fileID: 4300000, guid: 2c795c89ff01ba547ae6086708d4e1c0, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 1.0839965, y: 0.953599, z: 1.456761}
+  - key: shelf
+    mesh: {fileID: 4300000, guid: 7f5698e1e4ae4944ca23657c27cc0eac, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 1.5231476, y: 1.9261206, z: 0.8782301}
+  - key: desk
+    mesh: {fileID: 4300000, guid: 8f58cf86d8f906447acad0c79f1f7698, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 1.6076965, y: 1.0799354, z: 0.5000839}
+  - key: road
+    mesh: {fileID: 4300000, guid: 884f366830191e54f86bbca4e98971aa, type: 2}
+    materials:
+    - {fileID: 2100000, guid: 839dd76cb4b04d24a83c6e56702f386e, type: 2}
+    sourceSize: {x: 5, y: 0.000000011175871, z: 5}
+  - key: sidewalk
+    mesh: {fileID: 4300000, guid: 04f9b0c0ec7dc394fb2826109e858535, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 5.0000057, y: 0.29999137, z: 5}
+  - key: bridgeRail
+    mesh: {fileID: 4300000, guid: 3d6feed45e95fbc46863993517c487b1, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 5, y: 3.962677, z: 1.2919235}
+  - key: bridgePillar
+    mesh: {fileID: 4300000, guid: cc870f8958f31544f9ed274ab2c4d45a, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.9635773, y: 1.8748195, z: 0.91942596}
+  - key: car
+    mesh: {fileID: 4300000, guid: 0ab40d4f73a2df34bb9265d1cb3de9c8, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    - {fileID: 2100000, guid: 84694f463e6754f4ca404390656a3b29, type: 2}
+    sourceSize: {x: 2.1721282, y: 1.5350959, z: 5.1750245}
+  - key: van
+    mesh: {fileID: 4300000, guid: 405564a166555df41884e77ac13b1055, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    - {fileID: 2100000, guid: 84694f463e6754f4ca404390656a3b29, type: 2}
+    sourceSize: {x: 2.4726095, y: 2.0274072, z: 5.043458}
+  - key: ambulance
+    mesh: {fileID: 4300000, guid: 28d865f5a12c1584dac992cfc57a5401, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    - {fileID: 2100000, guid: 84694f463e6754f4ca404390656a3b29, type: 2}
+    sourceSize: {x: 2.472612, y: 2.5826643, z: 5.0940275}
+  - key: pine
+    mesh: {fileID: 4300000, guid: c27df7ee82cc288418c2f0ed901c5e16, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 1.876118, y: 9.4701, z: 1.8058925}
+  - key: tree
+    mesh: {fileID: 4300000, guid: 5d807ffdbdb7dca4496c6359bdfade7b, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 4.3173914, y: 8.297335, z: 4.4271083}
+  - key: treeAlt
+    mesh: {fileID: 4300000, guid: 4267160f69346ec4cb0466cdfaaba840, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 2.7424483, y: 6.153899, z: 2.5893354}
+  - key: bush
+    mesh: {fileID: 4300000, guid: 8b4d052abfe26a84daa8c3703486c5d9, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c936603636254c547b758cdbd671d7c1, type: 2}
+    sourceSize: {x: 2.9130573, y: 1.574005, z: 3.049861}
+  - key: bin
+    mesh: {fileID: 4300000, guid: 220c87252669e5d47bfc618998d09db3, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.6470232, y: 1.1784372, z: 0.6470337}
+  - key: lampBase
+    mesh: {fileID: 4300000, guid: f078d7718ab8d2e4cb424ffdc56d2356, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.34573555, y: 6.482998, z: 2.4787292}
+  - key: lampArm
+    mesh: {fileID: 4300000, guid: d91b31d4885d2714da06d00f1b75155e, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.40493798, y: 0.92030525, z: 6.2789173}
+  - key: lampHead
+    mesh: {fileID: 4300000, guid: 1aab868a11d110549906b3683ffd1ff0, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 0.5260858, y: 0.90494156, z: 0.3272171}
+  - key: hospitalSign
+    mesh: {fileID: 4300000, guid: 381fe634d1589e649863e7c94e139a68, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 3.337791, y: 0.6586198, z: 0.13584149}
+  - key: fence
+    mesh: {fileID: 4300000, guid: 97f28a82788087849abb719b504e5283, type: 2}
+    materials:
+    - {fileID: 2100000, guid: a925fe952238c1b4ca4b917f18dd9b9e, type: 2}
+    sourceSize: {x: 5, y: 2.140427, z: 0.44459152}
+  - key: wallSide
+    mesh: {fileID: 4300000, guid: eb9ed3e4b97e90448b54c66102f4f07d, type: 2}
+    materials:
+    - {fileID: 2100000, guid: c0d4fbbc9ba6456448e3eea682797bdd, type: 2}
+    - {fileID: 2100000, guid: 7a8bf4ff260dc854da95a1cb479efcbd, type: 2}
+    sourceSize: {x: 0.225, y: 3.0057428, z: 2.4999914}

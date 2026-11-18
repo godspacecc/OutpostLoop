@@ -40,6 +40,7 @@ namespace OutpostLoop
         {
             var content = UnityEngine.Resources.Load<RiverValleyGameplayContent>("Prototype/RiverValleyGameplayContent");
             if (content?.layout == null || content.surface == null) throw new System.InvalidOperationException("河谷镇整图引用缺失。");
+            survivalCityArt = RiverValleyCityArtCatalog.Load();
             var town = RiverValleyTownPreview.CreateWorld(scavengeRoot, content.layout, content.surface);
             survivalWorldGeometry = town.WorldGeometry;
             currentSurvivalRooms = new SurvivalRoomSet(new[] { survivalWorldGeometry.Interiors[0], survivalWorldGeometry.Interiors[1] });
@@ -51,6 +52,12 @@ namespace OutpostLoop
             {
                 var area = allRooms.Footprint(i);
                 ScavengeBox("重点建筑室内地面", SurvivalPosition(area.center,.035f), new Vector3(area.width,.065f,area.height),floor);
+                if (i == 4 && survivalCityArt != null)
+                {
+                    var sign = ScavengeBox("医院标志",SurvivalPosition(new Vector2(area.xMin-.25f,area.center.y),2.45f),new Vector3(3.34f,.66f,.14f),walls);
+                    sign.rotation=Quaternion.Euler(0,90,0);
+                    RegisterScavengeOccluder(sign.GetComponent<Renderer>());
+                }
                 var parts = new System.Collections.Generic.List<Renderer>();
                 foreach (var wall in allRooms.Walls(i))
                 {

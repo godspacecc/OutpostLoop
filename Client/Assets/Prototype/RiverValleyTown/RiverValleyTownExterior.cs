@@ -21,7 +21,7 @@ namespace OutpostLoop.RiverValley
 
         private void BuildBuilding(Building building)
         {
-            if (!fullSurvivalWorld) { BuildBuildingParts(building); return; }
+            if (!fullSurvivalWorld || cityArt != null) { BuildBuildingParts(building); return; }
             var shared = scenery;
             scenery = new RiverValleyMesh(Section("封闭建筑"), surface);
             try { BuildBuildingParts(building); scenery.Finish(); }
@@ -49,6 +49,7 @@ namespace OutpostLoop.RiverValley
                 foreach (var interior in WorldGeometry.Interiors)
                     if (bounds.Overlaps(new Rect(interior.position - Vector2.one, interior.size + Vector2.one * 2))) return;
             }
+            if (cityArt != null) { BuildCityBuilding(building, center, rotation); return; }
             var random = new System.Random(Mathf.RoundToInt(building.x * 37 + building.y * 11));
             float width = building.width, depth = building.depth;
             bool shop = building.style == "shop";
@@ -191,12 +192,19 @@ namespace OutpostLoop.RiverValley
                     BuildBuilding(new Building { x = store.x+2000, y = 2000-store.y,
                         width = 13.2f + east % 4, depth = depth, angle = yaw, style = "shop" });
                     var apron = point + curb * (sign * 9.4f);
-                    scenery.Box(At(apron,NaturalHeight(apron) + .148f),new Vector3(11,.14f,4.2f),
+                    if (cityArt != null)
+                        cityEnvironment.Add("sidewalk",At(apron,NaturalHeight(apron)+.148f),new Vector3(11,.14f,4.2f),Quaternion.Euler(0,yaw*Mathf.Rad2Deg,0));
+                    else scenery.Box(At(apron,NaturalHeight(apron) + .148f),new Vector3(11,.14f,4.2f),
                         Quaternion.Euler(0,yaw*Mathf.Rad2Deg,0),color);
                     if (east % 3 == 0)
                     {
                         var sidewalk = point + curb * (sign * 8.6f) + forward * 6f;
                         float ground = NaturalHeight(sidewalk);
+                        if (cityArt != null) {
+                            cityEnvironment.Add("lampBase",At(sidewalk,ground+2.32f),new Vector3(.25f,4.64f,1.7f),Quaternion.Euler(0,yaw*Mathf.Rad2Deg,0));
+                            cityEnvironment.Add("bin",At(sidewalk+forward*1.4f,ground+.59f),new Vector3(.65f,1.18f,.65f),Quaternion.identity);
+                            continue;
+                        }
                         scenery.Box(At(sidewalk,ground+2.32f),new Vector3(.15f,4.64f,.15f),Quaternion.identity,
                             Tint("#646a62"));
                         scenery.Box(At(sidewalk - curb * (sign * .47f),ground+4.52f),
@@ -382,6 +390,14 @@ namespace OutpostLoop.RiverValley
         {
             var rotation = Quaternion.Euler(0,yaw,0);
             var origin = At(point,NaturalHeight(point));
+            if (cityArt != null && !truck) {
+                bool hospital = Vector2.Distance(point,Map(2280,1308)) < 80;
+                var key = hospital ? "ambulance" : "car";
+                // 保持原车辆障碍的占地与高度，车型来自用户资源。
+                cityEnvironment.Add(key,origin+Vector3.up*.7f,new Vector3(1.8f,1.4f,4.2f),rotation);
+                Solid("停放车辆",origin+Vector3.up*.7f,new Vector3(1.8f,1.4f,4.2f),rotation,buildingColliders);
+                CityVehicleCount++; return;
+            }
             float length = truck ? 8.2f : 4.2f;
             var color = truck ? Tint("#9e9b89") : Tint("#887269");
             scenery.Box(origin + Vector3.up * .66f,new Vector3(truck ? 2.4f : 1.78f,.75f,length),rotation,color);
@@ -430,6 +446,12 @@ namespace OutpostLoop.RiverValley
         private void Tree(Vector2 point, float height, float variation)
         {
             float y = NaturalHeight(point);
+            if (cityArt != null) {
+                string key = variation > .65f ? "pine" : variation > .4f ? "treeAlt" : "tree";
+                var size = cityArt.Find(key).sourceSize; size *= height / size.y;
+                cityEnvironment.Add(key,At(point,y+height/2),size,Quaternion.Euler(0,point.x*19+point.y*7,0));
+                CityTreeCount++; return;
+            }
             scenery.Box(At(point,y + height*.27f),new Vector3(.24f,height*.56f,.24f),Quaternion.identity,TreeBark);
             var color = Color32.Lerp(Canopy,Tint("#7a8156"),variation);
             scenery.Box(At(point+new Vector2(height*.095f,0),y+height*.51f),

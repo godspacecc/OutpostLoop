@@ -146,7 +146,8 @@ namespace OutpostLoop.RiverValley
                         if (main && IsTownFrontage((a + b) / 2))
                             Ribbon(scenery,a,b,sideA,sideB,width + 5f,heightA - .037f,heightB - .037f,Concrete,true);
                     }
-                    if (main) RoadPaint(a,b,sideA,sideB,width,heightA,heightB);
+                    if (cityArt != null && !trail) AddCityRoad(a,b,width,heightA,heightB);
+                    else if (main) RoadPaint(a,b,sideA,sideB,width,heightA,heightB);
                 }
             }
             waterSurface.Finish(shadows: false);
@@ -211,6 +212,13 @@ namespace OutpostLoop.RiverValley
             {
                 Vector2 start = a + sideA * (width * .5f * side);
                 Vector2 end = b + sideB * (width * .5f * side);
+                if (cityArt != null) {
+                    var axis = At(end,hb)-At(start,ha);
+                    // 护栏保持旧桥边位置，原件的下部桥墙贴合旧桥面。
+                    cityEnvironment.Add("bridgeRail",(At(start,ha)+At(end,hb))/2 + At((sideA+sideB).normalized * (side*.5f),-1.08f),new Vector3(axis.magnitude,3.96f,1.29f),Quaternion.LookRotation(axis)*Quaternion.Euler(0,90,0));
+                    cityEnvironment.Add("fence",(At(start,ha)+At(end,hb))/2+Vector3.up*.5f,new Vector3(axis.magnitude,1,.18f),Quaternion.LookRotation(axis)*Quaternion.Euler(0,90,0));
+                    continue;
+                }
                 Beam(At(start,ha - .25f), At(end,hb - .25f), .38f, .8f, Concrete);
                 Beam(At(start,ha + .78f), At(end,hb + .78f), .16f, .16f, Tint("#737e7c"));
                 scenery.Box(At(start,ha + .36f), new Vector3(.2f,.87f,.2f), Quaternion.identity, Concrete);

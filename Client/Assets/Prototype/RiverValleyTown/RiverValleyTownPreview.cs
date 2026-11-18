@@ -14,6 +14,7 @@ namespace OutpostLoop.RiverValley
         private bool gameplayScenery;
         private Rect? reservedArea;
         private bool fullSurvivalWorld;
+        private bool useCityArt = true;
         private Building[] openBuildings;
         internal RiverValleyWorldGeometry WorldGeometry { get; private set; }
 
@@ -113,6 +114,8 @@ namespace OutpostLoop.RiverValley
         {
             layout = JsonUtility.FromJson<Layout>(layoutAsset.text);
             if (fullSurvivalWorld) PrepareSurvivalWorld();
+            cityArt = useCityArt && (!gameplayScenery || fullSurvivalWorld) ? RiverValleyCityArtCatalog.Load() : null;
+            if (cityArt != null) cityEnvironment = new RiverValleyCityBatch(Section("City道路植被道具"), cityArt);
             surface = new Material(surfaceShader) { name = "河谷镇共用表面" };
             IndexRoutes();
             if (fullSurvivalWorld)
@@ -130,6 +133,7 @@ namespace OutpostLoop.RiverValley
             BuildBuildings();
             BuildSites();
             BuildLandscape();
+            cityEnvironment?.Finish();
             scenery.Finish();
             if (fullSurvivalWorld)
             {
@@ -327,12 +331,13 @@ namespace OutpostLoop.RiverValley
         }
 
         /// <summary>整图行动复用原布局；六处重点建筑改由可进入室内模块表达。</summary>
-        internal static RiverValleyTownPreview CreateWorld(Transform parent, TextAsset data, Shader shader)
+        internal static RiverValleyTownPreview CreateWorld(Transform parent, TextAsset data, Shader shader, bool useCityArt = true)
         {
             var root = new GameObject("河谷镇整图");
             root.SetActive(false);
             var preview = root.AddComponent<RiverValleyTownPreview>();
             preview.gameplayScenery = preview.fullSurvivalWorld = true;
+            preview.useCityArt = useCityArt;
             preview.layoutAsset = data; preview.surfaceShader = shader;
             root.SetActive(true);
             root.transform.SetParent(parent, false);

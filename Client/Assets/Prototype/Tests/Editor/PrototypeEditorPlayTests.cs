@@ -250,7 +250,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyFullTownHasSixInteriorsAndKeepsLegacySaves()
         {
-            const string batch = "RiverValleyFocus-20261118";
+            const string batch = "CityTownReplacement-20261118";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -274,6 +274,12 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(6, run.FullTown.Interiors.Length);
             Assert.IsNull(GameObject.Find("东侧街区边界"));
             Assert.NotNull(GameObject.Find("河谷镇整图"));
+            var city=Object.FindObjectOfType<OutpostLoop.RiverValley.RiverValleyTownPreview>();
+            Assert.Greater(city.CityBuildingCount,200);
+            var meshFilters=GameObject.Find("河谷镇整图").GetComponentsInChildren<MeshFilter>();
+            System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Directory.GetParent(directory).FullName,"scene-counts.txt"),
+                "City buildings="+city.CityBuildingCount+"\nCity trees="+city.CityTreeCount+"\nCity vehicles="+city.CityVehicleCount+"\nCity road segments="+city.CityRoadSegmentCount+"\nMesh filters="+meshFilters.Length);
+            yield return CaptureSurvivalEvidence("street-start",1920,1080,batch);
             int alive = 0, fast = 0;
             foreach(var patrol in run.Patrols) { if(patrol.Alive)alive++; if(patrol.Fast)fast++; }
             Assert.AreEqual(12, alive); Assert.AreEqual(2, fast);
@@ -309,6 +315,12 @@ namespace OutpostLoop.Tests
                     if(solid.Contains(run.CachePoints[cache],.1f))blocked += $" {solid.Center}/{solid.Half}/{solid.Angle}";
                 Assert.IsTrue(run.FullTown.Walkable(run.CachePoints[cache], .1f),run.CacheNames[cache]+"不可达 "+run.CachePoints[cache]+blocked);
             }
+            // 受控定位只用于展示已替换主街，不冒充从落地完整步行到达。
+            var streetPoint=new Vector2(-134.38f,-20.94f);
+            Assert.IsTrue(run.FullTown.Walkable(streetPoint,.34f),"展示起点应在可通行主街上");
+            player.SetValue(run,streetPoint);
+            type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+            yield return CaptureSurvivalEvidence("main-street",1920,1080,batch);
             for(int i=0;i<6;i++)
             {
                 var rooms=new SurvivalRoomSet(run.FullTown.Interiors);
