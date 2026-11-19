@@ -33,6 +33,74 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyPortalPlaysAfterSuccessfulExtraction()
+        {
+            const string batch = "ArchanorPortal-20261119";
+            const string path = "RiverValleyPortal/PortalBlue";
+            foreach (var phase in new[] { "Idle", "Open", "Close" })
+            {
+                var prefab = UnityEngine.Resources.Load<GameObject>(path + phase);
+                if (!prefab) Assert.Ignore("先运行 Tools/Import-RiverValleyPortal.ps1。");
+                foreach (var renderer in prefab.GetComponentsInChildren<ParticleSystemRenderer>())
+                {
+                    Assert.NotNull(renderer.sharedMaterial);
+                    Assert.IsTrue(renderer.sharedMaterial.shader.isSupported, renderer.name);
+                }
+            }
+
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var type = typeof(PrototypeController);
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player)).SetValue(run, run.ExitPoint + Vector2.left * 1.4f);
+            run.Tick(.01f, Vector2.zero);
+            type.GetMethod("SyncScavenge", flags).Invoke(controller, new object[] { true });
+            Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
+            var idle = GameObject.Find("撤离点微光");
+            Assert.NotNull(idle);
+            Assert.That(idle.transform.position.x, Is.EqualTo(run.ExitPoint.x).Within(.01f));
+            Assert.That(idle.transform.position.z, Is.EqualTo(run.ExitPoint.y).Within(.01f));
+            Assert.IsNull(GameObject.Find("撤离传送门开启"));
+            yield return new WaitForSecondsRealtime(.4f);
+            yield return CaptureSurvivalEvidence("idle", 1280, 720, batch);
+
+            run.Survival.elapsed = ScavengeSurvival.Goal;
+            type.GetMethod("InteractSurvival", flags).Invoke(controller, null);
+            Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
+            yield return null;
+            yield return null;
+            Assert.NotNull(GameObject.Find("撤离传送门开启"));
+            Assert.IsNull(GameObject.Find("撤离点微光"));
+            var exitMarker = (Transform)type.GetField("scavengeExit", flags).GetValue(controller);
+            Assert.IsFalse(exitMarker.gameObject.activeSelf);
+            Assert.IsTrue(controller.JourneyProgress.completedFirst);
+            yield return new WaitForSecondsRealtime(.25f);
+            yield return CaptureSurvivalEvidence("opening", 1280, 720, batch);
+            float deadline = Time.realtimeSinceStartup + 3f;
+            while (!GameObject.Find("撤离传送门关闭") && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.NotNull(GameObject.Find("撤离传送门关闭"));
+            yield return CaptureSurvivalEvidence("closing", 1280, 720, batch);
+            while (GameObject.Find("撤离传送门关闭") && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsNull(GameObject.Find("撤离传送门关闭"));
+            Assert.IsTrue(exitMarker.gameObject.activeSelf);
+            yield return CaptureSurvivalEvidence("settlement", 1280, 720, batch);
+            type.GetMethod("ReturnFromSurvival", flags).Invoke(controller, null);
+            Assert.IsNull(type.GetField("scavengeRun", flags).GetValue(controller));
+            Assert.IsTrue(controller.JourneyProgress.completedFirst);
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootSpaceReturnPersistsResultsAndRejectsFailedSettlementWrites()
         {
             const string batch = "TaskInfoMenu-20261119";

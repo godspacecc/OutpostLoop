@@ -125,6 +125,7 @@ namespace OutpostLoop
         private void ResetSurvivalPresentation()
         {
             ResetSurvivalJourney();
+            ResetRiverValleyPortal();
             survivalFeedbackVersion = -1;
             survivalContainer = null;
             survivalPackOpen = survivalBuildOpen = false;
@@ -273,6 +274,7 @@ namespace OutpostLoop
         /// <summary>键鼠事件由房间、容器和随身道具界面按当前上下文接收。</summary>
         private void PollSurvival()
         {
+            if (PresentRiverValleyPortal()) return;
             if (scavengeRun.Outcome != ScavengeOutcome.Exploring) return;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
@@ -442,6 +444,7 @@ namespace OutpostLoop
 
         private void DrawSurvival(float width, float height)
         {
+            if (RiverValleyPortalPlaying) return;
             var state = scavengeRun.Survival;
             if (DrawSurvivalJourneyModal(width, height)) return;
             if (scavengePaused || scavengeRun.Outcome != ScavengeOutcome.Exploring)

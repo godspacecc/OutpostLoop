@@ -29,3 +29,7 @@
 /Client/Assets/Game/Art/RiverValleyInfected/Source.meta
 /Client/Assets/Game/Art/RiverValleyInfected/Content/Z_*
 /Client/Assets/Game/Art/RiverValleyInfected/Content/Zombie*
+
+# 本机 My Assets 授权资源，由选择性导入脚本还原。
+/Client/Assets/Game/Art/RiverValleyPortal/
+/Client/Assets/Game/Art/RiverValleyPortal.meta

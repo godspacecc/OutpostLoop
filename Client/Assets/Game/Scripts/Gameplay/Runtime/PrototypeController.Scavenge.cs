@@ -83,6 +83,7 @@ namespace OutpostLoop
 
         private void LeaveScavenge()
         {
+            ClearRiverValleyPortalEffect();
             if (survivalMode) ReleaseSurvivalPresentation();
             survivalWorldGeometry = null;
             currentSurvivalRooms = null;
