@@ -360,6 +360,9 @@ namespace OutpostLoop
                 startStage.Find("StartSurvival").gameObject.SetActive(!hasSave);
                 startStage.Find("ContinueSurvival").gameObject.SetActive(hasSave);
                 startStage.Find("RestartSurvival").gameObject.SetActive(hasSave);
+                // 隐藏续玩附属入口时同时收起该行，避免设置和退出保留空槽。
+                ((RectTransform)startStage.Find("SettingsEntry")).anchoredPosition = new Vector2(344, hasSave ? -607 : -521);
+                ((RectTransform)startStage.Find("QuitGame")).anchoredPosition = new Vector2(344, hasSave ? -693 : -607);
                 var progress = controller.JourneyProgress;
                 spaceBackdrop.SetActive(progress.visitedSpace && !hasSave);
                 journeyRecordPanel.gameObject.SetActive(progress.hasResult && !hasSave);

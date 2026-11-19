@@ -40,6 +40,22 @@ namespace OutpostLoop.Tests
                     Assert.AreEqual(!hasSave, GameObject.Find("StartSurvival") != null);
                     Assert.AreEqual(hasSave, GameObject.Find("ContinueSurvival") != null);
                     Assert.AreEqual(hasSave, GameObject.Find("RestartSurvival") != null);
+                    // 检查可见按钮之间的实际空隙，覆盖无档→有档→无档的重排。
+                    var names=hasSave ? new[]{"ContinueSurvival","RestartSurvival","SettingsEntry","QuitGame"}
+                        : new[]{"StartSurvival","SettingsEntry","QuitGame"};
+                    for(int i=1;i<names.Length;i++)
+                    {
+                        var previous=GameObject.Find(names[i-1]).GetComponent<RectTransform>();
+                        var current=GameObject.Find(names[i]).GetComponent<RectTransform>();
+                        float gap=previous.anchoredPosition.y-current.anchoredPosition.y-(previous.rect.height+current.rect.height)/2;
+                        Assert.That(gap,Is.InRange(12f,24f),"可见菜单按钮之间不应留下隐藏入口的空行："+names[i]);
+                    }
+                    var directory=System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,"../../Backup/Artifacts/StartMenuGap-20261119"));
+                    System.IO.Directory.CreateDirectory(directory);
+                    yield return null;yield return null;
+                    var image=ScreenCapture.CaptureScreenshotAsTexture();
+                    System.IO.File.WriteAllBytes(System.IO.Path.Combine(directory,hasSave?"with-save.png":"without-save.png"),image.EncodeToPNG());
+                    Object.Destroy(image);
                 }
             }
             finally
