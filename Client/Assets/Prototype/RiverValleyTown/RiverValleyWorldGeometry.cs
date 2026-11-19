@@ -44,6 +44,31 @@ namespace OutpostLoop.RiverValley
                 return Mathf.Abs(cosine * delta.x - sine * delta.y) < Half.x + padding &&
                     Mathf.Abs(sine * delta.x + cosine * delta.y) < Half.y + padding;
             }
+            /// <summary>在线段局部坐标中裁剪两轴，薄隔墙也不能从采样点之间漏过。</summary>
+            internal bool Intersects(Vector2 from,Vector2 to,float padding)
+            {
+                var center=Center;float c=cosine,s=sine;
+                Vector2 Local(Vector2 point)
+                {
+                    var d=point-center;
+                    return new Vector2(c*d.x-s*d.y,s*d.x+c*d.y);
+                }
+                var start=Local(from);var direction=Local(to)-start;
+                float enter=0,leave=1;
+                for(int axis=0;axis<2;axis++)
+                {
+                    float extent=Half[axis]+padding;
+                    if(Mathf.Abs(direction[axis])<.00001f)
+                    {
+                        if(Mathf.Abs(start[axis])>=extent)return false;
+                        continue;
+                    }
+                    float a=(-extent-start[axis])/direction[axis],b=(extent-start[axis])/direction[axis];
+                    enter=Mathf.Max(enter,Mathf.Min(a,b));leave=Mathf.Min(leave,Mathf.Max(a,b));
+                    if(enter>leave)return false;
+                }
+                return true;
+            }
         }
 
         internal readonly struct Channel
@@ -60,6 +85,18 @@ namespace OutpostLoop.RiverValley
             }
         }
 
+        // 新布局显式启用一次；旧整图实例保持空值，继续原坐标与空室内。
+        internal RiverValleyShopInterior Shop { get; private set; }
+        /// <summary>只为新版行动加入一次陈设实体，随后重建搜索位置与绕行节点。</summary>
+        internal void EnableShopInterior()
+        {
+            if(Shop!=null)return;
+            var rooms=new SurvivalRoomSet(new[]{Interiors[0],Interiors[1]});
+            Shop=new RiverValleyShopInterior(Interiors[0],rooms.Bed(0),rooms.Cabinet(0));
+            foreach(var fixture in Shop.Fixtures)Solids.Add(new Solid(fixture.Area.center,fixture.Area.size,0));
+            Finish();
+        }
+
         /// <summary>河水不可直接穿越；桥面宽度扣除护栏余量后才可通行。</summary>
         internal bool Walkable(Vector2 point, float padding = .34f)
         {
@@ -71,6 +108,13 @@ namespace OutpostLoop.RiverValley
         internal bool ClearBody(Vector2 point, float padding)
         {
             foreach (var solid in Solids) if (solid.Contains(point, padding)) return false;
+            return true;
+        }
+
+        /// <summary>新版室内使用精确线段判定，同时覆盖旋转建筑与薄隔墙。</summary>
+        internal bool ClearSegment(Vector2 from,Vector2 to,float padding)
+        {
+            foreach(var solid in Solids)if(solid.Intersects(from,to,padding))return false;
             return true;
         }
 
@@ -140,6 +184,7 @@ namespace OutpostLoop.RiverValley
             string[] names = { "镇口补给箱", "主街杂货店", "主街门廊", "住宅储藏柜", "住宅后院", "住宅床边柜",
                 "社区诊所", "仓库装卸架", "仓库安保柜", "", "仓库检修台", "", "医院入口物资柜", "", "西岸桥头店铺" };
             foreach (int index in ScavengeSurvival.ActiveCaches) CacheNames[index] = names[index];
+            if (Shop != null) Caches[1] = Shop.CheckoutTarget;
             var corners = new List<Vector2>();
             foreach (var solid in Solids)
                 for (int x = -1; x <= 1; x += 2)

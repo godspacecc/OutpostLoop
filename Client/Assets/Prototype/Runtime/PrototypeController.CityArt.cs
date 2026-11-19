@@ -10,7 +10,7 @@ namespace OutpostLoop
         /// <summary>保留现有交互对象、包围尺寸与 Renderer，避免开门和遮挡逻辑串到资源包实现。</summary>
         private void ApplyRiverValleyCityVisual(Transform target, string name, Vector3 size)
         {
-            if (!survivalMode || survivalLayoutVersion != 1 || survivalCityArt == null) return;
+            if (!survivalMode || survivalLayoutVersion < 1 || survivalCityArt == null) return;
             if (name == "现有外墙" || name == "重点建筑入口墙")
             {
                 survivalCityArt.ReplaceWall(target,size.z > size.x);

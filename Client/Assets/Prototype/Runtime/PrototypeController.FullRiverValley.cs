@@ -19,7 +19,7 @@ namespace OutpostLoop
         /// <summary>保持原物资总量，整图版仅重排到已确认的区域与容器位置。</summary>
         private ScavengeSurvival CreateSurvivalState(int seed)
         {
-            var state = ScavengeSurvival.Create(seed, survivalLayoutVersion == 1);
+            var state = ScavengeSurvival.Create(seed, survivalLayoutVersion >= 1);
             state.layoutVersion = survivalLayoutVersion;
             if (survivalWorldGeometry != null)
                 for (int i = 0; i < state.caches.Length; i++) state.caches[i].point = survivalWorldGeometry.Caches[i];
@@ -30,7 +30,7 @@ namespace OutpostLoop
         private void StartFreshSurvivalFromResult()
         {
             if (!CloseSurvivalSave()) return;
-            if (survivalLayoutVersion == 1) { RestartScavenge(); return; }
+            if (survivalLayoutVersion >= RiverValleyShopInterior.Version) { RestartScavenge(); return; }
             LeaveScavenge();
             CrossToWorld(StartSurvival);
         }
@@ -43,10 +43,12 @@ namespace OutpostLoop
             survivalCityArt = RiverValleyCityArtCatalog.Load();
             var town = RiverValleyTownPreview.CreateWorld(scavengeRoot, content.layout, content.surface);
             survivalWorldGeometry = town.WorldGeometry;
+            if(survivalLayoutVersion>=RiverValleyShopInterior.Version)survivalWorldGeometry.EnableShopInterior();
             currentSurvivalRooms = new SurvivalRoomSet(new[] { survivalWorldGeometry.Interiors[0], survivalWorldGeometry.Interiors[1] });
             riverValleyRegion = JsonUtility.FromJson<RiverValleyRegion>(content.layout.text);
             var wood = ScavengeMaterial(new Color(.43f,.32f,.23f));
             for (int room = 0; room < 2; room++) CreateSurvivalRoom(room, walls, floor, wood, roof);
+            if(survivalWorldGeometry.Shop!=null)CreateMainStreetShopInterior();
             var allRooms = new SurvivalRoomSet(survivalWorldGeometry.Interiors);
             for (int i = 2; i < 6; i++)
             {
@@ -87,6 +89,7 @@ namespace OutpostLoop
         /// <summary>重点入口有现场名称；无入口标记的其余建筑保持封闭。</summary>
         private void DrawFullRiverValleyEntrances()
         {
+            DrawMainStreetShopZones();
             if (survivalWorldGeometry == null) return;
             var rooms = new SurvivalRoomSet(survivalWorldGeometry.Interiors);
             for (int i = 0; i < 6; i++)

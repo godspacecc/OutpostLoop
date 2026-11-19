@@ -222,6 +222,8 @@ namespace OutpostLoop
                 {
                     var cache = scavengeRun.Survival.caches[i];
                     scavengeCrates[i].position = SurvivalPosition(scavengeRun.CachePoints[i], .33f);
+                    if(i==1 && survivalWorldGeometry?.Shop!=null)
+                        scavengeCrates[i].position=SurvivalPosition(survivalWorldGeometry.Shop.CounterCrate,1.03f);
                     scavengeCrates[i].gameObject.SetActive(cache.active);
                     scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
                     continue;
@@ -260,7 +262,7 @@ namespace OutpostLoop
             var canvas = ScavengeMaterial(new Color(.91f, .87f, .67f));
             var pad = ScavengeMaterial(new Color(.31f, .42f, .36f));
 
-            if (survivalMode && survivalLayoutVersion == 1) CreateFullRiverValleyMap(soil, concrete, steel, pad);
+            if (survivalMode && survivalLayoutVersion >= 1) CreateFullRiverValleyMap(soil, concrete, steel, pad);
             else if (scavengeTown) CreateTownGeography(soil, road, concrete, steel, pad);
             else
             {

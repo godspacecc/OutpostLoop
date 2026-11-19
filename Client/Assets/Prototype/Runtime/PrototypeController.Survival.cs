@@ -56,7 +56,7 @@ namespace OutpostLoop
             var save = read.Data;
             return save.run != null && save.run.elapsed >= 0 && save.run.elapsed < ScavengeSurvival.Deadline &&
                 save.patrols?.Length == ScavengeTown.PatrolCount && save.run.rooms?.Length == SurvivalRooms.BuildingIds.Length &&
-                save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= 1 ? save : null;
+                save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= OutpostLoop.RiverValley.RiverValleyShopInterior.Version ? save : null;
         }
 
         internal void StartSurvival() => EnterSurvival(false);
@@ -74,7 +74,7 @@ namespace OutpostLoop
                 return;
             }
             survivalConfirmNew = !resume && HasSurvivalSave;
-            survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? 1;
+            survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? OutpostLoop.RiverValley.RiverValleyShopInterior.Version;
             survivalMode = true;
             StartScavenge(true);
         }
@@ -150,7 +150,7 @@ namespace OutpostLoop
             ScavengeBox("床架", SurvivalPosition(bed, .20f), new Vector3(1.2f, .4f, 2), wood);
             ScavengeBox("床垫", SurvivalPosition(bed, .48f), new Vector3(1.1f, .22f, 1.9f), floor);
             var cabinet = ScavengeBox("储物柜", SurvivalPosition(CurrentSurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood);
-            if (survivalLayoutVersion == 1 && survivalCityArt != null)
+            if (survivalLayoutVersion >= 1 && survivalCityArt != null)
             {
                 cabinet.rotation=Quaternion.Euler(0,180,0);
                 OutpostLoop.RiverValley.RiverValleyShelfDressing.Fill(cabinet,survivalCityArt,false);

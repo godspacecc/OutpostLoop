@@ -326,7 +326,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyFullTownHasSixInteriorsAndKeepsLegacySaves()
         {
-            const string batch = "CityTownDressing-20261118";
+            const string batch = "ShopInterior-20261119";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -344,7 +344,7 @@ namespace OutpostLoop.Tests
             var field = type.GetField("scavengeRun", flags);
             var run = (ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
-            Assert.AreEqual(1, run.Survival.layoutVersion);
+            Assert.AreEqual(2, run.Survival.layoutVersion);
             Assert.AreEqual(2000, run.MapBounds.width);
             Assert.AreEqual(2000, run.MapBounds.height);
             Assert.AreEqual(6, run.FullTown.Interiors.Length);
@@ -409,19 +409,44 @@ namespace OutpostLoop.Tests
                 {
                     Assert.AreEqual(i,run.InsideSurvivalRoom);
                     Assert.IsTrue(run.ClaimSurvivalRoom());
-                    player.SetValue(run,run.RoomSet.Bed(i));
+                    if(i==0)
+                    {
+                        var shop=run.FullTown.Shop;
+                        Assert.NotNull(GameObject.Find("主街杂货店完整室内"));
+                        yield return WalkShopPath(controller,run,batch,"shop-checkout",shop.Room.position+new Vector2(5.5f,12.5f),shop.CheckoutTarget);
+                        run.Interact();
+                        Assert.AreEqual(1,run.OpenCache,"收银区应可搜索原杂货店容器");
+                        for(int step=0;step<20 && run.SearchRemaining>0;step++)run.Tick(.05f,Vector2.zero);
+                        Assert.IsTrue(run.Survival.caches[1].searched);
+                        run.CloseSearch();
+                        yield return WalkShopPath(controller,run,batch,"shop-rear",shop.Room.position+new Vector2(5.5f,12.5f),shop.StockTarget);
+                        yield return WalkShopPath(controller,run,batch,"shop-bed",shop.Room.position+new Vector2(28.2f,12.5f),shop.Room.position+new Vector2(28.2f,22),shop.Room.position+new Vector2(29.35f,22),shop.BedApproach);
+                    }
+                    else player.SetValue(run,run.RoomSet.Bed(i));
                     run.Survival.energy=40;
                     Assert.IsTrue(run.SleepSurvival());
                     run.Tick(.1f,Vector2.zero);
                     Assert.Greater(run.Survival.energy,40);
                     run.WakeSurvival("验收起身");
-                    player.SetValue(run,run.RoomSet.Cabinet(i));
+                    if(i==0)
+                    {
+                        var shop=run.FullTown.Shop;
+                        yield return WalkShopPath(controller,run,batch,"shop-storage",shop.Room.position+new Vector2(29.35f,22),shop.Room.position+new Vector2(28.2f,22),shop.Room.position+new Vector2(28.2f,1.2f),shop.CabinetApproach);
+                    }
+                    else player.SetValue(run,run.RoomSet.Cabinet(i));
                     type.GetMethod("InteractSurvival",flags).Invoke(controller,null);
                     Assert.AreSame(run.Survival.rooms[i].storage,type.GetField("survivalContainer",flags).GetValue(controller));
                     Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.pack,0,run.Survival.rooms[i].storage.items,12));
                     Assert.IsTrue(ScavengeSurvival.Transfer(run.Survival.rooms[i].storage.items,0,run.Survival.pack,6));
                     type.GetMethod("CloseSurvivalPanels",flags).Invoke(controller,null);
-                    player.SetValue(run,door+Vector2.right*1.2f);
+                    if(i==0)
+                    {
+                        var shop=run.FullTown.Shop;
+                        yield return WalkShopPath(controller,run,batch,"shop-return",shop.Room.position+new Vector2(28.2f,1.2f),shop.Room.position+new Vector2(28.2f,12.5f),shop.Entry);
+                        for(int step=0;step<12;step++)run.Tick(.05f,Vector2.left);
+                        Assert.Less(run.Player.x,door.x-.5f,"必须可以实际从西门离开商店");
+                    }
+                    else player.SetValue(run,door+Vector2.right*1.2f);
                     Assert.IsTrue(run.ToggleSurvivalDoor());
                     Assert.IsFalse(ScavengeLayout.ClearLine(door-Vector2.right,door+Vector2.right,.1f,run.RunWalls));
                     Assert.IsTrue(run.ToggleSurvivalDoor());
@@ -493,12 +518,29 @@ namespace OutpostLoop.Tests
             var savedPosition=run.Player;
             type.GetMethod("SaveAndLeaveSurvival",flags).Invoke(controller,null);
             yield return null;
-            Assert.AreEqual(1,store.Read("town-survival-v1.json").Data.run.layoutVersion);
+            Assert.AreEqual(2,store.Read("town-survival-v1.json").Data.run.layoutVersion);
             Click("ContinueSurvival");
             yield return WaitForCrossing();
             run=(ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
             Assert.That(Vector2.Distance(savedPosition,run.Player),Is.LessThan(.01f));
+            type.GetMethod("LeaveScavenge",flags).Invoke(controller,null);
+            yield return null;
+            // 版本 1 的空房间允许保存在未来货架占地内；继续时必须保持原坐标。
+            var oldFull=store.Read("town-survival-v1.json").Data;
+            oldFull.run.layoutVersion=1;
+            var oldPoint=new Vector2(-32.1f,38.25f);
+            oldFull.player=oldPoint;
+            store.Save("town-survival-v1.json",oldFull);
+            type.GetField("survivalSaveChecked",flags).SetValue(controller,false);
+            type.GetMethod("RefreshOverlay",flags).Invoke(controller,null);
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run=(ScavengeRun)field.GetValue(controller);
+            Assert.AreEqual(1,run.Survival.layoutVersion);
+            Assert.IsNull(run.FullTown.Shop);
+            Assert.AreEqual(oldPoint,run.Player);
+            Assert.IsTrue(run.FullTown.Walkable(oldPoint));
             type.GetMethod("LeaveScavenge",flags).Invoke(controller,null);
             yield return null;
             var legacy=new ScavengeRun(41,true,ScavengeSurvival.Create(41));
@@ -520,9 +562,42 @@ namespace OutpostLoop.Tests
             yield return WaitForCrossing();
             run=(ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
-            Assert.AreEqual(1,run.Survival.layoutVersion);
+            Assert.AreEqual(2,run.Survival.layoutVersion);
             Assert.IsEmpty(run.Survival.pack);
             yield return new ExitPlayMode();
+        }
+
+        // 领域输入逐帧步行，避免用传送替代家具间通路验收。
+        private IEnumerator WalkShopPath(PrototypeController controller,ScavengeRun run,string batch,string name,params Vector2[] targets)
+        {
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            foreach(var target in targets)
+            {
+                Assert.IsTrue(run.FullTown.Walkable(target),"目标占地不可通行 "+target);
+                for(int step=0;step<350 && Vector2.Distance(run.Player,target)>.16f;step++)
+                {
+                    run.Tick(.05f,(target-run.Player).normalized);
+                    if(step%8==0)yield return null;
+                }
+                Assert.That(Vector2.Distance(run.Player,target),Is.LessThan(.25f),"店内通路被挡 "+target+" 实际 "+run.Player);
+            }
+            typeof(PrototypeController).GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+            if(name=="shop-checkout")
+            {
+                // 受控镜头穿过货架验证整组隐藏与恢复，随后还原正常跟随镜头。
+                var shelf=GameObject.Find("商店Shelf 0").GetComponentsInChildren<Renderer>();
+                var camera=(Camera)typeof(PrototypeController).GetField("gameCamera",flags).GetValue(controller);
+                var torso=(Vector3)typeof(PrototypeController).GetMethod("SurvivalPosition",flags).Invoke(controller,new object[]{run.Player,.95f});
+                var bounds=shelf[0].bounds;foreach(var part in shelf)bounds.Encapsulate(part.bounds);
+                camera.transform.position=torso+(bounds.center-torso)*2;
+                typeof(PrototypeController).GetMethod("UpdateScavengeOccluders",flags).Invoke(controller,null);
+                foreach(var part in shelf)Assert.IsTrue(part.forceRenderingOff,"挡住玩家的货架必须整组隐藏");
+                camera.transform.position=torso+Vector3.up*15;
+                typeof(PrototypeController).GetMethod("UpdateScavengeOccluders",flags).Invoke(controller,null);
+                foreach(var part in shelf)Assert.IsFalse(part.forceRenderingOff,"离开视线的货架必须恢复");
+                typeof(PrototypeController).GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
+            }
+            yield return CaptureSurvivalEvidence(name,1920,1080,batch);
         }
 
         [UnityTest]

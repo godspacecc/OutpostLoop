@@ -125,7 +125,7 @@ namespace OutpostLoop
         public static readonly int[] ActiveCaches = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14 };
 
         public double elapsed;
-        // 0 为旧小街区存档，1 为确认的河谷镇整图；恢复时按原版地图读取。
+        // 0 为旧小街区，1 为整图空室内，2 为杂货店陈设版；恢复时按原版地图读取。
         public int layoutVersion;
         public float health = 100, water = 80, food = 80, energy = 80;
         public float dehydration, starvation, bleedClock, lastHit = -11, attackCooldown;

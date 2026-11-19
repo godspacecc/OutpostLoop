@@ -71,6 +71,16 @@ namespace OutpostLoop
         /// <summary>逐轴滑动并检查实体与河道，保持旧图原有移动规则。</summary>
         private Vector2 MoveInRun(Vector2 point, Vector2 step)
         {
+            // 新室内有薄隔墙；分步碰撞防止低帧或大 dt 从家具一侧跳到另一侧。
+            int pieces=FullTown?.Shop!=null?Mathf.Max(1,Mathf.CeilToInt(step.magnitude/.12f)):1;
+            var delta=step/pieces;
+            for(int i=0;i<pieces;i++)point=MoveInRunStep(point,delta);
+            return point;
+        }
+
+        /// <summary>执行单步滑动，分别检查动态房门、静态家具和河道。</summary>
+        private Vector2 MoveInRunStep(Vector2 point, Vector2 step)
+        {
             if (FullTown == null) return IsTown ? ScavengeLayout.Move(point, step, ScavengeTown.Bounds, RunWalls) : ScavengeLayout.Move(point, step);
             var next = ScavengeLayout.Move(point, step, FullTown.Bounds, RunWalls);
             if (!FullTown.Walkable(new Vector2(next.x, point.y))) next.x = point.x;
@@ -83,6 +93,7 @@ namespace OutpostLoop
         {
             if (!ScavengeLayout.ClearLine(from, to, clearance, RunWalls)) return false;
             if (FullTown == null) return true;
+            if(FullTown.Shop!=null)return FullTown.ClearSegment(from,to,clearance);
             int steps = Mathf.CeilToInt(Vector2.Distance(from, to) * 2);
             for (int i = 1; i <= steps; i++) if (!FullTown.ClearBody(Vector2.Lerp(from, to, (float)i / steps), clearance)) return false;
             return true;

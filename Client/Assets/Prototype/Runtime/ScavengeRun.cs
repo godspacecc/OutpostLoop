@@ -129,6 +129,13 @@ namespace OutpostLoop
             IsTown = town;
             Survival = survival;
             FullTown = geometry;
+            if(survival?.layoutVersion>=RiverValley.RiverValleyShopInterior.Version)
+            {
+                geometry?.EnableShopInterior();
+                if(geometry!=null)
+                    for(int i=0;i<survival.caches.Length;i++)survival.caches[i].point=geometry.Caches[i];
+            }
+            else if(geometry?.Shop!=null)throw new System.InvalidOperationException("旧版本存档不能复用新版室内几何。");
             RoomSet = new SurvivalRoomSet(geometry == null ? null : new[] { geometry.Interiors[0], geometry.Interiors[1] });
             if (survival?.layoutVersion > 0 && geometry == null) throw new System.InvalidOperationException("整图存档缺少对应地图几何。");
             if (survival != null) RefreshSurvivalWalls();
