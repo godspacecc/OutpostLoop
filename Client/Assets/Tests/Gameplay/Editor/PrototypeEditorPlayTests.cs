@@ -33,6 +33,151 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyDrivingUsesKeyboardAndResumesAtRest()
+        {
+            const string batch = "RiverValleyDriving";
+            const string saveName = "town-survival-v1.json";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var runField = type.GetField("scavengeRun", flags);
+            var poll = type.GetMethod("PollSurvival", flags);
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            var store = new Game.JsonFileStore<SurvivalSave>(directory);
+            type.GetField("survivalStore", flags).SetValue(controller, store);
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)runField.GetValue(controller);
+            Assert.IsTrue(run.HasVehicle, "镇口需要一辆可驾驶车辆");
+            Assert.NotNull(GameObject.Find("河谷镇可驾驶民用车"));
+            Vector2 parked = run.VehiclePosition;
+            Vector3 left = Quaternion.Euler(0, run.VehicleHeading, 0) * Vector3.left;
+            player.SetValue(run, parked + new Vector2(left.x, left.z) * 1.55f);
+            Assert.IsTrue(run.CanEnterVehicle);
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var settings = InputSystem.settings;
+            var inputBehavior = settings.editorInputBehaviorInPlayMode;
+            var background = settings.backgroundBehavior;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            try
+            {
+                DriveScavengeKey(controller, poll, keyboard, Key.Tab);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsFalse(run.Driving, "面板打开时一次 E 只关闭面板");
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsTrue(run.Driving);
+                double elapsed = run.Survival.elapsed;
+                DriveScavengeKey(controller, poll, keyboard, Key.W);
+                float deadline = Time.realtimeSinceStartup + 3f;
+                while (run.VehicleSpeed < 1.5f && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.Greater(run.VehicleSpeed, 1f, $"默认车位前方无法开出 {parked} / {run.VehicleHeading}");
+                Assert.Greater(Vector2.Distance(parked, run.VehiclePosition), .1f);
+                Assert.Greater(run.Survival.elapsed, elapsed);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsFalse(run.Driving, "行驶中有安全落点时可下车");
+                Assert.Zero(run.VehicleSpeed);
+                parked = run.VehiclePosition;
+                Assert.Greater(Vector2.Distance(run.Player, parked), 1.2f);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsTrue(run.Driving);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                elapsed = run.Survival.elapsed;
+                DriveScavengeKey(controller, poll, keyboard, Key.W);
+                yield return null;
+                Assert.AreEqual(parked, run.VehiclePosition);
+                Assert.AreEqual(elapsed, run.Survival.elapsed);
+                InputState.Change(keyboard, new KeyboardState());
+                type.GetMethod("SaveAndLeaveSurvival", flags).Invoke(controller, null);
+                yield return null;
+                var saved = store.Read(saveName).Data;
+                Assert.IsTrue(saved.vehicle.occupied);
+                Click("ContinueSurvival");
+                yield return WaitForCrossing();
+                run = (ScavengeRun)runField.GetValue(controller);
+                Assert.IsTrue(run.Driving);
+                Assert.Zero(run.VehicleSpeed);
+                Assert.AreEqual(parked, run.VehiclePosition);
+                Assert.AreEqual(parked, run.Player);
+                Assert.AreEqual(saved.vehicle.heading, run.VehicleHeading);
+                Assert.That(run.Survival.elapsed, Is.EqualTo(saved.run.elapsed).Within(1));
+                yield return CaptureSurvivalEvidence("resumed-in-car", 1280, 720, batch);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsFalse(run.Driving);
+                yield return CaptureSurvivalEvidence("parked-on-foot", 1280, 720, batch);
+                VerifyDrivableBridges(run, directory);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                settings.editorInputBehaviorInPlayMode = inputBehavior;
+                settings.backgroundBehavior = background;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>在三处真实桥头受控落位，再逐帧驾驶越过连续桥段。</summary>
+        private static void VerifyDrivableBridges(ScavengeRun source, string directory)
+        {
+            var world = source.FullTown;
+            var covered = new List<Vector2>();
+            var evidence = new List<string>();
+            foreach (var section in world.Bridges)
+            {
+                var center = (section.A + section.B) * .5f;
+                if (world.WaterMargin(center) > -3 || covered.Exists(point => Vector2.Distance(point, center) < 140))
+                    continue;
+                covered.Add(center);
+                var path = new List<Vector2> { section.A, section.B };
+                for (int i = world.Bridges.IndexOf(section) - 1; i >= 0; i--)
+                {
+                    var previous = world.Bridges[i];
+                    if (previous.B != path[0]) break;
+                    path.Insert(0, previous.A);
+                }
+                for (int i = world.Bridges.IndexOf(section) + 1; i < world.Bridges.Count; i++)
+                {
+                    var next = world.Bridges[i];
+                    if (next.A != path[path.Count - 1]) break;
+                    path.Add(next.B);
+                }
+                var entry = (path[1] - path[0]).normalized;
+                var leave = (path[path.Count - 1] - path[path.Count - 2]).normalized;
+                var save = JsonUtility.FromJson<SurvivalSave>(JsonUtility.ToJson(source.CaptureSurvival()));
+                save.vehicle.position = path[0] - entry * 4;
+                save.vehicle.heading = Mathf.Atan2(entry.x, entry.y) * Mathf.Rad2Deg;
+                save.vehicle.occupied = true;
+                var run = ScavengeRun.RestoreSurvival(save, world);
+                Assert.IsTrue(run.Driving, $"桥头 {path[0]} 无法容纳整车");
+                foreach (var patrol in run.Patrols) patrol.Health = 0;
+                path.Add(path[path.Count - 1] + leave * 4);
+                foreach (var target in path)
+                {
+                    for (int step = 0; step < 500 && Vector2.Distance(run.VehiclePosition, target) > .65f; step++)
+                    {
+                        var delta = target - run.VehiclePosition;
+                        float desired = Mathf.Atan2(delta.x, delta.y) * Mathf.Rad2Deg;
+                        float steering = Mathf.Clamp(Mathf.DeltaAngle(run.VehicleHeading, desired) / 18, -1, 1);
+                        float throttle = run.VehicleSpeed > 5 ? 0 : 1;
+                        run.Tick(.05f, new Vector2(steering, throttle));
+                    }
+                    Assert.That(Vector2.Distance(run.VehiclePosition, target), Is.LessThanOrEqualTo(.65f),
+                        $"桥 {covered.Count} 目标 {target}，车辆 {run.VehiclePosition}");
+                }
+                evidence.Add($"桥 {covered.Count}：{save.vehicle.position} → {run.VehiclePosition}，连续 {path.Count - 2} 段桥面");
+            }
+            Assert.AreEqual(3, covered.Count);
+            System.IO.File.WriteAllLines(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(directory), "bridge-traversal.txt"), evidence);
+        }
+
+        [UnityTest]
         public IEnumerator BootRiverValleyPortalPlaysAfterSuccessfulExtraction()
         {
             const string batch = "RiverValleyPortalWithoutPole-20261119";

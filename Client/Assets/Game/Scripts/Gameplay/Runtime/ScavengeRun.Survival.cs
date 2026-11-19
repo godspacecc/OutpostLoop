@@ -18,6 +18,7 @@ namespace OutpostLoop
         public SurvivalPatrolSave[] patrols;
         public Vector2 gunshot;
         public float gunshotRemaining;
+        public RiverValleyVehicleSave vehicle;
     }
 
     /// <summary>恢复时保留巡逻位置、受伤状态以及正在追踪的目标。</summary>
@@ -43,7 +44,7 @@ namespace OutpostLoop
         internal int SurvivalFeedbackVersion { get; private set; }
         /// <summary>同在诊所室内、近距离且无遮挡时可以重复交谈。</summary>
         internal bool CanTalkToClinicSurvivor => FullTown != null && Outcome == ScavengeOutcome.Exploring &&
-            Survival?.action == SurvivalAction.None && FullTown.Interiors[2].Contains(Player) &&
+            !Driving && Survival?.action == SurvivalAction.None && FullTown.Interiors[2].Contains(Player) &&
             (Player - FullTown.ClinicSurvivor).sqrMagnitude <= 1.8f * 1.8f && ClearRunLine(Player, FullTown.ClinicSurvivor);
 
         /// <summary>完成原有装卸架搜索后可读记录，重复打开也能查看。</summary>
@@ -250,7 +251,7 @@ namespace OutpostLoop
         /// <summary>以实际瞄准位置和遮挡决定攻击结果。</summary>
         internal bool SurvivalAttack(Vector2 aim, int aimedHead)
         {
-            if (Outcome != ScavengeOutcome.Exploring || Survival.sleeping || Survival.action != SurvivalAction.None ||
+            if (Outcome != ScavengeOutcome.Exploring || Driving || Survival.sleeping || Survival.action != SurvivalAction.None ||
                 Survival.attackCooldown > 0 || Survival.weapon == null || OpenCache >= 0) return false;
             bool pistol = Survival.weapon.item == SurvivalItem.Pistol;
             if (pistol && Survival.weapon.rounds <= 0) return ReportSurvival("空仓 · R 装填");
@@ -324,7 +325,7 @@ namespace OutpostLoop
         /// <summary>道具效果与消耗在完成时一起提交，取消不会扣除道具。</summary>
         internal bool BeginSurvivalAction(SurvivalAction action, int index = -1)
         {
-            if (Outcome != ScavengeOutcome.Exploring || Survival.sleeping || Survival.action != SurvivalAction.None)
+            if (Outcome != ScavengeOutcome.Exploring || Driving || Survival.sleeping || Survival.action != SurvivalAction.None)
                 return false;
             int room = NearbySurvivalDoor;
             SurvivalItem item;
@@ -450,7 +451,7 @@ namespace OutpostLoop
         {
             var snapshot = new SurvivalSave
             {
-                available = true, seed = Seed, player = Player, exitKnown = ExitKnown, run = Survival,
+                available = true, seed = Seed, player = Player, exitKnown = ExitKnown, run = Survival, vehicle = vehicle,
                 gunshot = gunshot, gunshotRemaining = gunshotRemaining, patrols = new SurvivalPatrolSave[patrols.Length]
             };
             for (int i = 0; i < patrols.Length; i++)
@@ -474,6 +475,16 @@ namespace OutpostLoop
                 Player = save.player, ExitKnown = save.exitKnown,
                 gunshot = save.gunshot, gunshotRemaining = save.gunshotRemaining
             };
+            if (geometry != null && save.vehicle.version == 1 &&
+                restored.VehiclePoseClear(save.vehicle.position, save.vehicle.heading))
+            {
+                restored.vehicle = save.vehicle;
+                if (restored.Driving)
+                {
+                    restored.Player = restored.VehiclePosition;
+                    restored.Survival.facing = VehicleForward(restored.VehicleHeading);
+                }
+            }
             for (int i = 0; i < restored.patrols.Length; i++)
             {
                 var p = restored.patrols[i];

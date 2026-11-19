@@ -112,7 +112,7 @@ namespace OutpostLoop
         public int OpenCache { get; private set; } = -1;
         public float SearchRemaining { get; private set; }
         public bool ExitKnown { get; private set; }
-        public bool AtExit => ExitKnown && Vector2.Distance(Player, ExitPoint) <= 1.65f;
+        public bool AtExit => !Driving && ExitKnown && Vector2.Distance(Player, ExitPoint) <= 1.65f;
         public ScavengeOutcome Outcome { get; private set; }
         // 工地和休整机会仅属于当前行动。
         public Vector2? Shelter { get; private set; }
@@ -140,6 +140,7 @@ namespace OutpostLoop
             if (survival?.layoutVersion > 0 && geometry == null) throw new System.InvalidOperationException("整图存档缺少对应地图几何。");
             if (survival != null) RefreshSurvivalWalls();
             Player = geometry != null ? geometry.Start : town ? ScavengeTown.Start : ScavengeLayout.Start;
+            PlaceSurvivalVehicle();
             contents = new ScavengeItem[CachePoints.Length];
             discovered = new bool[contents.Length];
             known = new bool[contents.Length];
@@ -195,8 +196,16 @@ namespace OutpostLoop
         public void Tick(float dt, Vector2 input)
         {
             if (Outcome != ScavengeOutcome.Exploring || dt <= 0) return;
-            float speed = Survival == null ? 5 : SurvivalSpeed(input);
-            Player = MoveInRun(Player, Vector2.ClampMagnitude(input, 1) * (speed * dt));
+            if (Driving)
+            {
+                TickVehicle(dt, input);
+                input = Vector2.zero;
+            }
+            else
+            {
+                float speed = Survival == null ? 5 : SurvivalSpeed(input);
+                MovePlayerOnFoot(Vector2.ClampMagnitude(input, 1) * (speed * dt));
+            }
             if (Survival != null)
             {
                 TickSurvival(dt, input);
@@ -237,7 +246,7 @@ namespace OutpostLoop
         /// <summary>同一交互键依次处理撤离、开箱或关箱。</summary>
         public bool Interact()
         {
-            if (Outcome != ScavengeOutcome.Exploring) return false;
+            if (Outcome != ScavengeOutcome.Exploring || Driving) return false;
             if (AtExit)
             {
                 CarriedOut = Inventory;
@@ -367,6 +376,7 @@ namespace OutpostLoop
         private void End(ScavengeOutcome outcome)
         {
             Outcome = outcome;
+            VehicleSpeed = 0;
             Inventory = ScavengeItem.None;
             Shelter = null;
             ShelterRemaining = 0;

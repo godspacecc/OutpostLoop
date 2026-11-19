@@ -289,12 +289,14 @@ namespace OutpostLoop
             }
             if (scavengePaused) { SyncSurvivalPresentation(); return; }
 
-            Vector2 movement = keyboard == null ? Vector2.zero : new Vector2(
+            bool driving = scavengeRun.Driving;
+            bool interactPressed = keyboard?.eKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.E);
+            Vector2 movement = driving ? ReadDrivingInput(keyboard) : keyboard == null ? Vector2.zero : new Vector2(
                 (keyboard.dKey.isPressed ? 1 : 0) - (keyboard.aKey.isPressed ? 1 : 0),
                 (keyboard.wKey.isPressed ? 1 : 0) - (keyboard.sKey.isPressed ? 1 : 0));
             scavengeRun.SurvivalSprint = movement.sqrMagnitude > 0 &&
                 (keyboard?.leftShiftKey.isPressed == true || keyboard?.rightShiftKey.isPressed == true);
-            var direction = ScavengeWorldMovement(movement);
+            var direction = driving ? movement : ScavengeWorldMovement(movement);
             for (float remaining = Time.unscaledDeltaTime; remaining > 0 && scavengeRun.Outcome == ScavengeOutcome.Exploring;)
             {
                 float step = Mathf.Min(remaining, .05f);
@@ -312,9 +314,16 @@ namespace OutpostLoop
             if (survivalContainer != null && Vector2.Distance(survivalContainer.point, scavengeRun.Player) > 1.8f)
                 CloseSurvivalPanels();
             if (survivalBuildOpen && scavengeRun.NearbySurvivalDoor < 0) CloseSurvivalPanels();
+            if (interactPressed && (driving ||
+                (!SurvivalPanelOpen && scavengeRun.CanEnterVehicle)))
+            {
+                InteractSurvival();
+                return;
+            }
+            if (driving) { SyncScavenge(); return; }
             if (keyboard?.tabKey.wasPressedThisFrame == true) OpenSurvivalPack();
             if (keyboard?.vKey.wasPressedThisFrame == true) OpenSurvivalBuild();
-            if (keyboard?.eKey.wasPressedThisFrame == true) InteractSurvival();
+            if (interactPressed) InteractSurvival();
             if (keyboard?.fKey.wasPressedThisFrame == true) scavengeRun.ToggleSurvivalTorch();
             if (keyboard?.rKey.wasPressedThisFrame == true) StartSurvivalAction(SurvivalAction.Reload);
             if (mouse != null && TryProjectBattleGround(mouse.position.ReadValue(), out var aim) &&
@@ -377,8 +386,10 @@ namespace OutpostLoop
 
         private string SurvivalInteraction()
         {
+            if (scavengeRun.Driving) return "下车";
             if (scavengeRun.Survival.sleeping) return "起身";
             if (SurvivalPanelOpen) return "关闭";
+            if (scavengeRun.CanEnterVehicle) return "上车";
             if (scavengeRun.AtExit) return scavengeRun.Survival.Ready ? "撤离" : "提前撤离";
             int door = scavengeRun.NearbySurvivalDoor;
             if (door >= 0 && scavengeRun.Survival.rooms[door].durability > 0)
@@ -400,6 +411,12 @@ namespace OutpostLoop
 
         private void InteractSurvival()
         {
+            if (scavengeRun.Driving || (!SurvivalPanelOpen && scavengeRun.CanEnterVehicle))
+            {
+                scavengeRun.InteractVehicle();
+                SyncScavenge();
+                return;
+            }
             if (scavengeRun.Survival.sleeping) { scavengeRun.WakeSurvival("已起身"); return; }
             if (SurvivalPanelOpen) { CloseSurvivalPanels(); return; }
             if (scavengeRun.AtExit)
@@ -464,8 +481,13 @@ namespace OutpostLoop
                 state.energy < 25 ? "需要休息" : state.food < 25 ? "需要进食" : "";
             GUI.Label(new Rect(30, 85, 350, 27), warning.Length > 0 ? warning :
                 state.weapon == null ? "未装备武器" : DescribeSurvivalItem(state.weapon));
-            if (GUI.Button(new Rect(30, 114, 148, 34), $"背包 {state.Used}/6  Tab")) OpenSurvivalPack();
-            GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
+            if (scavengeRun.Driving)
+                GUI.Label(new Rect(30, 114, 350, 34), $"车速 {Mathf.Abs(scavengeRun.VehicleSpeed) * 3.6f:0} km/h   WASD 驾驶");
+            else
+            {
+                if (GUI.Button(new Rect(30, 114, 148, 34), $"背包 {state.Used}/6  Tab")) OpenSurvivalPack();
+                GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
+            }
 
             if (survivalFeedbackVersion != scavengeRun.SurvivalFeedbackVersion)
             {
@@ -483,10 +505,10 @@ namespace OutpostLoop
                 InteractSurvival();
 
             int inside = scavengeRun.InsideSurvivalRoom;
-            if (inside >= 0 && state.baseRoom != inside &&
+            if (!scavengeRun.Driving && inside >= 0 && state.baseRoom != inside &&
                 GUI.Button(new Rect(width - 205, height - 61, 184, 40), "设为基地"))
                 scavengeRun.ClaimSurvivalRoom();
-            if (scavengeRun.NearbySurvivalDoor >= 0 &&
+            if (!scavengeRun.Driving && scavengeRun.NearbySurvivalDoor >= 0 &&
                 GUI.Button(new Rect(width - 205, height - 108, 184, 38), "入口操作  V"))
                 OpenSurvivalBuild();
 

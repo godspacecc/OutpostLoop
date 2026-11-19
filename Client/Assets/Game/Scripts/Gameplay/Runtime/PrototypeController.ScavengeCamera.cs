@@ -23,7 +23,9 @@ namespace OutpostLoop
         /// <summary>近距离跟随玩家，给前方多留一小段可观察空间。</summary>
         private void UpdateScavengeCamera(bool snap)
         {
-            var lookAhead = ScavengeGroundRotation * Vector3.forward * 1.5f;
+            var lookAhead = scavengeRun.Driving
+                ? Quaternion.Euler(0, scavengeRun.VehicleHeading, 0) * Vector3.forward * 3
+                : ScavengeGroundRotation * Vector3.forward * 1.5f;
             var desired = SurvivalPosition(scavengeRun.Player, 0) + lookAhead;
             scavengeCameraFocus = snap ? desired : Vector3.Lerp(scavengeCameraFocus, desired,
                 1 - Mathf.Exp(-10f * Time.unscaledDeltaTime));

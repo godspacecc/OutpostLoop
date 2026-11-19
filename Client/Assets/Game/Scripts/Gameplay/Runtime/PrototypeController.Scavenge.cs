@@ -90,6 +90,7 @@ namespace OutpostLoop
             Release(scavengeRoot.gameObject);
             scavengeRoot.gameObject.SetActive(false);
             scavengeRoot = null;
+            survivalVehicleVisual = null;
             infectedVisuals = null;
             scavengeRun = null;
             scavengeOccluders.Clear();
@@ -207,6 +208,8 @@ namespace OutpostLoop
         private void SyncScavenge(bool snapCamera = false)
         {
             scavengePlayer.position = SurvivalPosition(scavengeRun.Player, 0);
+            scavengePlayer.gameObject.SetActive(!scavengeRun.Driving);
+            SyncSurvivalVehicle();
             for (int i = 0; i < scavengeEnemies.Length; i++)
             {
                 var patrol = scavengeRun.Patrols[i];

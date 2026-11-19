@@ -48,6 +48,19 @@ namespace OutpostLoop.RiverValley
                 return Mathf.Abs(cosine * delta.x - sine * delta.y) < Half.x + padding &&
                     Mathf.Abs(sine * delta.x + cosine * delta.y) < Half.y + padding;
             }
+            /// <summary>在两个矩形各自的两条轴上判定是否存在间隙。</summary>
+            internal bool Overlaps(Solid other)
+            {
+                var offset = other.Center - Center;
+                float reach = Half.x + Half.y + other.Half.x + other.Half.y;
+                if (Mathf.Abs(offset.x) > reach || Mathf.Abs(offset.y) > reach) return false;
+                float aligned = Mathf.Abs(cosine * other.cosine + sine * other.sine);
+                float crossed = Mathf.Abs(sine * other.cosine - cosine * other.sine);
+                return Mathf.Abs(cosine * offset.x - sine * offset.y) < Half.x + aligned * other.Half.x + crossed * other.Half.y &&
+                    Mathf.Abs(sine * offset.x + cosine * offset.y) < Half.y + crossed * other.Half.x + aligned * other.Half.y &&
+                    Mathf.Abs(other.cosine * offset.x - other.sine * offset.y) < other.Half.x + aligned * Half.x + crossed * Half.y &&
+                    Mathf.Abs(other.sine * offset.x + other.cosine * offset.y) < other.Half.y + crossed * Half.x + aligned * Half.y;
+            }
             /// <summary>在线段局部坐标中裁剪两轴，薄隔墙也不能从采样点之间漏过。</summary>
             internal bool Intersects(Vector2 from,Vector2 to,float padding)
             {
