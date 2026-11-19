@@ -224,8 +224,8 @@ namespace Game.Tests.Flow
                 Assert.That(copied, Does.Contain("Code: GameDllLoadFailed"));
                 Assert.That(copied, Does.Contain("Stage: GameAssembly"));
                 Assert.That(copied, Does.Contain("Game.dll"));
-                Assert.That(copied, Is.Not.StringContaining("secret C:/Users/Admin/token"));
-                Assert.That(copied, Is.Not.StringContaining(" at "));
+                Assert.That(copied, Does.Not.Contain("secret C:/Users/Admin/token"));
+                Assert.That(copied, Does.Not.Contain(" at "));
                 Assert.That(copied.Length, Is.LessThanOrEqualTo(2048));
                 Assert.That(fixture.Status.text, Is.EqualTo("已复制错误信息"));
             }
@@ -273,12 +273,12 @@ namespace Game.Tests.Flow
                 fixture.CopyButton.onClick.Invoke();
 
                 Assert.That(copied, Is.Not.Null);
-                Assert.That(fixture.Title.text, Is.Not.StringContaining("secret"));
-                Assert.That(fixture.Guidance.text, Is.Not.StringContaining("C:/Users"));
+                Assert.That(fixture.Title.text, Does.Not.Contain("secret"));
+                Assert.That(fixture.Guidance.text, Does.Not.Contain("C:/Users"));
                 Assert.That(copied, Does.Contain("InvalidOperationException"));
-                Assert.That(copied, Is.Not.StringContaining("secret path"));
-                Assert.That(copied, Is.Not.StringContaining("C:/Users/Admin"));
-                Assert.That(copied, Is.Not.StringContaining(" at "));
+                Assert.That(copied, Does.Not.Contain("secret path"));
+                Assert.That(copied, Does.Not.Contain("C:/Users/Admin"));
+                Assert.That(copied, Does.Not.Contain(" at "));
             }
             finally
             {

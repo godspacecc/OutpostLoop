@@ -57,7 +57,11 @@ namespace Boot
         }
 
         /// <summary>异步读取包内默认值，兼容 Android APK 路径。</summary>
-        public static async UniTask<BootstrapConfig> LoadDefaultAsync()
+        public static
+#if UNITY_ANDROID && !UNITY_EDITOR
+            async
+#endif
+            UniTask<BootstrapConfig> LoadDefaultAsync()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             string path = Path.Combine(Application.streamingAssetsPath, FileName);
@@ -76,7 +80,7 @@ namespace Boot
                 return FromJson(json);
             }
 #else
-            return LoadDefault();
+            return UniTask.FromResult(LoadDefault());
 #endif
         }
 

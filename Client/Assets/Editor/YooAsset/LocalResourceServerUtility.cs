@@ -122,7 +122,18 @@ namespace Game.Editor
             try
             {
                 var process = Process.GetProcessById(state.ProcessId);
-                var snapshot = ProcessSnapshot.FromProcess(process);
+                // 失败的启动进程可能已退出；此时无需清理，也不应产生二次警告。
+                if (process.HasExited)
+                    return;
+                ProcessSnapshot snapshot;
+                try
+                {
+                    snapshot = ProcessSnapshot.FromProcess(process);
+                }
+                catch (InvalidOperationException) when (process.HasExited)
+                {
+                    return;
+                }
                 if (IsOwnedProcess(state, snapshot, BatchPath))
                 {
                     using (var stop = Process.Start(CreateOwnedTreeStopStartInfo(state.ProcessId)))

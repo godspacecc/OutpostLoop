@@ -237,9 +237,9 @@ namespace Game.Tests.Flow
                 Assert.That(failure.DiagnosticDetails, Does.Contain("mainPhase: SettingsLoadAndApply"));
                 Assert.That(failure.DiagnosticDetails, Does.Contain("exceptionType: System.MissingMethodException"));
                 Assert.That(failure.DiagnosticDetails, Does.Contain("hResult: -2146233069"));
-                Assert.That(failure.DiagnosticDetails, Is.Not.StringContaining("secret"));
-                Assert.That(failure.DiagnosticDetails, Is.Not.StringContaining("C:/Users/Admin"));
-                Assert.That(failure.DiagnosticDetails, Is.Not.StringContaining(" at "));
+                Assert.That(failure.DiagnosticDetails, Does.Not.Contain("secret"));
+                Assert.That(failure.DiagnosticDetails, Does.Not.Contain("C:/Users/Admin"));
+                Assert.That(failure.DiagnosticDetails, Does.Not.Contain(" at "));
             }
             finally
             {

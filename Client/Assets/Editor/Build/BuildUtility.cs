@@ -644,7 +644,7 @@ namespace Game.Editor
                     Directory.Move(burstDirectory, burstTarget);
                 Directory.Move(il2CppDirectory, il2CppTarget);
                 if (burstDirectory == null)
-                    Debug.LogWarning($"[BuildUtility] 本次 Player 未生成 Burst 调试资料目录，按 script-only build 产物继续：{batchDirectory}");
+                    Debug.Log($"[BuildUtility] 本次 Player 未生成可选的 Burst 调试资料目录：{batchDirectory}");
                 return symbolsDirectory;
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)

@@ -605,6 +605,13 @@ namespace Game.Editor
             foreach (var fileName in TemplateFiles)
             {
                 CopyFileSafe(Path.Combine(templateRoot, fileName), Path.Combine(targetRoot, fileName));
+                // Windows PowerShell 5.1 按 BOM 识别 UTF-8，避免中文脚本被本机代码页误解码。
+                if (string.Equals(Path.GetExtension(fileName), ".ps1", StringComparison.OrdinalIgnoreCase))
+                {
+                    string scriptPath = Path.Combine(targetRoot, fileName);
+                    string script = File.ReadAllText(scriptPath, System.Text.Encoding.UTF8);
+                    File.WriteAllText(scriptPath, script, new System.Text.UTF8Encoding(true));
+                }
             }
 
             CopyDirectorySafe(Path.Combine(templateRoot, "Notices"), Path.Combine(targetRoot, "Notices"));

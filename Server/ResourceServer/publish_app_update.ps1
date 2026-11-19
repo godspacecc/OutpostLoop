@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$Apk,
     [Parameter(Mandatory = $true)][string]$VersionName,
     [Parameter(Mandatory = $true)][ValidateRange(1, 2147483647)][int]$VersionCode,

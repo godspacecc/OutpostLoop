@@ -19,12 +19,13 @@ namespace Boot
         private const int MANIFEST_TIMEOUT_SECONDS = 15;
         private const string LAST_SUCCESSFUL_HOST_VERSION_KEY = "OutpostLoop.LastSuccessfulHostVersion";
 
+#if UNITY_EDITOR
+        // 此选项仅用于编辑器模拟，不写入 Player 的无效配置字段。
         [Header("编辑器资源模式")]
         [SerializeField]
-#if UNITY_EDITOR
         [Tooltip("编辑器运行时使用的资源加载模式")]
-#endif
         private ResourcePlayMode _editorPlayMode = ResourcePlayMode.EditorSimulateMode;
+#endif
 
         private ResourcePlayMode _actualPlayMode;
         private bool _isReady;
