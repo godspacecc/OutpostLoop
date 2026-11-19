@@ -4,7 +4,7 @@ namespace OutpostLoop
 {
     public sealed partial class PrototypeController
     {
-        // 蓝色传送门原件为可选本机资源，缺少任一阶段时沿用现有撤离点表现。
+        // 蓝色传送门原件为可选本机资源，缺少任一阶段时使用撤离点文字提示。
         private const string RiverValleyPortalPath = "RiverValleyPortal/PortalBlue";
         private const float RiverValleyOpenPortalScale = 1.45f;
         // 按展开后可见椭圆的半高抬起，微光与开合特效共用同一个中心。
@@ -18,7 +18,6 @@ namespace OutpostLoop
         private void ResetRiverValleyPortal()
         {
             ClearRiverValleyPortalEffect();
-            scavengeExit.gameObject.SetActive(true);
             riverValleyPortalStage = 0;
             riverValleyPortalIdle = UnityEngine.Resources.Load<GameObject>(RiverValleyPortalPath + "Idle");
             riverValleyPortalOpen = UnityEngine.Resources.Load<GameObject>(RiverValleyPortalPath + "Open");
@@ -40,7 +39,6 @@ namespace OutpostLoop
                 }
                 riverValleyPortalStage = 1;
                 riverValleyPortalStageEnd = Time.unscaledTime + .9f;
-                scavengeExit.gameObject.SetActive(false);
                 ShowRiverValleyPortalEffect(riverValleyPortalOpen, RiverValleyOpenPortalScale, "撤离传送门开启", true);
             }
             else if (riverValleyPortalStage == 1 && Time.unscaledTime >= riverValleyPortalStageEnd)
@@ -53,7 +51,6 @@ namespace OutpostLoop
             {
                 riverValleyPortalStage = 3;
                 ClearRiverValleyPortalEffect();
-                scavengeExit.gameObject.SetActive(true);
             }
             return RiverValleyPortalPlaying;
         }

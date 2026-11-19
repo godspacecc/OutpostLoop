@@ -309,9 +309,19 @@ namespace OutpostLoop
             for (int i = 0; i < scavengeCrates.Length; i++)
                 scavengeCrates[i] = ScavengeBox("可搜箱 " + i, At(cachePoints[i], .36f), Vector3.one, gold);
 
-            scavengeExit = ScavengeBox("路灯", At(exitPoint, 1.15f), new Vector3(.16f, 2.3f, .16f), steel);
-            ScavengeBox("灯箱", At(exitPoint, 2.33f), new Vector3(.8f, .25f, .56f), teal);
-            ScavengeBox("裂口底座", At(exitPoint, .02f), new Vector3(2.4f, .04f, 2.4f), teal);
+            if (survivalMode)
+            {
+                // 撤离提示仍需要世界坐标，河谷镇用空物体定位。
+                scavengeExit = new GameObject("撤离提示定位").transform;
+                scavengeExit.SetParent(scavengeRoot, false);
+                scavengeExit.position = SurvivalPosition(exitPoint, .05f);
+            }
+            else
+            {
+                scavengeExit = ScavengeBox("路灯", At(exitPoint, 1.15f), new Vector3(.16f, 2.3f, .16f), steel);
+                ScavengeBox("灯箱", At(exitPoint, 2.33f), new Vector3(.8f, .25f, .56f), teal);
+                ScavengeBox("裂口底座", At(exitPoint, .02f), new Vector3(2.4f, .04f, 2.4f), teal);
+            }
             scavengePlayer = CreateScavengePlayer();
             bool usingInfectedArt = survivalWorldGeometry != null && TryCreateRiverValleyInfected();
             for (int i = 0; !usingInfectedArt && i < scavengeEnemies.Length; i++)

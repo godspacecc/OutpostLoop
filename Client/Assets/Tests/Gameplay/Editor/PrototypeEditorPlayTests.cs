@@ -35,7 +35,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyPortalPlaysAfterSuccessfulExtraction()
         {
-            const string batch = "ArchanorPortalHeight-20261119";
+            const string batch = "RiverValleyPortalWithoutPole-20261119";
             const string path = "RiverValleyPortal/PortalBlue";
             foreach (var phase in new[] { "Idle", "Open", "Close" })
             {
@@ -69,6 +69,10 @@ namespace OutpostLoop.Tests
             var idle = GameObject.Find("撤离点微光");
             Assert.NotNull(idle);
             var exitMarker = (Transform)type.GetField("scavengeExit", flags).GetValue(controller);
+            Assert.IsNull(exitMarker.GetComponent<Renderer>());
+            Assert.IsNull(exitMarker.parent.Find("路灯"));
+            Assert.IsNull(exitMarker.parent.Find("灯箱"));
+            Assert.IsNull(exitMarker.parent.Find("裂口底座"));
             Assert.That(idle.transform.position.x, Is.EqualTo(run.ExitPoint.x).Within(.01f));
             Assert.That(idle.transform.position.z, Is.EqualTo(run.ExitPoint.y).Within(.01f));
             Vector3 portalCenter = idle.transform.position;
@@ -86,7 +90,6 @@ namespace OutpostLoop.Tests
             Assert.NotNull(opening);
             Assert.That(Vector3.Distance(opening.transform.position, portalCenter), Is.LessThan(.01f));
             Assert.IsNull(GameObject.Find("撤离点微光"));
-            Assert.IsFalse(exitMarker.gameObject.activeSelf);
             Assert.IsTrue(controller.JourneyProgress.completedFirst);
             yield return new WaitForSecondsRealtime(.45f);
             yield return CaptureSurvivalEvidence("opening", 1280, 720, batch);
@@ -98,7 +101,6 @@ namespace OutpostLoop.Tests
             yield return CaptureSurvivalEvidence("closing", 1280, 720, batch);
             while (GameObject.Find("撤离传送门关闭") && Time.realtimeSinceStartup < deadline) yield return null;
             Assert.IsNull(GameObject.Find("撤离传送门关闭"));
-            Assert.IsTrue(exitMarker.gameObject.activeSelf);
             yield return CaptureSurvivalEvidence("settlement", 1280, 720, batch);
             type.GetMethod("ReturnFromSurvival", flags).Invoke(controller, null);
             Assert.IsNull(type.GetField("scavengeRun", flags).GetValue(controller));
