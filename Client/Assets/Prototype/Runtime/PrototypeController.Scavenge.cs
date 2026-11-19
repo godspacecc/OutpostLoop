@@ -84,6 +84,7 @@ namespace OutpostLoop
             Release(scavengeRoot.gameObject);
             scavengeRoot.gameObject.SetActive(false);
             scavengeRoot = null;
+            infectedVisuals = null;
             scavengeRun = null;
             scavengeOccluders.Clear();
             ReleaseScavengeMaterials();
@@ -205,6 +206,13 @@ namespace OutpostLoop
                 var patrol = scavengeRun.Patrols[i];
                 var model = scavengeEnemies[i];
                 model.gameObject.SetActive(patrol.Alive);
+                if (infectedVisuals != null)
+                {
+                    if (patrol.Alive)
+                        infectedVisuals[i].Present(SurvivalPosition(patrol.Position, 0), patrol.Facing, patrol.Engaged,
+                            snapCamera, snapCamera ? 0 : Mathf.Min(Time.unscaledDeltaTime, .05f));
+                    continue;
+                }
                 model.position = SurvivalPosition(patrol.Position, .7f);
                 if (patrol.Facing != Vector2.zero) model.rotation = Quaternion.LookRotation(At(patrol.Facing, 0));
             }
@@ -288,7 +296,8 @@ namespace OutpostLoop
             ScavengeBox("灯箱", At(exitPoint, 2.33f), new Vector3(.8f, .25f, .56f), teal);
             ScavengeBox("裂口底座", At(exitPoint, .02f), new Vector3(2.4f, .04f, 2.4f), teal);
             scavengePlayer = CreateScavengePlayer();
-            for (int i = 0; i < scavengeEnemies.Length; i++)
+            bool usingInfectedArt = survivalWorldGeometry != null && TryCreateRiverValleyInfected();
+            for (int i = 0; !usingInfectedArt && i < scavengeEnemies.Length; i++)
             {
                 scavengeEnemies[i] = Shape(scavengeTown ? "感染者 " + i : i == 0 ? "巡逻敌人" : "路边巡逻敌人", scavengeRoot, PrimitiveType.Capsule,
                     Vector3.zero, new Vector3(.75f, .72f, .75f),

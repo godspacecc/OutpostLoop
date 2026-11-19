@@ -248,6 +248,82 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyInfectedUseMovementDrivenChaseAndSourcePatrol()
+        {
+            if (UnityEngine.Resources.Load<GameObject>("RiverValleyInfected/Zombie2") == null)
+                Assert.Ignore("先从本地 My Assets 缓存运行 Tools/Import-RiverValleyInfected.ps1。");
+            const string batch = "RiverValleyInfected-20261119";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var type = typeof(PrototypeController);
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var visuals = (RiverValleyInfectedVisual[])type.GetField("infectedVisuals", flags).GetValue(controller);
+            Assert.AreEqual(12, visuals.Length);
+            int fastCount = 0;
+            for (int i = 0; i < visuals.Length; i++)
+            {
+                Assert.IsTrue(visuals[i].GetComponentInChildren<Animator>().isHuman);
+                if (run.Patrols[i].Fast) fastCount++;
+                StringAssert.StartsWith(run.Patrols[i].Fast ? "快速感染者" : "普通感染者", visuals[i].name);
+                Assert.AreEqual(run.Patrols[i].Position.x, visuals[i].transform.position.x, .002f);
+                Assert.AreEqual(run.Patrols[i].Position.y, visuals[i].transform.position.z, .002f);
+            }
+            Assert.AreEqual(2, fastCount);
+
+            // 暂停领域循环，在 Boot 创建的表现对象上送入可控样本。
+            type.GetField("scavengePaused", flags).SetValue(controller, true);
+            var present = typeof(RiverValleyInfectedVisual).GetMethod("Present", flags);
+            var phase = typeof(RiverValleyInfectedVisual).GetField("chasePhase", flags);
+            var blend = typeof(RiverValleyInfectedVisual).GetField("chaseWeight", flags);
+            var patrolTime = typeof(RiverValleyInfectedVisual).GetField("walkTime", flags);
+            Vector3 normalStart = visuals[0].transform.position;
+            Vector3 fastStart = visuals[3].transform.position;
+            void Frame(int index, Vector3 point, Vector2 heading, bool chase, bool reset) =>
+                present.Invoke(visuals[index], new object[] { point, heading, chase, reset, reset ? 0f : .02f });
+
+            Frame(0, normalStart, Vector2.up, false, true);
+            for (int i = 1; i <= 10; i++)
+                Frame(0, normalStart + Vector3.forward * (.041f * i), Vector2.up, false, false);
+            Assert.AreEqual(.2f, (float)patrolTime.GetValue(visuals[0]), .001f);
+            Assert.AreEqual(0f, (float)blend.GetValue(visuals[0]));
+
+            foreach (int index in new[] { 0, 3 })
+            {
+                var start = index == 0 ? normalStart : fastStart;
+                float speed = index == 0 ? 4.15f : 5.35f;
+                float cycle = index == 0 ? .62f : .49f;
+                Frame(index, start, Vector2.up, true, true);
+                for (int i = 1; i <= 12; i++)
+                    Frame(index, start + Vector3.forward * (.02f * speed * i), Vector2.up, true, false);
+                Assert.AreEqual(.24f / cycle, (float)phase.GetValue(visuals[index]), .001f);
+                Assert.AreEqual(1f, (float)blend.GetValue(visuals[index]), .001f);
+                var corner = start + new Vector3(.035f, .028f, .24f * speed);
+                Frame(index, corner, Vector2.right, true, false);
+                Assert.AreEqual(corner, visuals[index].transform.position);
+                Assert.Greater(Vector3.Dot(Vector3.right, visuals[index].transform.forward), .99f);
+                var foot = visuals[index].GetComponentInChildren<Animator>().GetBoneTransform(HumanBodyBones.LeftFoot);
+                Assert.IsFalse(float.IsNaN(foot.position.sqrMagnitude));
+                for (int i = 1; i <= 8; i++)
+                    Frame(index, corner + Vector3.right * (.041f * i), Vector2.right, false, false);
+                Assert.AreEqual(0f, (float)blend.GetValue(visuals[index]), .001f);
+                Frame(index, start, Vector2.up, false, true);
+                Assert.AreEqual(0f, (float)phase.GetValue(visuals[index]));
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootRiverValleyFullTownHasSixInteriorsAndKeepsLegacySaves()
         {
             const string batch = "CityTownDressing-20261118";

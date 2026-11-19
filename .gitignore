@@ -23,3 +23,9 @@
 # Unity MCP 自动生成的本机接入与技能
 /Client/.codex/
 /Client/.agents/
+
+# 用户通过 Unity My Assets 获取的感染者原包文件。
+/Client/Assets/Art/RiverValleyInfected/Source/
+/Client/Assets/Art/RiverValleyInfected/Source.meta
+/Client/Assets/Art/RiverValleyInfected/Resources/RiverValleyInfected/Z_*
+/Client/Assets/Art/RiverValleyInfected/Resources/RiverValleyInfected/Zombie*
