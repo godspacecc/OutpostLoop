@@ -89,4 +89,17 @@ MonoBehaviour:
         PackRuleName: PackSeparately
         FilterRuleName: OutpostAudioFilter
         AssetTags: 
-        UserData: 
+        UserData:
+    - GroupName: GameplayArt
+      GroupDesc:
+      AssetTags:
+      ActiveRuleName: EnableGroup
+      Collectors:
+      - CollectPath: Assets/Game/Art
+        CollectorGUID: 0e35f0405d6f4082920f232c0bc215c8
+        CollectorType: 0
+        AddressRuleName: AddressByGameRelativePathNoExtension
+        PackRuleName: PackSeparately
+        FilterRuleName: OutpostGameplayArtFilter
+        AssetTags:
+        UserData:

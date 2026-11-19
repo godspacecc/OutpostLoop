@@ -36,6 +36,20 @@ namespace OutpostLoop.Resources
             else if (address.StartsWith("Prefabs/UI/",StringComparison.Ordinal) &&
                 ResourceAddress.TryFromRelativePath(ResourceAddressKind.UiPrefab,address.Substring("Prefabs/UI/".Length),out var resolved,out _))
                 path="Assets/Game/"+resolved+".prefab";
+            else if (GameplayArtAddress.IsEntry(address))
+            {
+                var root = "Assets/Game/" + address;
+                path = null;
+                foreach (var candidate in Directory.GetFiles(Path.GetDirectoryName(root), Path.GetFileName(root) + ".*"))
+                {
+                    var normalized = candidate.Replace(Path.DirectorySeparatorChar, '/');
+                    if (Path.ChangeExtension(normalized, null) != root ||
+                        !typeof(T).IsAssignableFrom(UnityEditor.AssetDatabase.GetMainAssetTypeAtPath(normalized))) continue;
+                    if (path != null) throw new InvalidOperationException("重复玩法美术地址：" + address);
+                    path = normalized;
+                }
+                if (path == null) return null;
+            }
             else throw new ArgumentException("未配置的源资源地址",nameof(address));
             var asset=UnityEditor.AssetDatabase.LoadAssetAtPath<T>(path);
             if(asset==null) Log.Error("[EditorSourceResourceLoader] 源资源不存在："+address);

@@ -21,6 +21,9 @@ namespace Game
             _package = package;
         }
 
+        /// <summary>确认可选资源包含在当前资源清单中。</summary>
+        internal bool HasAsset(string address) => !disposed && _package != null && _package.CheckLocationValid(address);
+
         public T LoadAsset<T>(string path) where T : Object
         {
             ThrowIfDisposed();

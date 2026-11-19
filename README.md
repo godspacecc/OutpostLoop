@@ -30,6 +30,7 @@
 - 独立 Luban 配置源 `Config/DataCsv/rules.csv`。运行 `Config/gen.bat` 会校验并生成客户端与服务端配置产物；`Server` 包含生成配置与通用资源服脚本模板，没有旧服务器业务或玩家数据。
 - YooAsset 2.3.17、独立 OutpostLoop 收集设置；公共 IResourceLoader/ResourceLoader/ResourceLoadHandle/YooAssetResourceLoader 与 FirepowerLoop 对齐。Boot 默认经 YooAsset 模拟包初始化，主场景和配置均通过公共 YooAssetResourceLoader 加载；EditorSourceResourceLoader 仅供独立编辑器诊断/测试使用，不再是 Boot 启动分支。模拟模式仍检查 Game.dll.bytes 和 AOT 清单地址，需要本项目自身生成的启动依赖。
 - BaseUI、Box/Page 控制器、UIRoot 分层、列表与对象池、ReferenceCollector 和 UI 代码生成器。默认 UI 加载转发公共 ResourceLoader，控制器 Path 返回完整逻辑地址（如 Prefabs/UI/Probe/Window），由 UIResourceAddress 校验后加载。开局、暂停、基地升级和结算使用 CreateView 生成的临时 UGUI 界面，接入 SafeAreaFitter；状态 HUD 与区域地图仍是原型 IMGUI。
+- 玩法美术入口集中在 `Assets/Game/Art`，由 YooAsset 的 `GameplayArt` 组按 `Art/…` 地址收集。贴图、网格和依赖材质随入口资产引用。Boot 初始化前的开场底图由 Boot 场景直接序列化引用，独立河谷镇预览场景也使用自己的场景引用。
 - 同步加载以地址和类型在会话内复用 YooAsset 句柄，UI 和系统退出后统一释放。异步句柄由调用方持有并交回原加载器；切换后端不提前释放旧会话借用的同步资源。
 - 运行时日志支持错误落盘和诊断导出；设置支持本地持久化及显示预览回滚；音频支持混音、池化、淡入淡出和会话暂停，尚未接入正式音效素材。
 - 独立 JSON 文件存储：区分缺失、损坏、未知版本，完整写入后替换旧文件。胜利补给币跨局保存，单局进度随重开重置。
@@ -56,7 +57,7 @@ UI 生成目录为 `Assets/Game/Scripts/Controller/`，Prefab 路径为 `Assets/
 
 ## Boot/Main 与通用打包链路
 
-稳定宿主程序集为 `Boot`，基础框架与原型编译到 `Game` 热更新程序集；原有 Foundation 与 Prototype 目录通过 asmref 保留代码组织。Build Settings 仅包含 Boot，Main 以 YooAsset 地址 `Scenes/Main` 收集。Main 的 FoundationRoot 跨场景保留，完成初始化后向 Boot 报告就绪，退出 Play 时统一清理。
+稳定宿主程序集为 `Boot`，基础框架与原型编译到 `Game` 热更新程序集；玩法脚本在 `Assets/Game/Scripts/Gameplay`，玩法回归测试在 `Assets/Tests/Gameplay`。Build Settings 仅包含 Boot，Main 以 YooAsset 地址 `Scenes/Main` 收集。Main 的 FoundationRoot 跨场景保留，完成初始化后向 Boot 报告就绪，退出 Play 时统一清理。
 
 通用工具基于参考项目迁入，已剔除具体玩法与渠道代码：
 

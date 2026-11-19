@@ -1993,6 +1993,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   sceneName: Arrival
+  backdropTexture: {fileID: 2800000, guid: 1ed48f7fcc4042840b68944a98b898ea, type: 3}
 --- !u!114 &1045955177
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -9,15 +9,17 @@ namespace Boot.UI
     {
         // 资源随宿主内置，Boot 在资源包初始化前也能显示。
         [SerializeField] private string sceneName = "Arrival";
+        [SerializeField] private Texture2D backdropTexture;
         // 实际铺满画面的 UGUI 图像。
         private RawImage surface;
         // 用不受暂停影响的时间驱动轻微推进。
         private float enteredAt;
 
         /// <summary>创建铺满父节点的背景，底图保持比例，额外边缘用于微量镜头运动。</summary>
-        public static CosmicBackdrop Create(Transform parent, string scene)
+        public static CosmicBackdrop Create(Transform parent, string scene, Texture2D texture)
         {
             var root = new GameObject("Cosmic" + scene, typeof(RectTransform), typeof(RawImage));
+            root.SetActive(false);
             root.transform.SetParent(parent, false);
             var rect = (RectTransform)root.transform;
             rect.anchorMin = Vector2.zero;
@@ -25,7 +27,8 @@ namespace Boot.UI
             rect.offsetMin = rect.offsetMax = Vector2.zero;
             var view = root.AddComponent<CosmicBackdrop>();
             view.sceneName = scene;
-            view.Load();
+            view.backdropTexture = texture;
+            root.SetActive(true);
             return view;
         }
 
@@ -36,7 +39,7 @@ namespace Boot.UI
         private void Load()
         {
             surface = GetComponent<RawImage>();
-            surface.texture = Resources.Load<Texture2D>("CosmicOpening/" + sceneName);
+            surface.texture = backdropTexture;
             surface.color = surface.texture ? Color.white : new Color(.025f, .04f, .06f);
             surface.raycastTarget = false;
         }

@@ -27,5 +27,5 @@
 # 用户通过 Unity My Assets 获取的感染者原包文件。
 /Client/Assets/Game/Art/RiverValleyInfected/Source/
 /Client/Assets/Game/Art/RiverValleyInfected/Source.meta
-/Client/Assets/Game/Art/RiverValleyInfected/Resources/RiverValleyInfected/Z_*
-/Client/Assets/Game/Art/RiverValleyInfected/Resources/RiverValleyInfected/Zombie*
+/Client/Assets/Game/Art/RiverValleyInfected/Content/Z_*
+/Client/Assets/Game/Art/RiverValleyInfected/Content/Zombie*

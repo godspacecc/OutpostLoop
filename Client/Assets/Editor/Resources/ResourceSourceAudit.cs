@@ -33,6 +33,17 @@ namespace OutpostLoop.Resources.Editor
         public string FindAssetType => "AudioClip";
         public bool IsCollectAsset(FilterRuleData data) => (data.AssetPath.StartsWith("Assets/Game/Audio/Music/",StringComparison.Ordinal) || data.AssetPath.StartsWith("Assets/Game/Audio/Sound/",StringComparison.Ordinal)) && AssetDatabase.GetMainAssetTypeAtPath(data.AssetPath)==typeof(AudioClip);
     }
+    /// <summary>只将独立加载的玩法美术作为 YooAsset 主资源，其余文件作为序列化依赖。</summary>
+    public sealed class OutpostGameplayArtFilter : IFilterRule
+    {
+        public string FindAssetType => EAssetSearchType.All.ToString();
+        public bool IsCollectAsset(FilterRuleData data)
+        {
+            const string root = "Assets/Game/";
+            return data.AssetPath.StartsWith(root, StringComparison.Ordinal) &&
+                Game.GameplayArtAddress.IsEntry(Path.ChangeExtension(data.AssetPath.Substring(root.Length), null));
+        }
+    }
     public static class ResourceSourceAudit
     {
         public const string SettingPath = "Assets/AssetBundleCollectorSetting.asset";
@@ -91,7 +102,10 @@ namespace OutpostLoop.Resources.Editor
             var config = result.CollectAssets.Single(x => x.Address == "tbrule.bytes");
             if (config.AssetInfo.AssetPath != "Assets/Game/Config/tbrule.bytes" || !config.AssetTags.Contains("startup")) throw new InvalidOperationException("配置地址或启动标签不匹配。");
             if (result.CollectAssets.GroupBy(x => x.Address).Any(g => g.Count() > 1)) throw new InvalidOperationException("重复地址。");
-            Debug.Log("源收集通过：tbrule.bytes / startup；运行包、发布包尚未验证。");
+            foreach (var address in Game.GameplayArtAddress.Required)
+                if (!result.CollectAssets.Any(asset => asset.Address == address))
+                    throw new InvalidOperationException("玩法美术地址未收集：" + address);
+            Debug.Log("源收集通过：启动配置与玩法美术地址；运行包、发布包尚未验证。");
         }
     }
 }

@@ -16,7 +16,7 @@ if ((Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash -ne $expected) {
 }
 
 $root = Join-Path $PSScriptRoot '../Client/Assets/Game/Art/RiverValleyInfected'
-$assets = Join-Path $root 'Resources/RiverValleyInfected'
+$assets = Join-Path $root 'Content'
 $staging = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ("outpost-zombie-" + [guid]::NewGuid()))).FullName
 try {
     & tar.exe -xzf $package -C $staging
