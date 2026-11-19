@@ -15,6 +15,9 @@ namespace OutpostLoop
         private int attackVersion;
         private float attackRemaining, recoil;
         private bool wasPistol;
+        // 当前低模的两条可动指链分别驱动食指与其余并拢的手指。
+        private readonly Transform[] gripJoints = new Transform[6];
+        private readonly Quaternion[] gripRotations = new Quaternion[6];
 
         /// <summary>建立手部挂点与临时反馈物件，初始版本不会重播续玩前的攻击。</summary>
         internal void Initialize(Func<ScavengeRun> run, Func<bool> paused)
@@ -60,6 +63,9 @@ namespace OutpostLoop
             }
             if(gun && !wasPistol)animator.CrossFadeInFixedTime("Combat.Aim",.08f,1,0);
             wasPistol=gun;
+            if (melee)
+                for (int i = 0; i < gripJoints.Length; i++)
+                    gripJoints[i].localRotation = gripRotations[i];
             animator.SetLayerWeight(1,gun || attackRemaining>0?1:0);
             if((gun || attackRemaining>0) && state.facing.sqrMagnitude>.01f)
                 transform.rotation=Quaternion.LookRotation(new Vector3(state.facing.x,0,state.facing.y));
@@ -97,8 +103,29 @@ namespace OutpostLoop
             var indexLocal=hand.InverseTransformPoint(index.position);
             var littleLocal=hand.InverseTransformPoint(little.position);
             var knuckles=(indexLocal+littleLocal)*.5f;
-            crowbar.localPosition=knuckles*.8f;
-            crowbar.localRotation=Quaternion.LookRotation((indexLocal-littleLocal).normalized,knuckles.normalized);
+            var across = (indexLocal - littleLocal).normalized;
+            var along = Vector3.ProjectOnPlane(knuckles, across).normalized;
+            var inward = Vector3.Cross(along, across).normalized;
+            var inwardWorld = hand.TransformDirection(inward);
+            // 握杆略低于指根，给弯曲后的指节留出厚度。
+            crowbar.localPosition = knuckles * .87f + hand.InverseTransformVector(inwardWorld * .024f);
+            crowbar.localRotation = Quaternion.LookRotation(across, along);
+            var curlAxis = hand.TransformDirection(-across);
+            CacheGripChain(0, index, curlAxis);
+            CacheGripChain(3, little, curlAxis);
+        }
+
+        /// <summary>按绑定姿态保存弯指轴，让动画更新后能稳定恢复握杆姿态。</summary>
+        private void CacheGripChain(int start, Transform joint, Vector3 curlAxis)
+        {
+            var angles = new[] { 42f, 66f, 53f };
+            for (int i = 0; i < angles.Length; i++)
+            {
+                gripJoints[start + i] = joint;
+                gripRotations[start + i] = joint.localRotation *
+                    Quaternion.AngleAxis(angles[i], joint.InverseTransformDirection(curlAxis));
+                if (i < angles.Length - 1) joint = joint.GetChild(0);
+            }
         }
 
         /// <summary>双骨解析约束使手掌稳定到握点，肘向下弯曲，不移动角色根节点。</summary>

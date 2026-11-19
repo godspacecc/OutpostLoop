@@ -35,7 +35,7 @@ namespace OutpostLoop.Tests
             for (int i=0;i<600 && owner==null;i++) { owner=Object.FindObjectOfType<PrototypeController>();yield return null; }
             Assert.NotNull(owner);
             for(int i=0;i<10;i++)yield return null;
-            string output=Path.GetFullPath(Path.Combine(Application.dataPath,"../../Backup/Artifacts/MeleeGripFix-20261119"));
+            string output=Path.GetFullPath(Path.Combine(Application.dataPath,"../../Backup/Artifacts/MeleeFingers-20261119"));
             var type=typeof(PrototypeController);
             type.GetField("survivalStore",Hidden).SetValue(owner,new JsonFileStore<SurvivalSave>(Path.Combine(output,"Save-"+System.Guid.NewGuid().ToString("N"))));
             type.GetField("survivalSaveChecked",Hidden).SetValue(owner,false);
@@ -54,7 +54,14 @@ namespace OutpostLoop.Tests
             foreach(var renderer in actor.GetComponentsInChildren<Renderer>())
                 foreach(var material in renderer.sharedMaterials)Assert.AreEqual("Standard",material.shader.name);
             var combat=actor.GetComponent<PrototypeCombatVisual>();Assert.NotNull(combat);
+            var indexFinger = animator.GetBoneTransform(HumanBodyBones.RightIndexProximal);
+            var idleFinger = indexFinger.localRotation;
             run.Survival.weapon=new SurvivalStack(SurvivalItem.Crowbar);
+            yield return null;
+            yield return null;
+            var closedFinger = indexFinger.localRotation;
+            Assert.That(Quaternion.Angle(idleFinger, closedFinger), Is.GreaterThan(15f));
+            CloseCapture(owner, actor, Path.Combine(output, "hold.png"));
             int version=run.SurvivalAttackVersion;
             var aim=run.Player+Vector2.up*4;
             run.SurvivalAttack(aim,-1);
@@ -71,7 +78,14 @@ namespace OutpostLoop.Tests
 
             for(int i=0;i<12;i++) {yield return new WaitForSecondsRealtime(.065f);CloseCapture(owner,actor,Path.Combine(output,"melee-"+i.ToString("D2")+".png"));
                 Assert.That(Vector3.Distance(grip.localPosition,gripPosition),Is.LessThan(.00001f));
-                Assert.That(Quaternion.Angle(grip.localRotation,gripRotation),Is.LessThan(.001f));}
+                Assert.That(Quaternion.Angle(grip.localRotation,gripRotation),Is.LessThan(.001f));
+                Assert.That(Quaternion.Angle(closedFinger, indexFinger.localRotation), Is.LessThan(.1f));
+            }
+            run.Survival.weapon = null;
+            yield return null;
+            yield return null;
+            Assert.That(Quaternion.Angle(closedFinger, indexFinger.localRotation), Is.GreaterThan(15f));
+            Assert.IsFalse(grip.gameObject.activeSelf);
             run.Survival.weapon=new SurvivalStack(SurvivalItem.Pistol){rounds=2};
             run.Survival.attackCooldown=0;
             yield return null;yield return null;
