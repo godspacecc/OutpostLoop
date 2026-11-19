@@ -827,18 +827,7 @@ namespace OutpostLoop.Tests
             type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
             type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
 
-            Click("TrialsEntry");
-            Assert.IsNull(GameObject.Find("StartScavengeTown"));
-            Assert.IsNull(GameObject.Find("PrimaryAction"), "守城试玩不再是菜单入口");
-            Assert.IsNull(GameObject.Find("StartingBalance"));
-            foreach (string name in new[] { "DepartWilderness", "DepartIndustrial", "DepartBeacon", "TrainCommander", "TrainScout", "ExpeditionProfile" })
-                Assert.IsNull(GameObject.Find(name), name);
-            var trialButtons = GameObject.Find("TrialDestinations").GetComponentsInChildren<Button>();
-            CollectionAssert.AreEquivalent(new[] { "StartScavenge", "CloseTrials" },
-                System.Array.ConvertAll(trialButtons, button => button.name));
-            yield return CaptureSurvivalEvidence("other-trials", 1280, 720, "RemoveExpeditionTrials-20261119");
-            Click("CloseTrials");
-            Assert.IsNull(GameObject.Find("TrialDestinations"));
+            Assert.IsNull(GameObject.Find("TrialsEntry"));
             Click("StartSurvival");
             yield return WaitForCrossing();
             var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
@@ -976,7 +965,7 @@ namespace OutpostLoop.Tests
             float originalFov = camera.fieldOfView;
             var originalColor = camera.backgroundColor;
             var originalRotation = camera.transform.rotation;
-            Click("StartScavenge");
+            StartLegacyScavenge();
             yield return WaitForCrossing();
             yield return null;
             var type = typeof(PrototypeController);
@@ -1049,7 +1038,7 @@ namespace OutpostLoop.Tests
             var keyboard = InputSystem.AddDevice<Keyboard>();
             try
             {
-                Click("StartScavenge");
+                StartLegacyScavenge();
             yield return WaitForCrossing();
                 yield return null;
                 var run = (ScavengeRun)runField.GetValue(controller);
@@ -1103,7 +1092,7 @@ namespace OutpostLoop.Tests
 
                 type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
                 Assert.IsNull(runField.GetValue(controller));
-                Click("StartScavenge");
+                StartLegacyScavenge();
             yield return WaitForCrossing();
                 Assert.AreEqual(0, ((ScavengeRun)runField.GetValue(controller)).Count);
             }
@@ -1117,7 +1106,7 @@ namespace OutpostLoop.Tests
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
-            Click("StartScavenge");
+            StartLegacyScavenge();
             yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
@@ -1172,7 +1161,7 @@ namespace OutpostLoop.Tests
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
-            Click("StartScavenge");
+            StartLegacyScavenge();
             yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
@@ -1239,7 +1228,7 @@ namespace OutpostLoop.Tests
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
-            Click("StartScavenge");
+            StartLegacyScavenge();
             yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
@@ -1294,7 +1283,7 @@ namespace OutpostLoop.Tests
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
-            Click("StartScavenge");
+            StartLegacyScavenge();
             yield return WaitForCrossing();
             yield return null;
             var character = Object.FindObjectOfType<PrototypePlayerVisual>();
@@ -1337,7 +1326,7 @@ namespace OutpostLoop.Tests
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
-            Click("StartScavenge");
+            StartLegacyScavenge();
             yield return WaitForCrossing();
             yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
@@ -2137,11 +2126,6 @@ namespace OutpostLoop.Tests
         private static void Click(string name)
         {
             var target = GameObject.Find(name);
-            if (target == null && GameObject.Find("TrialsEntry") != null)
-            {
-                Click("TrialsEntry");
-                target = GameObject.Find(name);
-            }
             Assert.NotNull(target, name + " 应在当前窗口显示");
             Assert.NotNull(target.GetComponent<Button>());
             Assert.NotNull(EventSystem.current);
@@ -2155,6 +2139,15 @@ namespace OutpostLoop.Tests
         {
             Assert.AreEqual(PrototypeOverlay.Start, controller.Overlay);
             controller.CrossToWorld(controller.ActOnModal);
+        }
+
+        /// <summary>使用内部入口回归历史撤离试玩中的共享探索操作。</summary>
+        private static void StartLegacyScavenge()
+        {
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            Assert.NotNull(controller);
+            Assert.AreEqual(PrototypeOverlay.Start, controller.Overlay);
+            controller.CrossToWorld(controller.StartScavenge);
         }
 
         /// <summary>直接启动历史远征，供局内流程和共享镜头回归使用。</summary>

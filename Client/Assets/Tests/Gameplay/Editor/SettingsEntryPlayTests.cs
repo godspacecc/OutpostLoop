@@ -39,13 +39,12 @@ namespace OutpostLoop.Tests
             architecture.RegisterUtility<IDisplayResolutionApplier>(new DisplaySpy());
             try
             {
-                GameObject.Find("TrialsEntry").GetComponent<Button>().onClick.Invoke();
-                var remainingTrial = GameObject.Find("StartScavenge")?.GetComponent<Button>();
-                Assert.NotNull(remainingTrial);
+                var action = GameObject.Find(controller.HasSurvivalSave ? "ContinueSurvival" : "StartSurvival")?.GetComponent<Button>();
+                Assert.NotNull(action);
                 GameObject.Find("SettingsEntry").GetComponent<Button>().onClick.Invoke();
                 var ctrl = UIHelper.GetUICtrl<PrototypeSettingsCtrl>();
                 Assert.IsTrue(ctrl.IsShow());
-                remainingTrial.onClick.Invoke();
+                action.onClick.Invoke();
                 Assert.IsFalse(controller.IsCrossing);
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 architecture.GetModel<LocalizationModel>().SetLanguageCode("en");

@@ -13,7 +13,7 @@ namespace OutpostLoop
         private const string SurvivalSaveName = "town-survival-v1.json";
         private JsonFileStore<SurvivalSave> survivalStore;
         private SurvivalSave survivalResume;
-        private bool survivalMode, survivalSaveChecked, survivalHasSave, survivalConfirmNew;
+        private bool survivalMode, survivalSaveChecked, survivalHasSave;
         private bool survivalPackOpen, survivalBuildOpen;
         private SurvivalContainer survivalContainer;
         private string survivalSaveError;
@@ -59,8 +59,12 @@ namespace OutpostLoop
                 save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= OutpostLoop.RiverValley.RiverValleyShopInterior.Version ? save : null;
         }
 
-        /// <summary>菜单新开与续玩都逐帧展示同一套地图加载步骤。</summary>
-        internal void CrossToSurvival(bool resume = false) => BeginCrossing(EnterSurvival(resume), resume);
+        /// <summary>新开前保护有效续玩档。新开和续玩共用地图加载流程。</summary>
+        internal void CrossToSurvival(bool resume = false)
+        {
+            if (!resume && HasSurvivalSave) return;
+            BeginCrossing(EnterSurvival(resume), resume);
+        }
 
         /// <summary>继续档与新行动从相同的地图和角色入口进入。</summary>
         private IEnumerable<(float value, string label)> EnterSurvival(bool resume)
@@ -73,7 +77,6 @@ namespace OutpostLoop
                 RefreshOverlay();
                 yield break;
             }
-            survivalConfirmNew = !resume && HasSurvivalSave;
             survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? OutpostLoop.RiverValley.RiverValleyShopInterior.Version;
             survivalMode = true;
             foreach (var step in LoadScavenge(true)) yield return step;
@@ -265,13 +268,12 @@ namespace OutpostLoop
             survivalDoorImpact = null;
             survivalDropMarkers.Clear();
             survivalMode = false;
-            survivalConfirmNew = false;
         }
 
         /// <summary>键鼠事件由房间、容器和随身道具界面按当前上下文接收。</summary>
         private void PollSurvival()
         {
-            if (survivalConfirmNew || scavengeRun.Outcome != ScavengeOutcome.Exploring) return;
+            if (scavengeRun.Outcome != ScavengeOutcome.Exploring) return;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
             if (PollSurvivalJourney(keyboard)) return;
@@ -442,7 +444,7 @@ namespace OutpostLoop
         {
             var state = scavengeRun.Survival;
             if (DrawSurvivalJourneyModal(width, height)) return;
-            if (survivalConfirmNew || scavengePaused || scavengeRun.Outcome != ScavengeOutcome.Exploring)
+            if (scavengePaused || scavengeRun.Outcome != ScavengeOutcome.Exploring)
             {
                 DrawSurvivalModal(width, height);
                 return;
@@ -648,14 +650,7 @@ namespace OutpostLoop
             ScavengeFill(new Rect(0, 0, width, height), new Color(.045f, .065f, .075f, .88f));
             float x = (width - 560) / 2, y = (height - 410) / 2;
             GUI.Box(new Rect(x, y, 560, 410), "");
-            if (survivalConfirmNew)
-            {
-                GUI.Label(new Rect(x + 20, y + 25, 425, 35), "开始新行动会放弃原来的续玩档");
-                if (GUI.Button(new Rect(x + 20, y + 75, 420, 42), "放弃旧行动并开始") && CloseSurvivalSave())
-                    survivalConfirmNew = false;
-                if (GUI.Button(new Rect(x + 20, y + 130, 420, 42), "返回开始页")) LeaveScavenge();
-            }
-            else if (scavengePaused)
+            if (scavengePaused)
             {
                 GUI.Label(new Rect(x + 20, y + 25, 425, 35), "行动暂停");
                 if (GUI.Button(new Rect(x + 20, y + 75, 420, 42), "继续行动")) scavengePaused = false;

@@ -50,10 +50,11 @@ namespace OutpostLoop.Tests
             Call(controller, "SaveAndLeaveSurvival");
             Assert.IsTrue(controller.HasSurvivalSave);
             Assert.IsNull(GameObject.Find("CosmicSpace"));
-            Click("RestartSurvival");
-            Assert.IsFalse(controller.IsCrossing, "确认之前不能创建新行动");
+            Assert.IsNull(GameObject.Find("StartSurvival"));
+            Assert.IsNull(GameObject.Find("RestartSurvival"));
+            controller.CrossToSurvival();
+            Assert.IsFalse(controller.IsCrossing, "有续玩档时，新行动入口不能启动");
             Assert.IsNull(Run(controller));
-            Click("CancelRestartSurvival");
             Assert.IsTrue(controller.HasSurvivalSave);
             Click("ContinueSurvival");
             Assert.IsNull(GameObject.Find("CosmicCrossing"));
@@ -77,14 +78,12 @@ namespace OutpostLoop.Tests
             Assert.NotNull(GameObject.Find("CosmicCrossing"), "空间主动出发使用穿越过渡");
             yield return WaitForLoading(controller);
             Assert.IsEmpty(Run(controller).Survival.pack);
+            Run(controller).Survival.elapsed = 30;
             Call(controller, "SaveAndLeaveSurvival");
-            Click("RestartSurvival");
-            Assert.IsFalse(controller.IsCrossing);
-            Click("ConfirmRestartSurvival");
-            Assert.IsTrue(controller.IsCrossing);
-            Assert.IsFalse(controller.HasSurvivalSave);
+            Assert.IsTrue(controller.HasSurvivalSave);
+            Click("ContinueSurvival");
             yield return WaitForLoading(controller);
-            Assert.That(Run(controller).Survival.elapsed, Is.LessThan(2));
+            Assert.That(Run(controller).Survival.elapsed, Is.InRange(30, 32));
             Assert.IsTrue(controller.JourneyProgress.completedFirst);
             yield return new ExitPlayMode();
         }

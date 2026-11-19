@@ -19,7 +19,7 @@ namespace OutpostLoop
             player.name = "探索角色_POLYGON_Prototype";
             var visual = player.AddComponent<PrototypePlayerVisual>();
             visual.Initialize(
-                () => scavengePaused || UtilityWindowOpen || survivalConfirmNew ||
+                () => scavengePaused || UtilityWindowOpen ||
                     survivalHelpOpen || survivalConfirmExit || survivalRegionMapOpen ||
                     scavengeRun == null || scavengeRun.Outcome != ScavengeOutcome.Exploring,
                 () => scavengeRun != null && scavengeRun.SurvivalSprint);

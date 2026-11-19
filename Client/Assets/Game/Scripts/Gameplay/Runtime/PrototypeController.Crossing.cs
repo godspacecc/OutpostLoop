@@ -20,15 +20,6 @@ namespace OutpostLoop
         /// <summary>供入口与验收观察的只读过渡状态。</summary>
         public bool IsCrossing => crossing;
 
-        /// <summary>主菜单确认后才关闭旧续玩档，失败时保留菜单与原行动。</summary>
-        internal bool TryRestartSurvival()
-        {
-            if (crossing || !initialized || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return false;
-            if (!CloseSurvivalSave()) return false;
-            CrossToSurvival();
-            return true;
-        }
-
         /// <summary>菜单统一出发入口；规则仍由传入的现有行动执行。</summary>
         internal void CrossToWorld(Action enter, bool resume = false) => BeginCrossing(SingleEntry(enter), resume);
 

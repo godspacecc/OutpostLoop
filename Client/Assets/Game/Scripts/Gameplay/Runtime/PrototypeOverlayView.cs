@@ -359,10 +359,6 @@ namespace OutpostLoop
                 bool hasSave = controller.HasSurvivalSave;
                 startStage.Find("StartSurvival").gameObject.SetActive(!hasSave);
                 startStage.Find("ContinueSurvival").gameObject.SetActive(hasSave);
-                startStage.Find("RestartSurvival").gameObject.SetActive(hasSave);
-                // 隐藏续玩附属入口时同时收起该行，避免设置和退出保留空槽。
-                ((RectTransform)startStage.Find("SettingsEntry")).anchoredPosition = new Vector2(344, hasSave ? -607 : -521);
-                ((RectTransform)startStage.Find("QuitGame")).anchoredPosition = new Vector2(344, hasSave ? -693 : -607);
                 var progress = controller.JourneyProgress;
                 spaceBackdrop.SetActive(progress.visitedSpace && !hasSave);
                 journeyRecordPanel.gameObject.SetActive(progress.hasResult && !hasSave);
@@ -566,11 +562,8 @@ namespace OutpostLoop
                 () => controller.CrossToSurvival());
             CosmicMenuButton(font, "ContinueSurvival", "继续游戏", 435,
                 () => controller.CrossToSurvival(resume: true));
-            var restartConfirmation = BuildRestartConfirmation(font, controller);
-            CosmicMenuButton(font, "RestartSurvival", "放弃并重新开始", 521,
-                () => { restartConfirmation.SetAsLastSibling(); restartConfirmation.gameObject.SetActive(true); });
-            CosmicMenuButton(font, "SettingsEntry", "设置", 607, () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
-            CosmicMenuButton(font, "QuitGame", "退出", 693, QuitFromSpace);
+            CosmicMenuButton(font, "SettingsEntry", "设置", 521, () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
+            CosmicMenuButton(font, "QuitGame", "退出", 607, QuitFromSpace);
             StartText(font, "JourneyCaption", "第一趟行动 · 三天生存", 144, 818, 650, 40, 21, muted);
             // 沿用已确认的空间背景，右侧结果板属于临时可用界面。
             var menuStage = startStage;
@@ -585,46 +578,6 @@ namespace OutpostLoop
             journeyNext = journeyRecordPanel.Find("JourneyNext").GetComponent<Text>();
             startStage = menuStage;
             journeyRecordPanel.gameObject.SetActive(false);
-
-            // 剩余的独立试玩集中在二级页，和河谷镇开始／续玩分开。
-            var mainStage = startStage;
-            var trials = Rect("TrialDestinations", mainStage, new Vector2(.5f,.5f), new Vector2(1920,1080), Vector2.zero);
-            trials.gameObject.AddComponent<Image>().color = new Color32(9, 17, 28, 248);
-            startStage = trials;
-            StartText(font, "TrialsTitle", "其他试玩", 660, 310, 600, 64, 42, ink, alignment: TextAnchor.MiddleCenter);
-            var startTrial = Button(trials, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(540, 70),
-                new Vector2(960, -462), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavenge));
-            StyleCosmicButton(startTrial, 30);
-            var closeTrials = Button(trials, font, "CloseTrials", "返回", new Vector2(240, 60),
-                new Vector2(960, -574), new Vector2(0, 1), () => trials.gameObject.SetActive(false));
-            StyleCosmicButton(closeTrials, 24);
-            startTrial.alignment = closeTrials.alignment = TextAnchor.MiddleCenter;
-            startStage = mainStage;
-            var trialEntry = Button(mainStage, font, "TrialsEntry", "其他试玩", new Vector2(220,50),
-                new Vector2(1715,-1008), new Vector2(0,1), () => trials.gameObject.SetActive(true));
-            StyleCosmicButton(trialEntry, 20);
-            trials.SetAsLastSibling();
-            trials.gameObject.SetActive(false);
-        }
-
-        /// <summary>加载前确认放弃旧行动，取消时不触碰存档和世界。</summary>
-        private RectTransform BuildRestartConfirmation(Font font, PrototypeController controller)
-        {
-            var panel = Rect("RestartConfirmation", startStage, new Vector2(.5f, .5f),
-                new Vector2(1920, 1080), Vector2.zero);
-            panel.gameObject.AddComponent<Image>().color = new Color32(9, 15, 24, 250);
-            var warning = Label(panel, font, "RestartWarning", new Vector2(760, 100), new Vector2(0, 80), 28);
-            warning.text = "放弃当前行动并重新开始？\n原来的续玩进度将被替换。";
-            Button(panel, font, "ConfirmRestartSurvival", "确认放弃并开始", new Vector2(320, 64),
-                new Vector2(-180, -40), new Vector2(.5f, .5f), () =>
-                {
-                    if (controller.TryRestartSurvival()) panel.gameObject.SetActive(false);
-                    else warning.text = "无法开始新行动，原存档已保留。\n请重试，或取消后继续原行动。";
-                });
-            Button(panel, font, "CancelRestartSurvival", "取消", new Vector2(240, 64),
-                new Vector2(180, -40), new Vector2(.5f, .5f), () => panel.gameObject.SetActive(false));
-            panel.gameObject.SetActive(false);
-            return panel;
         }
 
         /// <summary>文字菜单保留足够点击面积，悬停与选中由 UGUI 统一处理。</summary>
