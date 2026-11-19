@@ -23,6 +23,10 @@ namespace OutpostLoop
                     survivalHelpOpen || survivalConfirmExit || survivalRegionMapOpen ||
                     scavengeRun == null || scavengeRun.Outcome != ScavengeOutcome.Exploring,
                 () => scavengeRun != null && scavengeRun.SurvivalSprint);
+            player.AddComponent<PrototypeCombatVisual>().Initialize(
+                () => scavengeRun,
+                () => scavengePaused || UtilityWindowOpen || survivalHelpOpen || survivalConfirmExit || survivalRegionMapOpen ||
+                    scavengeRun == null || scavengeRun.Outcome != ScavengeOutcome.Exploring);
             return player.transform;
         }
     }

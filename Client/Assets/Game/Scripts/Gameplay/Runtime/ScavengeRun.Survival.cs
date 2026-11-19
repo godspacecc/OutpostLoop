@@ -35,6 +35,9 @@ namespace OutpostLoop
         // 生存入口沿用大镇寻路，动态房门仅影响该入口。
         internal ScavengeSurvival Survival { get; }
         internal bool SurvivalSprint { get; set; }
+        // 接受一次攻击后递增，供表现读取；不把动画回调用于伤害或存档。
+        internal int SurvivalAttackVersion { get; private set; }
+        internal int SurvivalHitPatrol { get; private set; } = -1;
         internal string SurvivalFeedback { get; private set; }
         // 即使连续出现相同提示，表现层也能重新显示短暂反馈。
         internal int SurvivalFeedbackVersion { get; private set; }
@@ -255,6 +258,8 @@ namespace OutpostLoop
             if (direction == Vector2.zero) return false;
             Survival.facing = direction;
             Survival.attackCooldown = pistol ? .35f : .8f;
+            SurvivalAttackVersion++;
+            SurvivalHitPatrol = -1;
             if (pistol)
             {
                 Survival.weapon.rounds--;
@@ -291,6 +296,7 @@ namespace OutpostLoop
             }
             if (target != null)
             {
+                SurvivalHitPatrol = hit;
                 target.Health = pistol && hit == aimedHead ? 0 : target.Health - 1;
                 target.Cooldown = Mathf.Max(target.Cooldown, .4f);
             }
