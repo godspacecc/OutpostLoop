@@ -82,8 +82,7 @@ namespace OutpostLoop
                 }
             }
             survivalWorldGeometry.Finish();
-            foreach (Transform child in town.transform)
-                if (child.name == "封闭建筑") RegisterScavengeOccluder(child.GetComponentsInChildren<Renderer>());
+            // 封闭建筑是跨建筑合批的外景；只有可进入房间的墙、屋顶和陈设参与遮挡切除。
         }
 
         /// <summary>重点入口有现场名称；无入口标记的其余建筑保持封闭。</summary>

@@ -39,9 +39,12 @@ namespace OutpostLoop
         private void UpdateScavengeOccluders()
         {
             var origin = gameCamera.transform.position;
-            var torso = SurvivalPosition(scavengeRun.Player, .95f);
-            var feet = SurvivalPosition(scavengeRun.Player, .22f);
+            var ground = SurvivalPosition(scavengeRun.Player, 0);
+            var torso = new OcclusionRay(origin, ground + Vector3.up * .95f);
+            var feet = new OcclusionRay(origin, ground + Vector3.up * .22f);
             int cache = scavengeRun.OpenCache >= 0 ? scavengeRun.OpenCache : scavengeRun.NearbyCache;
+            // 搜点高度可能遍历整张地图的道路；每帧只查询一次。
+            var cacheRay = cache >= 0 ? new OcclusionRay(origin, SurvivalPosition(scavengeRun.CachePoints[cache], .36f)) : default;
             foreach (var segment in scavengeOccluders)
             {
                 bool hidden = false;
@@ -49,20 +52,29 @@ namespace OutpostLoop
                 {
                     if (part == null || !part.enabled || !part.gameObject.activeInHierarchy) continue;
                     var bounds = part.bounds;
-                    hidden = BlocksView(bounds, origin, torso) || BlocksView(bounds, origin, feet) ||
-                        (cache >= 0 && BlocksView(bounds, origin, SurvivalPosition(scavengeRun.CachePoints[cache], .36f)));
+                    hidden = torso.BlockedBy(bounds) || feet.BlockedBy(bounds) ||
+                        (cache >= 0 && cacheRay.BlockedBy(bounds));
                     if (hidden) break;
                 }
                 foreach (var part in segment)
-                    if (part != null) part.forceRenderingOff = hidden;
+                    if (part != null && part.forceRenderingOff != hidden) part.forceRenderingOff = hidden;
             }
         }
 
-        private static bool BlocksView(Bounds bounds, Vector3 origin, Vector3 target)
+        /// <summary>同一观察目标的射线与距离在整轮遮挡扫描中复用。</summary>
+        private readonly struct OcclusionRay
         {
-            var toTarget = target - origin;
-            float distance = toTarget.magnitude;
-            return bounds.IntersectRay(new Ray(origin, toTarget), out float hit) && hit < distance - .06f;
+            private readonly Ray ray;
+            private readonly float maxDistance;
+
+            internal OcclusionRay(Vector3 origin, Vector3 target)
+            {
+                var delta = target - origin;
+                ray = new Ray(origin, delta);
+                maxDistance = delta.magnitude - .06f;
+            }
+
+            internal bool BlockedBy(Bounds bounds) => bounds.IntersectRay(ray, out float hit) && hit < maxDistance;
         }
     }
 }

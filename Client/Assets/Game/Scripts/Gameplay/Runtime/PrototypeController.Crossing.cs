@@ -68,10 +68,13 @@ namespace OutpostLoop
             label.fontSize = 28;
             label.alignment = TextAnchor.MiddleCenter;
             label.color = new Color32(225,235,243,255);
-            label.text = showCrossing ? "正在穿越\n正在接通世界" : resume ? "正在恢复行动" : "正在进入游戏";
+            label.text = "阶段 1/3\n" + (showCrossing ? "正在接通世界" : "正在准备行动");
             label.raycastTarget = false;
             yield return null;
             yield return new WaitForSecondsRealtime(.45f);
+            label.text = "阶段 2/3\n" + (resume ? "正在恢复行动" : "正在生成行动场景");
+            // 地图同步生成前先提交一帧，让当前阶段可见。
+            yield return null;
             Exception failure = null;
             try
             {
@@ -89,7 +92,7 @@ namespace OutpostLoop
                 Restart(false);
                 crossingRestorePause = true;
             }
-            else label.text = showCrossing ? "正在穿越\n即将抵达" : resume ? "正在恢复行动" : "即将醒来";
+            else label.text = "阶段 3/3\n" + (showCrossing ? "即将抵达" : resume ? "行动已恢复" : "即将醒来");
             yield return new WaitForSecondsRealtime(.55f);
             FinishCrossing();
         }

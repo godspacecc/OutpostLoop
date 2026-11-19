@@ -340,6 +340,8 @@ namespace OutpostLoop.Tests
             type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
             type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
             Click("StartSurvival");
+            var loading = GameObject.Find("CrossingStatus").GetComponent<Text>();
+            StringAssert.Contains("阶段 1/3", loading.text);
             yield return WaitForCrossing();
             var field = type.GetField("scavengeRun", flags);
             var run = (ScavengeRun)field.GetValue(controller);
@@ -352,6 +354,13 @@ namespace OutpostLoop.Tests
             Assert.NotNull(GameObject.Find("河谷镇整图"));
             var city=Object.FindObjectOfType<OutpostLoop.RiverValley.RiverValleyTownPreview>();
             Assert.Greater(city.CityBuildingCount,200);
+            // 封闭建筑跨建筑合批，整组若进入遮挡扫描会导致远近多处同时消失。
+            var closed = city.transform.Find("封闭建筑").GetComponentsInChildren<Renderer>();
+            Assert.IsNotEmpty(closed);
+            var cutaway = (List<Renderer[]>)type.GetField("scavengeOccluders", flags).GetValue(controller);
+            foreach (var group in cutaway)
+                foreach (var renderer in group)
+                    CollectionAssert.DoesNotContain(closed, renderer);
             var meshFilters=GameObject.Find("河谷镇整图").GetComponentsInChildren<MeshFilter>();
             System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Directory.GetParent(directory).FullName,"scene-counts.txt"),
                 "City fixture dressing="+city.CityDressingFixtureCount+"\nCity surfaces="+city.CityDressingSurfaceCount+"\nCity low dressing="+city.CityDressingGroundCount+"\nDistrict pads="+city.CityDistrictPadCount+"\nCity buildings="+city.CityBuildingCount+"\nCity trees="+city.CityTreeCount+"\nCity vehicles="+city.CityVehicleCount+"\nCity road segments="+city.CityRoadSegmentCount+"\nMesh filters="+meshFilters.Length);

@@ -47,6 +47,8 @@ namespace Boot.UI
         public event Action OnCopyDetailsClicked;
         public event Action OnQuitClicked;
 
+        private const int StartupStepCount = 4;
+        private int _startupStep = 1;
         private bool _initialized;
         private bool _apkActions;
         private Action _apkPrimary;
@@ -125,7 +127,7 @@ namespace Boot.UI
             _detailsText.gameObject.SetActive(false);
             _statusText.text = status;
             _statusText.gameObject.SetActive(true);
-            _progressArea.SetActive(false);
+            RenderStartupProgress();
             _downloadStatsArea.SetActive(false);
             HideAllButtons();
         }
@@ -141,7 +143,7 @@ namespace Boot.UI
             _detailsText.gameObject.SetActive(false);
             _statusText.text = status;
             _statusText.gameObject.SetActive(true);
-            _progressArea.SetActive(false);
+            RenderStartupProgress();
             _downloadStatsArea.SetActive(false);
             HideAllButtons();
         }
@@ -191,7 +193,7 @@ namespace Boot.UI
             }
         }
 
-        /// <summary>只切换阶段文案和辅助提示（旧信标引用仅兼容测试预制体），真实进度仍由下载事件写入。</summary>
+        /// <summary>切换阶段文案和辅助提示；下载百分比由下载事件更新。</summary>
         private void PresentSignal(string stage, Color tint, bool checking, bool failure = false)
         {
             if (_recoveryShade)
@@ -212,6 +214,20 @@ namespace Boot.UI
             }
             if (_busyIndicator) _busyIndicator.SetActive(checking);
             if (_copyNotice) _copyNotice.gameObject.SetActive(false);
+        }
+
+        /// <summary>显示已到达的启动阶段；下载模式另外显示真实下载百分比。</summary>
+        public void SetStartupStep(int step)
+        {
+            _startupStep = Mathf.Clamp(step, 1, StartupStepCount);
+            RenderStartupProgress();
+        }
+
+        private void RenderStartupProgress()
+        {
+            _progressArea.SetActive(true);
+            _progressSlider.value = (_startupStep - 1f) / StartupStepCount;
+            _progressText.text = $"阶段 {_startupStep}/{StartupStepCount}";
         }
 
         public void SetProgress(float progress)
@@ -271,6 +287,7 @@ namespace Boot.UI
         {
             EnsureApkLabels();
             RenderNormal(string.Empty);
+            _progressArea.SetActive(false);
             PresentSignal("应用更新", SignalColor, false);
             _titleText.text = "有新版本可下载";
             _titleText.gameObject.SetActive(true);
