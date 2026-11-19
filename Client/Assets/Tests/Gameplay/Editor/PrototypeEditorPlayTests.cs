@@ -712,6 +712,78 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRainStaysOutsideRoomsWhenRoofsAreHidden()
+        {
+            const string batch="IndoorRain-20261119";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();yield return WaitForMain();
+            var controller=Object.FindObjectOfType<PrototypeController>();
+            var type=typeof(PrototypeController);var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var directory=System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,"../../Backup/Artifacts/"+batch+"/Save-"+System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore",flags).SetValue(controller,new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked",flags).SetValue(controller,false);
+            type.GetMethod("RefreshOverlay",flags).Invoke(controller,null);
+            Click("StartSurvival");yield return WaitForCrossing();
+            // 固定雨天种子；不更改地图、敌人或存档规则。
+            type.GetMethod("BeginScavenge",flags).Invoke(controller,new object[]{1});
+            var run=(ScavengeRun)type.GetField("scavengeRun",flags).GetValue(controller);
+            foreach(var patrol in run.Patrols)patrol.Health=0;
+            var player=typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var sync=type.GetMethod("SyncScavenge",flags);
+            var covered=type.GetMethod("TownRainCovered",flags);
+            var rain=(MeshRenderer)type.GetField("townRain",flags).GetValue(controller);
+            var mesh=(Mesh)type.GetField("townRainMesh",flags).GetValue(controller);
+            Assert.IsTrue(rain.enabled);
+            for(int room=0;room<6;room++)
+            {
+                var area=run.FullTown.Interiors[room];
+                var targets=new[]{new Vector2(area.xMin-1,area.center.y),new Vector2(area.xMin+1,area.center.y),area.center,new Vector2(area.xMin-1,area.center.y)};
+                for(int phase=0;phase<targets.Length;phase++)
+                {
+                    player.SetValue(run,targets[phase]);sync.Invoke(controller,new object[]{true});
+                    Assert.That(rain.transform.position.y,Is.EqualTo(run.FullTown.Height(run.Player)).Within(.001f));
+                    var vertices=mesh.vertices;int hidden=0,visible=0,outside=0;
+                    for(int i=0;i<vertices.Length;i+=2)
+                    {
+                        var point=run.Player+new Vector2(vertices[i].x,vertices[i].z);
+                        bool under=(bool)covered.Invoke(controller,new object[]{point});
+                        bool shown=(vertices[i+1]-vertices[i]).sqrMagnitude>.001f;
+                        if(area.Contains(point))Assert.IsFalse(shown,"实际房间矩形内不应出现雨线");
+                        if(under){hidden++;Assert.IsFalse(shown,"雨线穿入房间 "+room+" / "+point);}
+                        else{outside++;if(shown)visible++;}
+                    }
+                    Assert.Greater(hidden,0,"测试必须实际覆盖屋顶投影");
+                    if(phase==0 || phase==3)Assert.Greater(outside,0,"门外取景必须覆盖露天雨线");
+                    if(outside>0)Assert.AreEqual(outside,visible,"门外的雨不能一起关闭");
+                    Assert.IsTrue((bool)covered.Invoke(controller,new object[]{new Vector2(area.xMin-.05f,area.center.y)}),"屋檐不能漏雨");
+                    if(room==0 && (phase==0 || phase==1))yield return CaptureSurvivalEvidence(phase==0?"rain-outside":"rain-inside",1920,1080,batch);
+                }
+            }
+            // 原室内屋顶即使已被遮挡系统切掉，挡雨判定仍应保留。
+            var shop=run.FullTown.Interiors[0];player.SetValue(run,shop.center);sync.Invoke(controller,new object[]{true});
+            var root=(Transform)type.GetField("scavengeRoot",flags).GetValue(controller);
+            int roofs=0;
+            foreach(var renderer in root.GetComponentsInChildren<Renderer>())
+                if(renderer.name=="屋顶"){renderer.forceRenderingOff=true;roofs++;}
+            Assert.Greater(roofs,0,"应实际验证屋顶切除状态");
+            type.GetMethod("UpdateTownWeather",flags).Invoke(controller,null);
+            var cutVertices=mesh.vertices;
+            for(int i=0;i<cutVertices.Length;i+=2)
+            {
+                var point=run.Player+new Vector2(cutVertices[i].x,cutVertices[i].z);
+                if(shop.Contains(point))Assert.AreEqual(cutVertices[i],cutVertices[i+1],"隐藏屋顶仍应挡雨");
+            }
+            type.GetMethod("BeginScavenge",flags).Invoke(controller,new object[]{0});
+            Assert.IsFalse(rain.enabled,"晴天不能出现雨线");
+            // 旧小街区恢复仍采用其自身建筑占地。
+            var legacy=new ScavengeRun(1,true,ScavengeSurvival.Create(1));
+            type.GetField("scavengeRun",flags).SetValue(controller,legacy);
+            Assert.IsTrue((bool)covered.Invoke(controller,new object[]{SurvivalRooms.Footprint(0).center}));
+            Assert.IsFalse((bool)covered.Invoke(controller,new object[]{ScavengeTown.Start}));
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootScavengeTownStartsWithWeatherAndLetsThePlayerSpeak()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

@@ -166,7 +166,7 @@ namespace OutpostLoop
         private void UpdateTownWeather()
         {
             if (!scavengeTown) return;
-            townRain.transform.position = At(scavengeRun.Player, 0);
+            townRain.transform.position = SurvivalPosition(scavengeRun.Player, 0);
             if (townRain.enabled)
             {
                 rainTime += Time.unscaledDeltaTime * 11f;
@@ -175,13 +175,28 @@ namespace OutpostLoop
                     var drop = rainPositions[i];
                     drop.y = Mathf.Repeat(drop.y - rainTime, 8.5f);
                     rainVertices[i * 2] = drop;
-                    rainVertices[i * 2 + 1] = drop + new Vector3(-.045f, .42f, .04f);
+                    var worldPoint=scavengeRun.Player+new Vector2(drop.x,drop.z);
+                    // 剔除屋顶投影内的整条雨线；屋顶为观察室内而隐藏时依然挡雨。
+                    rainVertices[i * 2 + 1] = TownRainCovered(worldPoint) ? drop : drop + new Vector3(-.045f, .42f, .04f);
                 }
                 townRainMesh.vertices = rainVertices;
             }
             townGunFlash = Mathf.Max(0, townGunFlash - Time.unscaledDeltaTime);
             townGunTrace.enabled = townGunFlash > 0;
             if (scavengeRun.Outcome != ScavengeOutcome.Exploring) townAmbience.Stop();
+        }
+
+        /// <summary>按当前行动的真实房间占地挡雨，不因玩家站在门内或门外而关闭整场雨。</summary>
+        private bool TownRainCovered(Vector2 point)
+        {
+            var roofs=scavengeRun.FullTown?.Interiors ?? ScavengeTown.Buildings;
+            foreach(var roof in roofs)
+            {
+                // 包含原屋檐和短雨线的水平偏移，避免门槛与墙边漏出雨丝。
+                if(point.x>=roof.xMin-.15f && point.x<=roof.xMax+.15f &&
+                    point.y>=roof.yMin-.15f && point.y<=roof.yMax+.15f)return true;
+            }
+            return false;
         }
 
         private void PlayTownShot(Vector2 aim)
