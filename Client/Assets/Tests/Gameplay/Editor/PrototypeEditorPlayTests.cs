@@ -35,7 +35,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootSpaceReturnPersistsResultsAndRejectsFailedSettlementWrites()
         {
-            const string batch = "FirstSpaceReturn-20261113";
+            const string batch = "TaskInfoMenu-20261119";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -75,9 +75,9 @@ namespace OutpostLoop.Tests
             Assert.IsNull(type.GetField("scavengeRun", flags).GetValue(controller));
             Assert.IsTrue(controller.JourneyProgress.completedFirst);
             Assert.IsFalse(controller.HasSurvivalSave);
-            Assert.NotNull(GameObject.Find("JourneyRecordPanel"));
-            Assert.That(GameObject.Find("JourneyRecordBody").GetComponent<Text>().text, Does.Contain("密封饮水"));
-            yield return CaptureSurvivalEvidence("space-return", 1280, 720, batch);
+            Assert.IsNull(GameObject.Find("JourneyRecordPanel"));
+            Assert.IsNull(GameObject.Find("JourneyCaption"));
+            Assert.That(controller.JourneyProgress.carriedSummary, Does.Contain("密封饮水"));
             yield return CaptureSurvivalEvidence("space-return", 1920, 1080, batch);
             var saved = store.Read("town-survival-v1.json").Data;
             Assert.IsFalse(saved.available);
@@ -101,8 +101,10 @@ namespace OutpostLoop.Tests
             type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
             type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
             Assert.IsTrue(controller.JourneyProgress.completedFirst);
-            Assert.NotNull(GameObject.Find("JourneyRecordPanel"));
-            Assert.AreEqual("首次行动 · 达标回归", GameObject.Find("JourneyRecordTitle").GetComponent<Text>().text);
+            Assert.IsNull(GameObject.Find("JourneyRecordPanel"));
+            Assert.IsNull(GameObject.Find("JourneyCaption"));
+            Assert.AreEqual(ScavengeOutcome.Extracted, controller.JourneyProgress.lastOutcome);
+            Assert.That(controller.JourneyProgress.carriedSummary, Does.Contain("密封饮水"));
             Click("StartSurvival");
             yield return WaitForCrossing();
             run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);

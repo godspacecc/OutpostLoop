@@ -200,8 +200,6 @@ namespace OutpostLoop
         // 只有已经回归且当前不在续玩行动中时，菜单才展示空间。
         private GameObject spaceBackdrop;
         // 空间只展示持久化行动记录，不提供物品取用入口。
-        private RectTransform journeyRecordPanel;
-        private Text journeyRecordTitle, journeyRecordBody, journeyNext;
         private Button startUpdateEntry;
         private Button sessionSettingsEntry;
         private Text startUpdateVersion, startUpdateStatus;
@@ -361,15 +359,6 @@ namespace OutpostLoop
                 startStage.Find("ContinueSurvival").gameObject.SetActive(hasSave);
                 var progress = controller.JourneyProgress;
                 spaceBackdrop.SetActive(progress.visitedSpace && !hasSave);
-                journeyRecordPanel.gameObject.SetActive(progress.hasResult && !hasSave);
-                if (progress.hasResult)
-                {
-                    journeyRecordTitle.text = controller.JourneyResultTitle;
-                    journeyRecordBody.text = progress.visitedSpace ? controller.JourneyResultBody
-                        : "本趟行动已经结束。重新开始时，从镇口空手起步。";
-                    journeyNext.text = progress.visitedSpace ? controller.JourneyNextStep
-                        : "先寻找饮水和食物，再找能关门落脚的房间。";
-                }
                 var beginLabel = startStage.Find("StartSurvival").GetComponentInChildren<Text>(true);
                 beginLabel.text = progress.hasResult ? "再次行动 · 三天生存" : "开始游戏";
                 startStage.Find("SpaceCaption").GetComponent<Text>().text = hasSave
@@ -543,7 +532,6 @@ namespace OutpostLoop
         private void BuildStartScreen(Font font, PrototypeController controller)
         {
             var ink = new Color32(230, 237, 244, 255);
-            var silver = new Color32(186, 207, 224, 255);
             var muted = new Color32(158, 178, 198, 255);
             startScreen = new GameObject("StartScreenBackground", typeof(RectTransform));
             startScreen.transform.SetParent(transform, false);
@@ -564,20 +552,6 @@ namespace OutpostLoop
                 () => controller.CrossToSurvival(resume: true));
             CosmicMenuButton(font, "SettingsEntry", "设置", 521, () => UIHelper.ShowUI<PrototypeSettingsCtrl>());
             CosmicMenuButton(font, "QuitGame", "退出", 607, QuitFromSpace);
-            StartText(font, "JourneyCaption", "第一趟行动 · 三天生存", 144, 818, 650, 40, 21, muted);
-            // 沿用已确认的空间背景，右侧结果板属于临时可用界面。
-            var menuStage = startStage;
-            journeyRecordPanel = StartRect("JourneyRecordPanel", 980, 190, 780, 730);
-            journeyRecordPanel.gameObject.AddComponent<Image>().color = new Color32(8, 17, 27, 232);
-            startStage = journeyRecordPanel;
-            StartText(font, "JourneyRecordTitle", "", 32, 24, 716, 56, 32, ink);
-            StartText(font, "JourneyRecordBody", "", 32, 100, 716, 450, 22, silver, alignment: TextAnchor.UpperLeft);
-            StartText(font, "JourneyNext", "", 32, 576, 716, 116, 23, muted, alignment: TextAnchor.UpperLeft);
-            journeyRecordTitle = journeyRecordPanel.Find("JourneyRecordTitle").GetComponent<Text>();
-            journeyRecordBody = journeyRecordPanel.Find("JourneyRecordBody").GetComponent<Text>();
-            journeyNext = journeyRecordPanel.Find("JourneyNext").GetComponent<Text>();
-            startStage = menuStage;
-            journeyRecordPanel.gameObject.SetActive(false);
         }
 
         /// <summary>文字菜单保留足够点击面积，悬停与选中由 UGUI 统一处理。</summary>

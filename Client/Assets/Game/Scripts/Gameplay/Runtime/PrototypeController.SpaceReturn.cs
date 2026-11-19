@@ -9,7 +9,7 @@ namespace OutpostLoop
         private SurvivalJourneyProgress survivalJourney;
         private ScavengeRun journeyRecordedRun;
 
-        /// <summary>只读行动结果供空间菜单展示；没有任何可取出的物资。</summary>
+        /// <summary>读取持久化行动进度和结果，供出发流程及后续任务界面使用。</summary>
         internal SurvivalJourneyProgress JourneyProgress
         {
             get
@@ -42,26 +42,5 @@ namespace OutpostLoop
             if (state.torch != null) names.Add(DescribeSurvivalItem(state.torch));
             return names.Count == 0 ? "空手" : string.Join("、", names);
         }
-
-        internal string JourneyResultTitle => JourneyProgress.lastOutcome switch
-        {
-            ScavengeOutcome.Died => "行动结束 · 阵亡",
-            ScavengeOutcome.WindowClosed => "行动结束 · 撤离窗口关闭",
-            _ => JourneyProgress.survived >= ScavengeSurvival.Goal ? "首次行动 · 达标回归" : "已回归 · 生存目标未达成"
-        };
-
-        internal string JourneyResultBody
-        {
-            get
-            {
-                var progress = JourneyProgress;
-                string places = progress.discovered.Length == 0 ? "尚无带回的地点记录" : string.Join("、", progress.discovered);
-                return $"存活 {SurvivalTime(progress.survived)}\n\n随身物品快照：{progress.carriedSummary}\n\n已查明地点：{places}\n\n空间不存放物资、装备或收藏。下一趟从空手开始。";
-            }
-        }
-
-        internal string JourneyNextStep => JourneyProgress.completedFirst
-            ? "三天生存已完成。后续行动：修通桥头备用通道。\n任务内容正在接入；当前可再次体验三天生存。"
-            : "当前目标：活过三天并成功撤离。\n可以再次出发；历史结果会保留到下一次结算。";
     }
 }
