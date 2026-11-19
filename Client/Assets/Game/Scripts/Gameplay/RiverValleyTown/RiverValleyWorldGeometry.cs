@@ -18,6 +18,10 @@ namespace OutpostLoop.RiverValley
         internal readonly List<Channel> Roads = new List<Channel>();
         // 六处实际室内，前两处可设为基地。
         internal readonly Rect[] Interiors = new Rect[6];
+        // 幸存者站在诊所搜点另一侧，远离入口与柜台。
+        internal Vector2 ClinicSurvivor => Interiors[2].center + Vector2.right * 4;
+        // 转运记录附在原有仓库装卸架上，不单独生成搜点或库存物品。
+        internal const int TransferNoteCache = 7;
         // 沿用原容器索引，以保持生成规则和旧档格式独立兼容。
         internal readonly Vector2[] Caches = new Vector2[ScavengeTown.Caches.Length];
         internal readonly string[] CacheNames = (string[])ScavengeTown.Names.Clone();
@@ -178,7 +182,7 @@ namespace OutpostLoop.RiverValley
             Caches[3] = Interiors[1].center; Caches[4] = FindWalkable(rooms.Door(1).center + Vector2.left * 3);
             Caches[5] = Interiors[1].center + Vector2.up * 2;
             Caches[6] = Interiors[2].center;
-            Caches[7] = Interiors[3].center; Caches[8] = Interiors[3].center + Vector2.up * 2;
+            Caches[TransferNoteCache] = Interiors[3].center; Caches[8] = Interiors[3].center + Vector2.up * 2;
             Caches[10] = Interiors[3].center + Vector2.down * 2;
             Caches[12] = Interiors[4].center; Caches[14] = Interiors[5].center;
             string[] names = { "镇口补给箱", "主街杂货店", "主街门廊", "住宅储藏柜", "住宅后院", "住宅床边柜",

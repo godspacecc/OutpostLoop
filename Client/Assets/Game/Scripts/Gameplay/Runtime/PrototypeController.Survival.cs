@@ -382,6 +382,7 @@ namespace OutpostLoop
             if (scavengeRun.NearbySurvivalBed >= 0) return "睡觉";
             if (scavengeRun.NearbySurvivalCabinet >= 0) return "打开储物柜";
             if (NearbySurvivalDrop() != null) return "查看地面物品";
+            if (scavengeRun.CanTalkToClinicSurvivor) return "和幸存者交谈";
             int cache = scavengeRun.NearbyCache;
             return cache < 0 ? null : "搜索" + scavengeRun.CacheNames[cache];
         }
@@ -414,7 +415,11 @@ namespace OutpostLoop
                 return;
             }
             survivalContainer = NearbySurvivalDrop();
-            if (survivalContainer == null) scavengeRun.Interact();
+            if (survivalContainer != null) return;
+            if (scavengeRun.CanTalkToClinicSurvivor)
+                scavengeRun.ReportSurvival("幸存者：前几天，药都转到医院去了。");
+            else
+                scavengeRun.Interact();
         }
 
         private static Rect SurvivalInfo => new Rect(18, 18, 374, 141);
@@ -514,7 +519,16 @@ namespace OutpostLoop
             }
             GUI.Label(new Rect(panel.x + half + 10, panel.y + 8, half - 20, 31),
                 opened >= 0 ? scavengeRun.CacheNames[opened] : container != null ? "容器" : "已装备");
-            var scroll = new Rect(panel.x + 9, panel.y + 44, panel.width - 18, panel.height - 52);
+            float rowsTop = 44;
+            if (scavengeRun.CanReadWarehouseTransferNote)
+            {
+                GUI.Box(new Rect(panel.x + 9, panel.y + rowsTop, panel.width - 18, 56), "");
+                GUI.Label(new Rect(panel.x + 17, panel.y + rowsTop + 2, panel.width - 34, 26), "药品转运记录");
+                GUI.Label(new Rect(panel.x + 17, panel.y + rowsTop + 27, panel.width - 34, 26),
+                    "急救用品已转运至区域医院一楼。");
+                rowsTop += 62;
+            }
+            var scroll = new Rect(panel.x + 9, panel.y + rowsTop, panel.width - 18, panel.height - rowsTop - 8);
             float rows = Mathf.Max(state.pack.Count, container?.items.Count ?? 3);
             survivalScroll = GUI.BeginScrollView(scroll, survivalScroll,
                 new Rect(0, 0, scroll.width - 18, Mathf.Max(rows * 45, scroll.height - 1)));

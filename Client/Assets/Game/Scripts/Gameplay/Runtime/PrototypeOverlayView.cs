@@ -598,8 +598,6 @@ namespace OutpostLoop
             StartText(font, "TrialsNote", "已有独立试玩入口", 1000, 280, 680, 60, 24, muted);
             Button(trials, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(600, 70),
                 new Vector2(1320, -530), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavenge));
-            Button(trials, font, "StartScavengeTown", "大镇与镇郊 · 探索试玩", new Vector2(600, 70),
-                new Vector2(1320, -630), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavengeTown));
             Button(trials, font, "CloseTrials", "返回空间", new Vector2(300, 60),
                 new Vector2(1600,-930), new Vector2(0,1), () => trials.gameObject.SetActive(false));
             startStage = mainStage;

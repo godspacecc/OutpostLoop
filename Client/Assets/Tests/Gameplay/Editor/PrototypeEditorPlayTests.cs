@@ -812,17 +812,95 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
-        public IEnumerator BootScavengeTownStartsWithWeatherAndLetsThePlayerSpeak()
+        public IEnumerator BootRiverValleyLetsPlayersDiscoverLocalCluesFreely()
+        {
+            const string batch = "RiverValleyFreeExploration-20261119";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+
+            Click("TrialsEntry");
+            Assert.IsNull(GameObject.Find("StartScavengeTown"));
+            foreach (string name in new[] { "StartScavenge", "DepartWilderness", "DepartIndustrial", "DepartBeacon", "PrimaryAction" })
+                Assert.NotNull(GameObject.Find(name)?.GetComponent<Button>(), name);
+            Click("CloseTrials");
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var interact = type.GetMethod("InteractSurvival", flags);
+            var context = type.GetMethod("SurvivalInteraction", flags);
+            var sync = type.GetMethod("SyncScavenge", flags);
+            foreach (var patrol in run.Patrols) patrol.Health = 0;
+            Assert.IsFalse(run.CanTalkToClinicSurvivor);
+            Assert.IsFalse(run.CanReadWarehouseTransferNote);
+
+            // 定位至搜点来隔离发现逻辑，仍沿用正常搜索、读取容器和取物规则。
+            player.SetValue(run, run.CachePoints[12]);
+            interact.Invoke(controller, null);
+            Assert.AreEqual(12, run.OpenCache);
+            while (run.SearchRemaining > 0) run.Tick(.05f, Vector2.zero);
+            var hospital = run.Survival.caches[12].items;
+            int aid = hospital.FindIndex(item => item.item == SurvivalItem.Aid);
+            Assert.GreaterOrEqual(aid, 0);
+            Assert.IsTrue(ScavengeSurvival.Transfer(hospital, aid, run.Survival.pack, 6));
+            Assert.IsFalse(run.Survival.Ready);
+            Assert.IsFalse(run.MedicineLeadKnown);
+            interact.Invoke(controller, null);
+
+            int note = OutpostLoop.RiverValley.RiverValleyWorldGeometry.TransferNoteCache;
+            player.SetValue(run, run.CachePoints[note] + Vector2.left);
+            interact.Invoke(controller, null);
+            Assert.AreEqual(note, run.OpenCache);
+            Assert.IsFalse(run.CanReadWarehouseTransferNote);
+            while (run.SearchRemaining > 0) run.Tick(.05f, Vector2.zero);
+            Assert.IsTrue(run.CanReadWarehouseTransferNote);
+            sync.Invoke(controller, new object[] { true });
+            yield return CaptureSurvivalEvidence("warehouse-transfer-note", 1280, 720, batch);
+            interact.Invoke(controller, null);
+            Assert.IsFalse(run.CanReadWarehouseTransferNote);
+            Assert.IsFalse(run.MedicineLeadKnown, "搜点记录不启用旧试玩任务");
+
+            var survivor = GameObject.Find("诊所幸存者");
+            Assert.NotNull(survivor);
+            var meeting = run.FullTown.ClinicSurvivor + Vector2.left;
+            Assert.IsTrue(run.FullTown.Interiors[2].Contains(meeting));
+            Assert.IsTrue(run.FullTown.Walkable(meeting));
+            Assert.IsTrue(run.FullTown.Walkable(run.FullTown.ClinicSurvivor));
+            player.SetValue(run, meeting);
+            Assert.AreEqual("和幸存者交谈", context.Invoke(controller, null));
+            int feedback = run.SurvivalFeedbackVersion;
+            interact.Invoke(controller, null);
+            Assert.AreEqual(feedback + 1, run.SurvivalFeedbackVersion);
+            StringAssert.Contains("医院", run.SurvivalFeedback);
+            Assert.IsTrue(run.CanTalkToClinicSurvivor, "对话可重复查看");
+            Assert.IsFalse(run.SurvivorSpoken, "现场对话不启用旧试玩任务");
+            sync.Invoke(controller, new object[] { true });
+            yield return CaptureSurvivalEvidence("clinic-conversation", 1280, 720, batch);
+
+            Assert.IsTrue(run.Survival.pack.Exists(item => item.item == SurvivalItem.Aid));
+            Assert.IsFalse(run.Survival.Ready);
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator LegacyScavengeTownStartsWithWeatherAndLetsThePlayerSpeak()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
-            Click("StartScavengeTown");
-            yield return WaitForCrossing();
-            yield return null;
             var controller = Object.FindObjectOfType<PrototypeController>();
             var type = typeof(PrototypeController);
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            type.GetMethod("StartScavengeTown", flags).Invoke(controller, null);
             var field = type.GetField("scavengeRun", flags);
             var poll = type.GetMethod("PollScavenge", flags);
             type.GetMethod("BeginScavenge", flags).Invoke(controller, new object[] { 0 });

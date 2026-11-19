@@ -38,6 +38,15 @@ namespace OutpostLoop
         internal string SurvivalFeedback { get; private set; }
         // 即使连续出现相同提示，表现层也能重新显示短暂反馈。
         internal int SurvivalFeedbackVersion { get; private set; }
+        /// <summary>同在诊所室内、近距离且无遮挡时可以重复交谈。</summary>
+        internal bool CanTalkToClinicSurvivor => FullTown != null && Outcome == ScavengeOutcome.Exploring &&
+            Survival?.action == SurvivalAction.None && FullTown.Interiors[2].Contains(Player) &&
+            (Player - FullTown.ClinicSurvivor).sqrMagnitude <= 1.8f * 1.8f && ClearRunLine(Player, FullTown.ClinicSurvivor);
+
+        /// <summary>完成原有装卸架搜索后可读记录，重复打开也能查看。</summary>
+        internal bool CanReadWarehouseTransferNote => FullTown != null &&
+            OpenCache == RiverValley.RiverValleyWorldGeometry.TransferNoteCache && SearchRemaining <= 0;
+
         private Rect[] survivalWalls;
         internal void RefreshSurvivalWalls() => survivalWalls = RoomSet.Collision(Survival.rooms, FullTown == null);
 

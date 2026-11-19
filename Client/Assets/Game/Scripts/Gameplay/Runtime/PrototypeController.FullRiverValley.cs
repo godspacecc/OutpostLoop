@@ -86,6 +86,17 @@ namespace OutpostLoop
                 }
             }
             survivalWorldGeometry.Finish();
+            // 暂用项目现有人形和待机动作表现诊所幸存者。
+            var survivor = Instantiate(LoadScavengeHuman(), scavengeRoot, false);
+            survivor.name = "诊所幸存者";
+            survivor.transform.SetPositionAndRotation(SurvivalPosition(survivalWorldGeometry.ClinicSurvivor, 0),
+                Quaternion.LookRotation(Vector3.left));
+            survivor.GetComponentInChildren<Animator>().applyRootMotion = false;
+            // 仅临时区分同一底模的两名角色，不写回共用材质。
+            var survivorTint = new MaterialPropertyBlock();
+            survivorTint.SetColor("_Color", new Color(.27f, .67f, .76f));
+            foreach (var renderer in survivor.GetComponentsInChildren<SkinnedMeshRenderer>())
+                renderer.SetPropertyBlock(survivorTint);
             // 封闭建筑是跨建筑合批的外景；只有可进入房间的墙、屋顶和陈设参与遮挡切除。
         }
 
