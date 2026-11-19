@@ -5,70 +5,10 @@ namespace OutpostLoop
 {
     internal sealed partial class PrototypeOverlayView
     {
-        // 开局与局内窗口只呈现领域状态，实际扣费、任务和保存由系统处理。
-        private Text profileSummary, training, scoutTraining, trainingFeedback;
+        // 局内窗口只呈现领域状态，实际扣费、任务和保存由系统处理。
         private Text cancelReturn, researchStatus, shelterOption, dismantleBarricade;
-        private readonly Text[] mapEntries = new Text[3];
         private GameObject researchRows;
         private readonly Text[] techActions = new Text[ExpeditionState.TechTree.Length];
-
-        private void BuildDeparture(Font font, PrototypeController controller, Color ink, Color mint, Color muted, Color line)
-        {
-            StartText(font, "ExpeditionTitle", "探索出发", 96, 149, 650, 76, 59, ink, FontStyle.Bold);
-            StartText(font, "ExpeditionSubtitle", "活着回归，将资金和科技带回档案", 96, 222, 650, 44, 26, muted);
-            Fill("ProfileRule", 96, 272, 650, 2, line);
-            profileSummary = Label(StartRect("ExpeditionProfile", 96, 282, 650, 85), font, "Label",
-                new Vector2(650, 85), Vector2.zero, 23);
-            profileSummary.alignment = TextAnchor.MiddleLeft;
-
-            for (int index = 0; index < mapEntries.Length; index++)
-                mapEntries[index] = BuildMapEntry(font, controller, (ExpeditionMap)index, 400 + index * 122, mint, muted);
-
-            training = Button(startStage, font, "TrainCommander", "", new Vector2(316, 62), new Vector2(254, -789),
-                new Vector2(0, 1), controller.TrainCommander);
-            scoutTraining = Button(startStage, font, "TrainScout", "", new Vector2(316, 62), new Vector2(588, -789),
-                new Vector2(0, 1), controller.TrainScout);
-            training.fontSize = scoutTraining.fontSize = 21;
-            trainingFeedback = Label(StartRect("TrainingFeedback", 96, 825, 650, 38), font, "Label",
-                new Vector2(650, 38), Vector2.zero, 22);
-
-        }
-
-        private Text BuildMapEntry(Font font, PrototypeController controller, ExpeditionMap map, float y, Color mint, Color muted)
-        {
-            var rules = ExpeditionMapRules.For(map);
-            var label = Button(startStage, font, "Depart" + map, $"{rules.Name} · {rules.Era}  →", new Vector2(650, 48),
-                new Vector2(421, -y), new Vector2(0, 1), () => controller.CrossToWorld(() => controller.Depart(map)));
-            label.fontSize = 25;
-            StartText(font, map + "Basic", $"基础 · {rules.BasicObjective}  +{rules.BasicFunds} 资金",
-                96, y + 25, 650, 32, 23, mint);
-            StartText(font, map + "Survey", $"终极 · {rules.Objective}  +{rules.SurveyFunds} 资金",
-                96, y + 56, 650, 32, 23, muted);
-            StartText(font, map + "Enemy", $"敌袭每 {rules.EnemyInterval} 秒 · 上限 {rules.EnemyCap}",
-                508, y + 56, 238, 32, 19, muted, alignment: TextAnchor.MiddleRight);
-            return label;
-        }
-
-        private void PresentDeparture(PrototypeController controller)
-        {
-            var profile = controller.ExpeditionProfile;
-            SetText(profileSummary, $"局外资金 {profile.Funds}  ·  指挥员生命 {profile.MaxHealth}\n已带回科技 · {ExpeditionState.DescribeTech(profile.Tech)}");
-            for (int index = 0; index < mapEntries.Length; index++)
-            {
-                var map = (ExpeditionMap)index;
-                var rules = ExpeditionMapRules.For(map);
-                bool unlocked = profile.CanEnter(map);
-                SetText(mapEntries[index], $"{rules.Name} · {rules.Era}  {(unlocked ? "→" : "/  " + rules.EntryRequirement)}");
-                SetAffordable(mapEntries[index], unlocked);
-            }
-            SetText(training, profile.Trained ? "体能训练 · 已完成" :
-                $"体能训练 · {ExpeditionProfile.TrainingCost} 资金\n下次出发生命 +20");
-            SetAffordable(training, profile.CanTrain);
-            SetText(scoutTraining, profile.ScoutTrained ? "侦察训练 · 已完成" :
-                $"侦察训练 · {ExpeditionProfile.ScoutTrainingCost} 资金\n下次出发视野 +2 米");
-            SetAffordable(scoutTraining, profile.CanTrainScout);
-            SetText(trainingFeedback, controller.ActionFeedback);
-        }
 
         private void BuildExpeditionModal(Transform panel, Font font, PrototypeController controller)
         {

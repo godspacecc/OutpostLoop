@@ -831,9 +831,14 @@ namespace OutpostLoop.Tests
             Assert.IsNull(GameObject.Find("StartScavengeTown"));
             Assert.IsNull(GameObject.Find("PrimaryAction"), "守城试玩不再是菜单入口");
             Assert.IsNull(GameObject.Find("StartingBalance"));
-            foreach (string name in new[] { "StartScavenge", "DepartWilderness", "DepartIndustrial", "DepartBeacon" })
-                Assert.NotNull(GameObject.Find(name)?.GetComponent<Button>(), name);
+            foreach (string name in new[] { "DepartWilderness", "DepartIndustrial", "DepartBeacon", "TrainCommander", "TrainScout", "ExpeditionProfile" })
+                Assert.IsNull(GameObject.Find(name), name);
+            var trialButtons = GameObject.Find("TrialDestinations").GetComponentsInChildren<Button>();
+            CollectionAssert.AreEquivalent(new[] { "StartScavenge", "CloseTrials" },
+                System.Array.ConvertAll(trialButtons, button => button.name));
+            yield return CaptureSurvivalEvidence("other-trials", 1280, 720, "RemoveExpeditionTrials-20261119");
             Click("CloseTrials");
+            Assert.IsNull(GameObject.Find("TrialDestinations"));
             Click("StartSurvival");
             yield return WaitForCrossing();
             var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
@@ -1292,7 +1297,7 @@ namespace OutpostLoop.Tests
             Click("StartScavenge");
             yield return WaitForCrossing();
             yield return null;
-            var character = GameObject.Find("探索角色");
+            var character = Object.FindObjectOfType<PrototypePlayerVisual>();
             Assert.NotNull(character);
             var controller = Object.FindObjectOfType<PrototypeController>();
             var field = typeof(PrototypeController).GetField("scavengeRun",
@@ -1366,7 +1371,7 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
-        public IEnumerator BootExpeditionButtonsConfirmReturnAndRefreshProfile()
+        public IEnumerator LegacyExpeditionsConfirmReturnAndRefreshProfile()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
@@ -1375,13 +1380,12 @@ namespace OutpostLoop.Tests
             var profile = new ExpeditionProfile(PrototypeExpeditionTests.ProfileDirectory());
             Game.Game.Interface.RegisterUtility(profile);
             yield return null;
-            Click("TrialsEntry");
-            Assert.IsFalse(GameObject.Find("DepartIndustrial").GetComponent<Button>().interactable);
-            Assert.IsFalse(GameObject.Find("TrainCommander").GetComponent<Button>().interactable);
-            Click("DepartIndustrial");
+            Assert.IsFalse(profile.CanEnter(ExpeditionMap.Industrial));
+            Assert.IsFalse(profile.CanTrain);
+            StartLegacyExpedition(controller, ExpeditionMap.Industrial);
             yield return WaitForCrossing();
             Assert.IsNull(controller.World.Expedition);
-            Click("DepartWilderness");
+            StartLegacyExpedition(controller, ExpeditionMap.Wilderness);
             yield return WaitForCrossing();
             var world = controller.World;
             Assert.AreEqual(ExpeditionMap.Wilderness, world.Expedition.Map);
@@ -1407,11 +1411,11 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(25, profile.Funds);
             Click("PrimaryAction");
             yield return WaitForCrossing();
-            Assert.IsTrue(GameObject.Find("DepartWilderness").GetComponent<Button>().interactable);
+            Assert.IsTrue(profile.CanEnter(ExpeditionMap.Wilderness));
             Assert.AreEqual(25, profile.Funds);
-            Assert.IsTrue(GameObject.Find("DepartIndustrial").GetComponent<Button>().interactable);
-            Assert.IsFalse(GameObject.Find("DepartBeacon").GetComponent<Button>().interactable);
-            Click("DepartIndustrial");
+            Assert.IsTrue(profile.CanEnter(ExpeditionMap.Industrial));
+            Assert.IsFalse(profile.CanEnter(ExpeditionMap.Beacon));
+            StartLegacyExpedition(controller, ExpeditionMap.Industrial);
             yield return WaitForCrossing();
             var workshop = controller.World;
             Assert.AreEqual(ExpeditionMap.Industrial, workshop.Expedition.Map);
@@ -1423,8 +1427,8 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(75, profile.Funds);
             Click("PrimaryAction");
             yield return WaitForCrossing();
-            Assert.IsTrue(GameObject.Find("DepartBeacon").GetComponent<Button>().interactable);
-            Click("DepartBeacon");
+            Assert.IsTrue(profile.CanEnter(ExpeditionMap.Beacon));
+            StartLegacyExpedition(controller, ExpeditionMap.Beacon);
             yield return WaitForCrossing();
             var beacon = controller.World;
             Assert.AreEqual(ExpeditionMap.Beacon, beacon.Expedition.Map);
@@ -1433,7 +1437,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(295, profile.Funds);
             Click("PrimaryAction");
             yield return WaitForCrossing();
-            Click("TrainScout");
+            Assert.IsTrue(profile.TrainScout());
             Assert.IsTrue(profile.ScoutTrained);
             Assert.AreEqual(220, profile.Funds);
             yield return new ExitPlayMode();
@@ -1681,7 +1685,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
-            Click("DepartWilderness");
+            StartLegacyExpedition(controller, ExpeditionMap.Wilderness);
             yield return WaitForCrossing();
             StringAssert.Contains("方向键平移镜头", GameObject.Find("ExpeditionGuide").transform.Find("Controls").GetComponent<Text>().text);
             var camera = controller.GetComponentInChildren<Camera>();
@@ -1745,8 +1749,8 @@ namespace OutpostLoop.Tests
             var screen = InputSystem.AddDevice<Touchscreen>();
             try
             {
-                Click("DepartWilderness");
-            yield return WaitForCrossing();
+                StartLegacyExpedition(controller, ExpeditionMap.Wilderness);
+                yield return WaitForCrossing();
                 var controls = GameObject.Find("ExpeditionGuide").transform.Find("Controls").GetComponent<Text>();
                 StringAssert.Contains("两指拖动平移", controls.text);
                 Assert.LessOrEqual(controls.preferredHeight, controls.rectTransform.rect.height, "完整镜头提示应在面板内");
@@ -2151,6 +2155,13 @@ namespace OutpostLoop.Tests
         {
             Assert.AreEqual(PrototypeOverlay.Start, controller.Overlay);
             controller.CrossToWorld(controller.ActOnModal);
+        }
+
+        /// <summary>直接启动历史远征，供局内流程和共享镜头回归使用。</summary>
+        private static void StartLegacyExpedition(PrototypeController controller, ExpeditionMap map)
+        {
+            Assert.AreEqual(PrototypeOverlay.Start, controller.Overlay);
+            controller.CrossToWorld(() => controller.Depart(map));
         }
     }
 }

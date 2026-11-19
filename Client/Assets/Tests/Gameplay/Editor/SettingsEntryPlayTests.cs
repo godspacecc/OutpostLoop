@@ -20,7 +20,8 @@ namespace OutpostLoop.Tests
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             for (int frame = 0; frame < 600 && Object.FindObjectOfType<PrototypeController>() == null; frame++) yield return null;
-            Assert.NotNull(Object.FindObjectOfType<PrototypeController>(), "Boot 未进入 Main");
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            Assert.NotNull(controller, "Boot 未进入 Main");
             for (int frame = 0; frame < 10; frame++) yield return null;
             Assert.IsTrue(FoundationRuntime.IsInitialized);
             var architecture = Game.Game.Interface;
@@ -39,12 +40,13 @@ namespace OutpostLoop.Tests
             try
             {
                 GameObject.Find("TrialsEntry").GetComponent<Button>().onClick.Invoke();
+                var remainingTrial = GameObject.Find("StartScavenge")?.GetComponent<Button>();
+                Assert.NotNull(remainingTrial);
                 GameObject.Find("SettingsEntry").GetComponent<Button>().onClick.Invoke();
                 var ctrl = UIHelper.GetUICtrl<PrototypeSettingsCtrl>();
                 Assert.IsTrue(ctrl.IsShow());
-                GameObject.Find("DepartWilderness").GetComponent<Button>().onClick.Invoke();
-                float deadline = Time.realtimeSinceStartup + 15;
-                while (Object.FindObjectOfType<PrototypeController>().IsCrossing && Time.realtimeSinceStartup < deadline) yield return null;
+                remainingTrial.onClick.Invoke();
+                Assert.IsFalse(controller.IsCrossing);
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 architecture.GetModel<LocalizationModel>().SetLanguageCode("en");
                 Assert.AreEqual("Settings", Loc.T("SettingsTitle"));
@@ -52,10 +54,9 @@ namespace OutpostLoop.Tests
                 ctrl.Hide();
                 Assert.IsFalse(architecture.GetSystem<DisplayPreviewTransaction>().IsActive);
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
-                GameObject.Find("DepartWilderness").GetComponent<Button>().onClick.Invoke();
-                deadline = Time.realtimeSinceStartup + 15;
-                while (Object.FindObjectOfType<PrototypeController>().IsCrossing && Time.realtimeSinceStartup < deadline) yield return null;
-                Assert.AreEqual(ExpeditionMap.Wilderness, architecture.GetModel<PrototypeModel>().World.Expedition.Map);
+                controller.CrossToWorld(controller.ActOnModal);
+                float deadline = Time.realtimeSinceStartup + 15;
+                while (controller.IsCrossing && Time.realtimeSinceStartup < deadline) yield return null;
                 Assert.IsFalse(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 UIHelper.ShowUI<PrototypeSettingsCtrl>();
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);

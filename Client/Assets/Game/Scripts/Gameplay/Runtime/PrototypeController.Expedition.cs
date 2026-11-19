@@ -23,20 +23,6 @@ namespace OutpostLoop
             RefreshOverlay();
         }
 
-        internal void TrainCommander()
-        {
-            if (!initialized || UtilityWindowOpen || Overlay != PrototypeOverlay.Start) return;
-            ShowFeedback(ExpeditionProfile.Train() ? "体能训练已完成" : "体能训练未保存");
-            RefreshOverlay();
-        }
-
-        internal void TrainScout()
-        {
-            if (!initialized || UtilityWindowOpen || Overlay != PrototypeOverlay.Start) return;
-            ShowFeedback(ExpeditionProfile.TrainScout() ? "侦察训练已完成" : "侦察训练未保存");
-            RefreshOverlay();
-        }
-
         internal void DismissExpeditionIntro()
         {
             ExpeditionIntroDismissed = true;

@@ -382,7 +382,6 @@ namespace OutpostLoop
                 startUpdateEntry.interactable = snapshot.Status != ResourceUpdateStatus.Checking;
                 SetText(startUpdateVersion, PrototypeUpdateText.CurrentVersion(snapshot));
                 SetText(startUpdateStatus, PrototypeUpdateText.Status(snapshot));
-                PresentDeparture(controller);
                 // 以较窄边为准缩放整幅构图，保住宽屏和较窄窗口中的标题及按钮。
                 var viewport = ((RectTransform)transform).rect.size;
                 var safe = Screen.safeArea.size;
@@ -550,7 +549,6 @@ namespace OutpostLoop
             var ink = new Color32(230, 237, 244, 255);
             var silver = new Color32(186, 207, 224, 255);
             var muted = new Color32(158, 178, 198, 255);
-            var line = new Color32(45, 61, 79, 255);
             startScreen = new GameObject("StartScreenBackground", typeof(RectTransform));
             startScreen.transform.SetParent(transform, false);
             var backgroundRect = (RectTransform)startScreen.transform;
@@ -588,18 +586,19 @@ namespace OutpostLoop
             startStage = menuStage;
             journeyRecordPanel.gameObject.SetActive(false);
 
-            // 独立次级窗口保存已有试玩按钮与进度字段，避免改变已验证的玩法入口。
+            // 剩余的独立试玩集中在二级页，和河谷镇开始／续玩分开。
             var mainStage = startStage;
             var trials = Rect("TrialDestinations", mainStage, new Vector2(.5f,.5f), new Vector2(1920,1080), Vector2.zero);
             trials.gameObject.AddComponent<Image>().color = new Color32(9, 17, 28, 248);
             startStage = trials;
-            BuildDeparture(font, controller, ink, silver, muted, line);
-            StartText(font, "TrialsTitle", "其他试玩", 1000, 200, 680, 64, 42, ink);
-            StartText(font, "TrialsNote", "已有独立试玩入口", 1000, 280, 680, 60, 24, muted);
-            Button(trials, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(600, 70),
-                new Vector2(1320, -530), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavenge));
-            Button(trials, font, "CloseTrials", "返回空间", new Vector2(300, 60),
-                new Vector2(1600,-930), new Vector2(0,1), () => trials.gameObject.SetActive(false));
+            StartText(font, "TrialsTitle", "其他试玩", 660, 310, 600, 64, 42, ink, alignment: TextAnchor.MiddleCenter);
+            var startTrial = Button(trials, font, "StartScavenge", "异界探索 · 撤离试玩", new Vector2(540, 70),
+                new Vector2(960, -462), new Vector2(0, 1), () => controller.CrossToWorld(controller.StartScavenge));
+            StyleCosmicButton(startTrial, 30);
+            var closeTrials = Button(trials, font, "CloseTrials", "返回", new Vector2(240, 60),
+                new Vector2(960, -574), new Vector2(0, 1), () => trials.gameObject.SetActive(false));
+            StyleCosmicButton(closeTrials, 24);
+            startTrial.alignment = closeTrials.alignment = TextAnchor.MiddleCenter;
             startStage = mainStage;
             var trialEntry = Button(mainStage, font, "TrialsEntry", "其他试玩", new Vector2(220,50),
                 new Vector2(1715,-1008), new Vector2(0,1), () => trials.gameObject.SetActive(true));
@@ -665,13 +664,6 @@ namespace OutpostLoop
         // 开始页按 1920×1080 的左上角坐标布置，整页随安全区缩放。
         private RectTransform StartRect(string name, float x, float y, float width, float height) =>
             Rect(name, startStage, new Vector2(0, 1), new Vector2(width, height), new Vector2(x + width / 2, -y - height / 2));
-
-        private void Fill(string name, float x, float y, float width, float height, Color color)
-        {
-            var image = StartRect(name, x, y, width, height).gameObject.AddComponent<Image>();
-            image.color = color;
-            image.raycastTarget = false;
-        }
 
         private void StartText(Font font, string name, string text, float x, float y, float width, float height, int size,
             Color color, FontStyle style = FontStyle.Normal, TextAnchor alignment = TextAnchor.MiddleLeft)
