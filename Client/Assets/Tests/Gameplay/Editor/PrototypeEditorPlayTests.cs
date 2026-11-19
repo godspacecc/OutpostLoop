@@ -35,7 +35,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyPortalPlaysAfterSuccessfulExtraction()
         {
-            const string batch = "ArchanorPortal-20261119";
+            const string batch = "ArchanorPortalHeight-20261119";
             const string path = "RiverValleyPortal/PortalBlue";
             foreach (var phase in new[] { "Idle", "Open", "Close" })
             {
@@ -68,8 +68,11 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
             var idle = GameObject.Find("撤离点微光");
             Assert.NotNull(idle);
+            var exitMarker = (Transform)type.GetField("scavengeExit", flags).GetValue(controller);
             Assert.That(idle.transform.position.x, Is.EqualTo(run.ExitPoint.x).Within(.01f));
             Assert.That(idle.transform.position.z, Is.EqualTo(run.ExitPoint.y).Within(.01f));
+            Vector3 portalCenter = idle.transform.position;
+            Assert.That(portalCenter.y - exitMarker.position.y, Is.GreaterThan(2f));
             Assert.IsNull(GameObject.Find("撤离传送门开启"));
             yield return new WaitForSecondsRealtime(.4f);
             yield return CaptureSurvivalEvidence("idle", 1280, 720, batch);
@@ -79,16 +82,19 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(ScavengeOutcome.Extracted, run.Outcome);
             yield return null;
             yield return null;
-            Assert.NotNull(GameObject.Find("撤离传送门开启"));
+            var opening = GameObject.Find("撤离传送门开启");
+            Assert.NotNull(opening);
+            Assert.That(Vector3.Distance(opening.transform.position, portalCenter), Is.LessThan(.01f));
             Assert.IsNull(GameObject.Find("撤离点微光"));
-            var exitMarker = (Transform)type.GetField("scavengeExit", flags).GetValue(controller);
             Assert.IsFalse(exitMarker.gameObject.activeSelf);
             Assert.IsTrue(controller.JourneyProgress.completedFirst);
-            yield return new WaitForSecondsRealtime(.25f);
+            yield return new WaitForSecondsRealtime(.45f);
             yield return CaptureSurvivalEvidence("opening", 1280, 720, batch);
             float deadline = Time.realtimeSinceStartup + 3f;
-            while (!GameObject.Find("撤离传送门关闭") && Time.realtimeSinceStartup < deadline) yield return null;
-            Assert.NotNull(GameObject.Find("撤离传送门关闭"));
+            GameObject closing;
+            while (!(closing = GameObject.Find("撤离传送门关闭")) && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.NotNull(closing);
+            Assert.That(Vector3.Distance(closing.transform.position, portalCenter), Is.LessThan(.01f));
             yield return CaptureSurvivalEvidence("closing", 1280, 720, batch);
             while (GameObject.Find("撤离传送门关闭") && Time.realtimeSinceStartup < deadline) yield return null;
             Assert.IsNull(GameObject.Find("撤离传送门关闭"));

@@ -7,6 +7,8 @@ namespace OutpostLoop
         // 蓝色传送门原件为可选本机资源，缺少任一阶段时沿用现有撤离点表现。
         private const string RiverValleyPortalPath = "RiverValleyPortal/PortalBlue";
         private const float RiverValleyOpenPortalScale = 1.45f;
+        // 按展开后可见椭圆的半高抬起，微光与开合特效共用同一个中心。
+        private const float RiverValleyPortalCenterHeight = 2.25f;
         private GameObject riverValleyPortalIdle, riverValleyPortalOpen, riverValleyPortalClose;
         private GameObject riverValleyPortalInstance;
         private int riverValleyPortalStage;
@@ -66,7 +68,7 @@ namespace OutpostLoop
             riverValleyPortalInstance = Instantiate(prefab, scavengeRoot, false);
             riverValleyPortalInstance.name = label;
             var effect = riverValleyPortalInstance.transform;
-            effect.position = SurvivalPosition(scavengeRun.ExitPoint, .25f);
+            effect.position = SurvivalPosition(scavengeRun.ExitPoint, RiverValleyPortalCenterHeight);
             effect.localScale *= scale;
             foreach (var particle in riverValleyPortalInstance.GetComponentsInChildren<ParticleSystem>())
             {
