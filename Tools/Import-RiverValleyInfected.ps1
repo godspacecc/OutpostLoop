@@ -15,7 +15,7 @@ if ((Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash -ne $expected) {
     throw '包装哈希与已验证的 Zombie Draft 1.2 不一致。'
 }
 
-$root = Join-Path $PSScriptRoot '../Client/Assets/Art/RiverValleyInfected'
+$root = Join-Path $PSScriptRoot '../Client/Assets/Game/Art/RiverValleyInfected'
 $assets = Join-Path $root 'Resources/RiverValleyInfected'
 $staging = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ("outpost-zombie-" + [guid]::NewGuid()))).FullName
 try {
