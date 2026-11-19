@@ -47,21 +47,7 @@ namespace Game.Tests.Flow
                 var viewData = new SerializedObject(view);
                 var progress = (GameObject)viewData.FindProperty("_progressArea").objectReferenceValue;
                 var stats = (GameObject)viewData.FindProperty("_downloadStatsArea").objectReferenceValue;
-                var progressText = (Text)viewData.FindProperty("_progressText").objectReferenceValue;
-                Assert.IsTrue(progressText.transform.IsChildOf(progress.transform));
-                view.SetStartupStep(2);
-                view.RenderBusy("正在加载游戏代码……");
-                Assert.IsTrue(progress.activeSelf);
-                Assert.IsFalse(stats.activeSelf);
-                Assert.AreEqual("阶段 2/4", progressText.text);
-                view.RenderDownloading("正在下载");
-                view.SetProgress(.5f);
-                Assert.AreEqual("50%", progressText.text);
-                Assert.IsTrue(stats.activeSelf);
-                view.SetStartupStep(3);
-                view.RenderNormal("正在进入游戏……");
-                Assert.AreEqual("阶段 3/4", progressText.text);
-                Assert.IsFalse(stats.activeSelf);
+                Assert.IsTrue(((Text)viewData.FindProperty("_progressText").objectReferenceValue).transform.IsChildOf(progress.transform));
                 foreach(var field in new[]{"_sizeText","_fileCountText","_speedText"})
                     Assert.IsTrue(((Text)viewData.FindProperty(field).objectReferenceValue).transform.IsChildOf(stats.transform),field+" 必须随统计区域显隐");
                 var blockers = canvas.GetComponentsInChildren<Image>(true).Where(image =>

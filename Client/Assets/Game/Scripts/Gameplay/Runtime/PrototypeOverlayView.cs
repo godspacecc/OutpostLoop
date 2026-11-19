@@ -565,9 +565,9 @@ namespace OutpostLoop
             StartText(font, "Brand", "O U T P O S T   L O O P", 132, 210, 900, 84, 48, ink);
             StartText(font, "SpaceCaption", "星海中的残存空间", 138, 304, 600, 40, 22, muted);
             CosmicMenuButton(font, "StartSurvival", "开始游戏", 435,
-                () => controller.CrossToWorld(controller.StartSurvival));
+                () => controller.CrossToSurvival());
             CosmicMenuButton(font, "ContinueSurvival", "继续游戏", 435,
-                () => controller.CrossToWorld(controller.ContinueSurvival, resume: true));
+                () => controller.CrossToSurvival(resume: true));
             var restartConfirmation = BuildRestartConfirmation(font, controller);
             CosmicMenuButton(font, "RestartSurvival", "放弃并重新开始", 521,
                 () => { restartConfirmation.SetAsLastSibling(); restartConfirmation.gameObject.SetActive(true); });

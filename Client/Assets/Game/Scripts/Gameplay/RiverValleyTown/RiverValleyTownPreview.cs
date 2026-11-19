@@ -16,6 +16,8 @@ namespace OutpostLoop.RiverValley
         private bool gameplayScenery;
         private Rect? reservedArea;
         private bool fullSurvivalWorld;
+        // 整图从行动入口分段构建，独立预览仍由 Awake 同步生成。
+        private bool deferBuild;
         private bool useCityArt = true;
         private Building[] openBuildings;
         internal RiverValleyWorldGeometry WorldGeometry { get; private set; }
@@ -114,6 +116,14 @@ namespace OutpostLoop.RiverValley
 
         private void Awake()
         {
+            if (deferBuild) return;
+            foreach (var step in BuildStages()) { }
+        }
+
+        /// <summary>执行外景构建顺序，在真实的工作段之间上报进度。</summary>
+        internal IEnumerable<(float value, string label)> BuildStages()
+        {
+            yield return (.18f, "正在解析河谷镇布局");
             layout = JsonUtility.FromJson<Layout>(layoutAsset.text);
             if (fullSurvivalWorld) PrepareSurvivalWorld();
             cityArt = useCityArt && (!gameplayScenery || fullSurvivalWorld) ? previewCityArt : null;
@@ -129,11 +139,15 @@ namespace OutpostLoop.RiverValley
                     WorldGeometry.Interiors[i] = new Rect(center - RiverValleyWorldGeometry.Anchor - size / 2,size);
                     footprints.Add(new Footprint(center,size.magnitude / 2));
                 }
+            yield return (.28f, "正在生成地形");
             BuildTerrain();
             scenery = new RiverValleyMesh(Section("街区与设施"), surface, reservedArea);
+            yield return (.42f, "正在生成道路与桥梁");
             BuildRoutes();
+            yield return (.56f, "正在生成建筑外景");
             BuildBuildings();
             BuildSites();
+            yield return (.68f, "正在布置植被");
             BuildLandscape();
             if (fullSurvivalWorld)
             {
@@ -142,6 +156,7 @@ namespace OutpostLoop.RiverValley
                 foreach (var edge in roads) WorldGeometry.Roads.Add(new RiverValleyWorldGeometry.Channel(edge.A - RiverValleyWorldGeometry.Anchor, edge.B - RiverValleyWorldGeometry.Anchor, edge.Width));
                 WorldGeometry.Finish();
             }
+            yield return (.78f, "正在合批街景");
             if (cityArt != null) BuildCityDressing();
             cityEnvironment?.Finish();
             scenery.Finish();
@@ -335,12 +350,13 @@ namespace OutpostLoop.RiverValley
 
         /// <summary>整图行动复用原布局；六处重点建筑改由可进入室内模块表达。</summary>
         internal static RiverValleyTownPreview CreateWorld(Transform parent, TextAsset data, Shader shader, bool useCityArt = true,
-            RiverValleyCityArtCatalog catalog = null)
+            RiverValleyCityArtCatalog catalog = null, bool deferBuild = false)
         {
             var root = new GameObject("河谷镇整图");
             root.SetActive(false);
             var preview = root.AddComponent<RiverValleyTownPreview>();
             preview.gameplayScenery = preview.fullSurvivalWorld = true;
+            preview.deferBuild = deferBuild;
             preview.useCityArt = useCityArt;
             preview.previewCityArt = catalog;
             preview.layoutAsset = data; preview.surfaceShader = shader;

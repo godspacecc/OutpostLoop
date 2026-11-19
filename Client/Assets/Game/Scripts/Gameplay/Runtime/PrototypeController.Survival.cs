@@ -59,24 +59,24 @@ namespace OutpostLoop
                 save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= OutpostLoop.RiverValley.RiverValleyShopInterior.Version ? save : null;
         }
 
-        internal void StartSurvival() => EnterSurvival(false);
-        internal void ContinueSurvival() => EnterSurvival(true);
+        /// <summary>菜单新开与续玩都逐帧展示同一套地图加载步骤。</summary>
+        internal void CrossToSurvival(bool resume = false) => BeginCrossing(EnterSurvival(resume), resume);
 
         /// <summary>继续档与新行动从相同的地图和角色入口进入。</summary>
-        private void EnterSurvival(bool resume)
+        private IEnumerable<(float value, string label)> EnterSurvival(bool resume)
         {
-            if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return;
+            if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) yield break;
             survivalResume = resume ? ReadSurvivalSave() : null;
             if (resume && survivalResume == null)
             {
                 survivalHasSave = false;
                 RefreshOverlay();
-                return;
+                yield break;
             }
             survivalConfirmNew = !resume && HasSurvivalSave;
             survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? OutpostLoop.RiverValley.RiverValleyShopInterior.Version;
             survivalMode = true;
-            StartScavenge(true);
+            foreach (var step in LoadScavenge(true)) yield return step;
         }
 
         private bool WriteSurvivalSave(bool available)
@@ -254,8 +254,11 @@ namespace OutpostLoop
         private void ReleaseSurvivalPresentation()
         {
             journeyRecordedRun = null;
-            if (survivalSun != null) survivalSun.intensity = survivalSunBefore;
-            RenderSettings.ambientLight = survivalAmbientBefore;
+            if (survivalTorch)
+            {
+                if (survivalSun != null) survivalSun.intensity = survivalSunBefore;
+                RenderSettings.ambientLight = survivalAmbientBefore;
+            }
             Release(survivalAlarmClip);
             Release(survivalDoorImpact);
             survivalAlarmClip = null;

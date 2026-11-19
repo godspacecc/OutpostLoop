@@ -41,12 +41,17 @@ namespace OutpostLoop
 
         private void StartScavenge(bool town)
         {
-            if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) return;
+            foreach (var step in LoadScavenge(town)) { }
+        }
+
+        private IEnumerable<(float value, string label)> LoadScavenge(bool town)
+        {
+            if (!initialized || scavengeRoot != null || Overlay != PrototypeOverlay.Start || UtilityWindowOpen) yield break;
             scavengeTown = town;
-            CreateScavengeMap();
             previousCameraColor = gameCamera.backgroundColor;
             previousCameraFieldOfView = gameCamera.fieldOfView;
             previousScavengeFarClip = gameCamera.farClipPlane;
+            foreach (var step in CreateScavengeMap()) yield return step;
             gameCamera.backgroundColor = new Color(.095f, .122f, .128f);
             gameCamera.orthographic = false;
             gameCamera.fieldOfView = ScavengeCameraFieldOfView;
@@ -248,7 +253,7 @@ namespace OutpostLoop
         }
 
         /// <summary>用临时几何体表达开阔路、仓门、矮墙和侧门。</summary>
-        private void CreateScavengeMap()
+        private IEnumerable<(float value, string label)> CreateScavengeMap()
         {
             scavengeRoot = new GameObject("ScavengeTrial").transform;
             scavengeRoot.SetParent(transform, false);
@@ -262,8 +267,16 @@ namespace OutpostLoop
             var canvas = ScavengeMaterial(new Color(.91f, .87f, .67f));
             var pad = ScavengeMaterial(new Color(.31f, .42f, .36f));
 
-            if (survivalMode && survivalLayoutVersion >= 1) CreateFullRiverValleyMap(soil, concrete, steel, pad);
-            else if (scavengeTown) CreateTownGeography(soil, road, concrete, steel, pad);
+            yield return (.10f, "正在读取地图资源");
+            if (survivalMode && survivalLayoutVersion >= 1)
+            {
+                foreach (var step in CreateFullRiverValleyMap(concrete, steel, pad)) yield return step;
+            }
+            else if (scavengeTown)
+            {
+                yield return (.35f, "正在生成街区");
+                CreateTownGeography(soil, road, concrete, steel, pad);
+            }
             else
             {
                 var outskirts = ScavengeMaterial(new Color(.17f, .21f, .21f));
@@ -287,6 +300,7 @@ namespace OutpostLoop
                 ScavengeBox("仓门", new Vector3(.84f, .06f, -3.1f), new Vector3(.85f, .07f, 2.65f), gold);
                 ScavengeBox("侧门", new Vector3(5.35f, .06f, 7), new Vector3(2.45f, .07f, .8f), gold);
             }
+            yield return (.94f, "正在布置角色和搜点");
             var cachePoints = survivalWorldGeometry?.Caches ?? (scavengeTown ? ScavengeTown.Caches : ScavengeLayout.Caches);
             var exitPoint = survivalWorldGeometry?.Exit ?? (scavengeTown ? ScavengeTown.Exit : ScavengeLayout.Exit);
             scavengeCrates = new Transform[cachePoints.Length];

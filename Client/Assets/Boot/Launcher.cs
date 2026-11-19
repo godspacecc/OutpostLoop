@@ -246,7 +246,6 @@ namespace Boot
                 RecordStartupStage("开始准备资源");
                 _currentFailure = null;
                 _updateView.gameObject.SetActive(true);
-                _updateView.SetStartupStep(1);
                 _updateView.RenderBusy("正在初始化资源...");
 
                 _resourceBoot.Configure(_updateView);
@@ -282,7 +281,6 @@ namespace Boot
                 }
 
                 RecordStartupStage("资源准备完成");
-                _updateView.SetStartupStep(2);
                 _updateView.RenderBusy("正在加载游戏代码……");
                 RecordStartupStage("开始加载游戏代码");
                 var package = ResolveOutpostLoop();
@@ -300,7 +298,6 @@ namespace Boot
 
                 RecordStartupStage("游戏代码加载完成");
                 _resourceBoot.CommitSuccessfulHostVersion();
-                _updateView.SetStartupStep(3);
                 _updateView.RenderNormal("正在进入游戏……");
 
                 RecordStartupStage("开始加载主场景");
@@ -340,7 +337,6 @@ namespace Boot
             _terminalState = StartupTerminalState.Running;
             RecordStartupStage("重试主场景");
             _currentFailure = null;
-            _updateView.SetStartupStep(3);
             _updateView.RenderBusy("正在重新进入游戏……");
 
             try
@@ -547,7 +543,6 @@ namespace Boot
             switch (stage)
             {
                 case BootMainStartupStage.InitializingGame:
-                    _updateView.SetStartupStep(4);
                     _updateView.RenderNormal("正在初始化游戏……");
                     break;
                 case BootMainStartupStage.LoadingGameConfig:

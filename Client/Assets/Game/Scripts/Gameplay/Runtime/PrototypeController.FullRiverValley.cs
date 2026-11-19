@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using OutpostLoop.RiverValley;
 
@@ -32,16 +33,19 @@ namespace OutpostLoop
             if (!CloseSurvivalSave()) return;
             if (survivalLayoutVersion >= RiverValleyShopInterior.Version) { RestartScavenge(); return; }
             LeaveScavenge();
-            CrossToWorld(StartSurvival);
+            CrossToSurvival();
         }
 
         /// <summary>用实际整图替代嵌入小街区；六处室内与模型、领域墙体共用矩形。</summary>
-        private void CreateFullRiverValleyMap(Material soil, Material floor, Material walls, Material roof)
+        private IEnumerable<(float value, string label)> CreateFullRiverValleyMap(Material floor, Material walls, Material roof)
         {
             var content = Game.ResourceLoader.LoadAsset<RiverValleyGameplayContent>(Game.GameplayArtAddress.RiverValley);
             if (content?.layout == null || content.surface == null) throw new System.InvalidOperationException("河谷镇整图引用缺失。");
             survivalCityArt = RiverValleyCityArtCatalog.Load();
-            var town = RiverValleyTownPreview.CreateWorld(scavengeRoot, content.layout, content.surface, catalog: survivalCityArt);
+            var town = RiverValleyTownPreview.CreateWorld(scavengeRoot, content.layout, content.surface,
+                catalog: survivalCityArt, deferBuild: true);
+            foreach (var step in town.BuildStages()) yield return step;
+            yield return (.86f, "正在布置可进入的建筑");
             survivalWorldGeometry = town.WorldGeometry;
             if(survivalLayoutVersion>=RiverValleyShopInterior.Version)survivalWorldGeometry.EnableShopInterior();
             currentSurvivalRooms = new SurvivalRoomSet(new[] { survivalWorldGeometry.Interiors[0], survivalWorldGeometry.Interiors[1] });

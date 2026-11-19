@@ -340,9 +340,28 @@ namespace OutpostLoop.Tests
             type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
             type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
             Click("StartSurvival");
-            var loading = GameObject.Find("CrossingStatus").GetComponent<Text>();
-            StringAssert.Contains("阶段 1/3", loading.text);
-            yield return WaitForCrossing();
+            var loading = GameObject.Find("CrossingProgress").GetComponent<Text>();
+            var loadingStatus = GameObject.Find("CrossingStatus").GetComponent<Text>();
+            Assert.AreEqual("0%", loading.text);
+            var progress = new HashSet<int>();
+            var labels = new HashSet<string>();
+            int previousProgress = 0;
+            float deadline = Time.realtimeSinceStartup + 15;
+            while (controller.IsCrossing && Time.realtimeSinceStartup < deadline)
+            {
+                int current = int.Parse(loading.text.TrimEnd('%'));
+                Assert.GreaterOrEqual(current, previousProgress);
+                previousProgress = current;
+                progress.Add(current);
+                labels.Add(loadingStatus.text);
+                yield return null;
+            }
+            Assert.IsFalse(controller.IsCrossing);
+            Assert.IsTrue(progress.Contains(100), "只有地图和会话就绪后才能显示满格");
+            Assert.IsTrue(labels.Contains("正在生成地形"));
+            Assert.IsTrue(labels.Contains("正在生成建筑外景"));
+            Assert.IsTrue(labels.Contains("正在布置角色和搜点"));
+            Assert.GreaterOrEqual(progress.Count, 8, "实际地图构建应显示多次可见进度");
             var field = type.GetField("scavengeRun", flags);
             var run = (ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
