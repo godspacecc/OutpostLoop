@@ -28,6 +28,7 @@ namespace OutpostLoop
             leftHand=animator.GetBoneTransform(HumanBodyBones.LeftHand);
             pistol=transform.Find("手枪模型");pistol.SetParent(hand,false);
             var bar=new GameObject("撬棍挂点");crowbar=bar.transform;crowbar.SetParent(hand,false);
+            CalibrateCrowbarGrip();
             Part("撬杆",crowbar,PrimitiveType.Cylinder,new Vector3(0,0,.25f),new Vector3(.025f,.3f,.025f),Quaternion.Euler(90,0,0),new Color(.22f,.24f,.25f));
             Part("弯钩",crowbar,PrimitiveType.Cylinder,new Vector3(0,.04f,.54f),new Vector3(.025f,.065f,.025f),Quaternion.Euler(30,0,0),new Color(.25f,.27f,.28f));
             muzzle=Part("枪口闪光",pistol,PrimitiveType.Sphere,Vector3.zero,Vector3.one*.09f,Quaternion.identity,new Color(1,.7f,.15f));
@@ -81,15 +82,23 @@ namespace OutpostLoop
                 if(mesh.bounds.size.x>mesh.bounds.size.z)pistol.rotation*=Quaternion.Euler(0,90,0);
                 muzzle.position=palm+transform.forward*.27f;
             }
-            if(melee)
-            {
-                crowbar.position=hand.position+(hand.position-rightElbow.position).normalized*.07f;
-                var direction=Vector3.Cross(hand.position-rightElbow.position,transform.right);
-                if(direction.sqrMagnitude<.001f)direction=Vector3.up;
-                crowbar.rotation=Quaternion.LookRotation(direction.normalized,transform.right);
-            }
             muzzle.gameObject.SetActive(gun && recoil>.10f);
             impact.gameObject.SetActive(attackRemaining>(gun ? .05f : .65f) && run.SurvivalHitPatrol>=0);
+        }
+
+        /// <summary>按绑定姿态的指根校准固定握点：手柄穿过掌心，长杆朝食指一侧延伸。</summary>
+        private void CalibrateCrowbarGrip()
+        {
+            var index=animator.GetBoneTransform(HumanBodyBones.RightIndexProximal);
+            var little=animator.GetBoneTransform(HumanBodyBones.RightLittleProximal);
+            if(index==null || little==null)
+                throw new InvalidOperationException("当前角色缺少手指骨骼，不能沿用该撬棍握点配置");
+            // 使用手骨局部空间保存一次，随后完全继承手腕旋转，避免世界方向叉乘造成翻转。
+            var indexLocal=hand.InverseTransformPoint(index.position);
+            var littleLocal=hand.InverseTransformPoint(little.position);
+            var knuckles=(indexLocal+littleLocal)*.5f;
+            crowbar.localPosition=knuckles*.8f;
+            crowbar.localRotation=Quaternion.LookRotation((indexLocal-littleLocal).normalized,knuckles.normalized);
         }
 
         /// <summary>双骨解析约束使手掌稳定到握点，肘向下弯曲，不移动角色根节点。</summary>

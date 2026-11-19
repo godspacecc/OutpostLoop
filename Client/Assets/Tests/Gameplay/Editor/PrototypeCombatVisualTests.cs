@@ -35,7 +35,7 @@ namespace OutpostLoop.Tests
             for (int i=0;i<600 && owner==null;i++) { owner=Object.FindObjectOfType<PrototypeController>();yield return null; }
             Assert.NotNull(owner);
             for(int i=0;i<10;i++)yield return null;
-            string output=Path.GetFullPath(Path.Combine(Application.dataPath,"../../Backup/Artifacts/PlayerCombat-20261119"));
+            string output=Path.GetFullPath(Path.Combine(Application.dataPath,"../../Backup/Artifacts/MeleeGripFix-20261119"));
             var type=typeof(PrototypeController);
             type.GetField("survivalStore",Hidden).SetValue(owner,new JsonFileStore<SurvivalSave>(Path.Combine(output,"Save-"+System.Guid.NewGuid().ToString("N"))));
             type.GetField("survivalSaveChecked",Hidden).SetValue(owner,false);
@@ -64,7 +64,14 @@ namespace OutpostLoop.Tests
             yield return null;yield return null;
             Assert.That(animator.GetLayerWeight(1),Is.GreaterThan(.9f));
             var right=animator.GetBoneTransform(HumanBodyBones.RightHand);
-            for(int i=0;i<12;i++) {yield return new WaitForSecondsRealtime(.065f);CloseCapture(owner,actor,Path.Combine(output,"melee-"+i.ToString("D2")+".png"));}
+            var grip=actor.GetComponentsInChildren<Transform>(true).First(t=>t.name=="撬棍挂点");
+            Assert.AreSame(right,grip.parent);
+            var gripPosition=grip.localPosition;var gripRotation=grip.localRotation;
+            File.WriteAllText(Path.Combine(output,"grip.txt"),"hand-local position="+gripPosition+" rotation="+gripRotation.eulerAngles);
+
+            for(int i=0;i<12;i++) {yield return new WaitForSecondsRealtime(.065f);CloseCapture(owner,actor,Path.Combine(output,"melee-"+i.ToString("D2")+".png"));
+                Assert.That(Vector3.Distance(grip.localPosition,gripPosition),Is.LessThan(.00001f));
+                Assert.That(Quaternion.Angle(grip.localRotation,gripRotation),Is.LessThan(.001f));}
             run.Survival.weapon=new SurvivalStack(SurvivalItem.Pistol){rounds=2};
             run.Survival.attackCooldown=0;
             yield return null;yield return null;
