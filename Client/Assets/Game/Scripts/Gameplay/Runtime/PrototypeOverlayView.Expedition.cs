@@ -6,7 +6,7 @@ namespace OutpostLoop
     internal sealed partial class PrototypeOverlayView
     {
         // 开局与局内窗口只呈现领域状态，实际扣费、任务和保存由系统处理。
-        private Text profileSummary, legacyBalance, training, scoutTraining, trainingFeedback;
+        private Text profileSummary, training, scoutTraining, trainingFeedback;
         private Text cancelReturn, researchStatus, shelterOption, dismantleBarricade;
         private readonly Text[] mapEntries = new Text[3];
         private GameObject researchRows;
@@ -32,13 +32,6 @@ namespace OutpostLoop
             trainingFeedback = Label(StartRect("TrainingFeedback", 96, 825, 650, 38), font, "Label",
                 new Vector2(650, 38), Vector2.zero, 22);
 
-            Fill("LegacyRule", 96, 874, 650, 2, line);
-            var legacy = Button(startStage, font, "PrimaryAction", Game.Loc.T("PreviewText12"), new Vector2(260, 60),
-                new Vector2(226, -925), new Vector2(0, 1), () => controller.CrossToWorld(controller.ActOnModal));
-            legacy.fontSize = 25;
-            legacyBalance = Label(StartRect("StartingBalance", 380, 890, 366, 70), font, "Label",
-                new Vector2(366, 70), Vector2.zero, 21);
-            legacyBalance.alignment = TextAnchor.MiddleLeft;
         }
 
         private Text BuildMapEntry(Font font, PrototypeController controller, ExpeditionMap map, float y, Color mint, Color muted)
@@ -75,7 +68,6 @@ namespace OutpostLoop
                 $"侦察训练 · {ExpeditionProfile.ScoutTrainingCost} 资金\n下次出发视野 +2 米");
             SetAffordable(scoutTraining, profile.CanTrainScout);
             SetText(trainingFeedback, controller.ActionFeedback);
-            SetText(legacyBalance, Game.Loc.T("StartingFundsTier", controller.World.Run.Funds) + "\n" + TierProgress(controller));
         }
 
         private void BuildExpeditionModal(Transform panel, Font font, PrototypeController controller)

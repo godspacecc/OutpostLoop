@@ -829,7 +829,9 @@ namespace OutpostLoop.Tests
 
             Click("TrialsEntry");
             Assert.IsNull(GameObject.Find("StartScavengeTown"));
-            foreach (string name in new[] { "StartScavenge", "DepartWilderness", "DepartIndustrial", "DepartBeacon", "PrimaryAction" })
+            Assert.IsNull(GameObject.Find("PrimaryAction"), "守城试玩不再是菜单入口");
+            Assert.IsNull(GameObject.Find("StartingBalance"));
+            foreach (string name in new[] { "StartScavenge", "DepartWilderness", "DepartIndustrial", "DepartBeacon" })
                 Assert.NotNull(GameObject.Find(name)?.GetComponent<Button>(), name);
             Click("CloseTrials");
             Click("StartSurvival");
@@ -1489,9 +1491,9 @@ namespace OutpostLoop.Tests
             Game.Game.Interface.RegisterUtility(wallet);
             controller.Restart(false);
             var world = controller.World;
-            Assert.IsNotNull(GameObject.Find("BaseArtwork")?.GetComponent<RawImage>()?.texture);
+            Assert.IsNotNull(GameObject.Find("StartScreenBackground"));
             Assert.IsNull(GameObject.Find("OpenPause"));
-            Click("PrimaryAction");
+            StartLegacyDefenseTrial(controller);
             yield return WaitForCrossing();
             Assert.IsFalse(world.Run.Paused);
             Assert.AreEqual(800, world.Run.Funds);
@@ -1544,7 +1546,6 @@ namespace OutpostLoop.Tests
 
             world.Run.Damage(world.Run.Health);
             yield return null;
-            if (GameObject.Find("PrimaryAction") == null) Click("TrialsEntry");
             Assert.IsNotNull(GameObject.Find("PrimaryAction"));
             Assert.AreEqual(0, wallet.Wins);
             Click("PrimaryAction");
@@ -1555,7 +1556,7 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(800, controller.World.Run.Funds);
             Assert.IsNull(controller.World.Headquarters);
 
-            Click("PrimaryAction");
+            StartLegacyDefenseTrial(controller);
             yield return WaitForCrossing();
             ClickBase(controller, 4);
             var victory = controller.World;
@@ -1585,7 +1586,7 @@ namespace OutpostLoop.Tests
             yield return new EnterPlayMode();
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
-            Click("PrimaryAction");
+            StartLegacyDefenseTrial(controller);
             yield return WaitForCrossing();
             var camera = controller.GetComponentInChildren<Camera>();
             Assert.IsFalse(camera.orthographic);
@@ -1834,8 +1835,8 @@ namespace OutpostLoop.Tests
             var screen = InputSystem.AddDevice<Touchscreen>();
             try
             {
-                Click("PrimaryAction");
-            yield return WaitForCrossing();
+                StartLegacyDefenseTrial(controller);
+                yield return WaitForCrossing();
                 Click("OpenConstruction");
                 Click("BuildHeadquarters");
                 var cell = new Vector2Int(-4, 0);
@@ -1911,8 +1912,8 @@ namespace OutpostLoop.Tests
                         controller.Restart(false);
                         yield return null;
                     }
-                    Click("PrimaryAction");
-            yield return WaitForCrossing();
+                    StartLegacyDefenseTrial(controller);
+                    yield return WaitForCrossing();
                     // 固定全图取景，使远处黑区与合法占地在测试窗口中可触及。
                     typeof(PrototypeController).GetField("mapView", System.Reflection.BindingFlags.Instance |
                         System.Reflection.BindingFlags.NonPublic).SetValue(controller, 1f);
@@ -2045,7 +2046,7 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
             var controller = Object.FindObjectOfType<PrototypeController>();
             var world = controller.World;
-            Click("PrimaryAction");
+            StartLegacyDefenseTrial(controller);
             yield return WaitForCrossing();
             ClickBase(controller, -4);
             Click("BuildExtractor");
@@ -2143,6 +2144,13 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(ExecuteEvents.Execute(target,
                 new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left },
                 ExecuteEvents.pointerClickHandler));
+        }
+
+        /// <summary>直接启动历史守城会话，保留对共享战场与局内按钮的回归覆盖。</summary>
+        private static void StartLegacyDefenseTrial(PrototypeController controller)
+        {
+            Assert.AreEqual(PrototypeOverlay.Start, controller.Overlay);
+            controller.CrossToWorld(controller.ActOnModal);
         }
     }
 }
