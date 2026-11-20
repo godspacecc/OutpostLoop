@@ -1041,6 +1041,8 @@ namespace OutpostLoop
         {
             if (crossing) return;
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
+            // 日志窗口显示时让出 IMGUI 绘制和输入，避免行动 HUD 覆盖指令面板。
+            if (Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true) return;
             if (scavengeRoot != null && scavengeRoot.gameObject.activeSelf)
             {
                 DrawScavenge();

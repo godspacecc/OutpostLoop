@@ -3,6 +3,8 @@
   "CommonCancel": "取消",
   "CommonContinue": "继续",
   "CommonBack": "返回",
+  "RuntimeLogDebugCommands": "调试指令",
+  "RuntimeLogExecuteCommand": "执行",
   "CommonRetry": "重试",
   "SettingsTitle": "设置",
   "SettingsMaster": "主音量",
