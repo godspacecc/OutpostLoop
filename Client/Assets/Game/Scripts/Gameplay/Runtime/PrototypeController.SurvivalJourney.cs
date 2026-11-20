@@ -83,22 +83,7 @@ namespace OutpostLoop
             if (GUI.Button(new Rect(161, height - 61, 143, 40), "操作与目标")) survivalHelpOpen = true;
             if (GUI.Button(new Rect(312, height - 61, 143, 40), "区域地图 M")) OpenRiverValleyRegion();
 
-            var state = scavengeRun.Survival;
-            if (state.action == SurvivalAction.None) return;
-            float duration = SurvivalActionDuration(state.action);
-            var bar = new Rect(width / 2 - 180, height - 113, 360, 7);
-            ScavengeFill(bar, new Color(.12f, .16f, .18f));
-            ScavengeFill(new Rect(bar.x, bar.y, bar.width * Mathf.Clamp01(1 - state.actionTime / duration), bar.height),
-                new Color(.35f, .78f, .68f));
         }
-
-        /// <summary>进度仅用于显示；操作时长仍由领域层决定。</summary>
-        private static float SurvivalActionDuration(SurvivalAction action) => action switch
-        {
-            SurvivalAction.Drink => 2, SurvivalAction.Eat => 4, SurvivalAction.Bandage => 3,
-            SurvivalAction.Aid => 6, SurvivalAction.Reload => 2.5f, SurvivalAction.Fortify => 20,
-            SurvivalAction.Repair => 8, SurvivalAction.Alarm => 10, _ => 3
-        };
 
         /// <summary>结算只展示本趟状态，不把物品登记成空间库存。</summary>
         private string SurvivalResultDetails()

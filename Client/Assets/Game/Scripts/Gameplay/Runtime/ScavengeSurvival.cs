@@ -136,6 +136,8 @@ namespace OutpostLoop
         public Vector2 facing = Vector2.up;
         public SurvivalAction action;
         public float actionTime;
+        // 记录动作开始时的真实总时长，供进度显示。
+        public float actionDuration;
         public int actionIndex, actionRoom;
         public List<SurvivalStack> pack = new List<SurvivalStack>();
         [SerializeReference] public SurvivalStack weapon;

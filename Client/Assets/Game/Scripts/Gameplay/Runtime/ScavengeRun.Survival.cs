@@ -142,25 +142,37 @@ namespace OutpostLoop
             int index = NearbySurvivalDoor;
             if (index < 0 || Survival.rooms[index].durability <= 0) return ReportSurvival("入口已经损坏");
             var room = Survival.rooms[index];
-            if (room.open)
-            {
-                var area = RoomSet.Door(index);
-                area = Rect.MinMaxRect(area.xMin - .38f, area.yMin - .38f, area.xMax + .38f, area.yMax + .38f);
-                if (area.Contains(Player)) return ReportSurvival("离开门洞后再关门");
-                foreach (var patrol in patrols)
-                    if (patrol.Alive && area.Contains(patrol.Position)) return ReportSurvival("门洞有感染者");
-            }
+            string blocked = SurvivalDoorBlocked(index);
+            if (blocked != null) return ReportSurvival(blocked);
             room.open = !room.open;
             RefreshSurvivalWalls();
             return ReportSurvival(room.open ? "门已打开" : "门已关上", true);
         }
 
+        /// <summary>关门和交互提示共用门洞占用判定。</summary>
+        internal string SurvivalDoorBlocked(int index)
+        {
+            if (!Survival.rooms[index].open) return null;
+            var area = RoomSet.Door(index);
+            area = Rect.MinMaxRect(area.xMin - .38f, area.yMin - .38f, area.xMax + .38f, area.yMax + .38f);
+            if (area.Contains(Player)) return "离开门洞后再关门";
+            foreach (var patrol in patrols)
+                if (patrol.Alive && area.Contains(patrol.Position)) return "门洞有感染者";
+            return null;
+        }
+
+        /// <summary>睡觉和交互提示共用精力、房间及威胁判定。</summary>
+        internal string SurvivalSleepBlocked(int room)
+        {
+            if (Survival.energy >= 100) return "现在不困";
+            return room < 0 || InsideSurvivalRoom != room || HasRoomThreat(room) ? "附近有危险，无法睡觉" : null;
+        }
+
         internal bool SleepSurvival()
         {
-            if (Survival.energy >= 100) return ReportSurvival("现在不困");
             int room = NearbySurvivalBed;
-            if (room < 0 || InsideSurvivalRoom != room || HasRoomThreat(room))
-                return ReportSurvival("附近有危险，无法睡觉");
+            string blocked = SurvivalSleepBlocked(room);
+            if (blocked != null) return ReportSurvival(blocked);
             CancelSurvivalAction();
             CloseSearch();
             Survival.sleepRoom = room;
@@ -371,6 +383,7 @@ namespace OutpostLoop
                 return ReportSurvival("缺少所需道具");
             Survival.action = action;
             Survival.actionTime = time;
+            Survival.actionDuration = time;
             Survival.actionIndex = index;
             Survival.actionRoom = room;
             SurvivalFeedback = "";

@@ -47,14 +47,18 @@ namespace OutpostLoop
             return (scavengeRun.SearchRemaining > 0 ? 1 : rows) * 39 + (scavengeRun.CanReadWarehouseTransferNote ? 46 : 0);
         }
 
-        private bool CanShowInventoryCanvas() => initialized && !crossing && survivalMode && scavengeRoot != null &&
-            scavengeRoot.gameObject.activeSelf && scavengeRun != null && SurvivalInventoryOpen &&
+        private bool CanShowInventoryCanvas() => CanShowSurvivalHud() && SurvivalInventoryOpen;
+
+        /// <summary>物品和交互共用模态窗口的可见性判定。</summary>
+        private bool CanShowSurvivalHud() => initialized && !crossing && survivalMode && scavengeRoot != null &&
+            scavengeRoot.gameObject.activeSelf && scavengeRun != null &&
             scavengeRun.Outcome == ScavengeOutcome.Exploring && !scavengePaused && !survivalHelpOpen &&
             !survivalConfirmExit && !survivalRegionMapOpen && !RiverValleyPortalPlaying && !UtilityWindowOpen;
 
         /// <summary>局内面板跟随实际开关和模态窗口，只在内容或语言有变化时重排。</summary>
         private void LateUpdate()
         {
+            UpdateSurvivalContext();
             if (!CanShowInventoryCanvas())
             {
                 if (inventoryRoot && inventoryRoot.activeSelf) inventoryRoot.SetActive(false);
@@ -80,8 +84,6 @@ namespace OutpostLoop
                 inventoryDisplayedSource = source;
                 inventoryDisplayedHeight = height;
             }
-            if (scavengeRun.SearchRemaining > 0)
-                inventoryView.SourceStatus.text = Loc.T("InventorySearching", scavengeRun.SearchRemaining);
         }
 
         /// <summary>通过项目 UI 资源地址加载面板，固定控件只接线一次。</summary>
@@ -106,7 +108,7 @@ namespace OutpostLoop
             ApplyInventoryButtonTexture(inventoryView.Close);
             ApplyInventoryButtonTexture(inventoryView.ReplaceBattery);
             inventoryView.Equipment.onClick.AddListener(() => { if (CanShowInventoryCanvas()) OpenSurvivalPack(); });
-            inventoryView.Close.onClick.AddListener(CloseSurvivalPanels);
+            inventoryView.Close.onClick.AddListener(() => { if (CanShowInventoryCanvas()) CloseSurvivalPanels(); });
             inventoryView.ReplaceBattery.onClick.AddListener(() =>
             {
                 if (InventoryCanMove(null)) StartSurvivalAction(SurvivalAction.Battery);
@@ -189,12 +191,12 @@ namespace OutpostLoop
             SetInventoryButtonState(view.ReplaceBattery, enabled);
             view.EmptyPack.SetActive(state.pack.Count == 0);
 
-            bool showStatus = source != null && (searching || source.items.Count == 0);
+            bool showStatus = source != null && !searching && source.items.Count == 0;
             view.SourceStatus.gameObject.SetActive(showStatus);
             float offset = showNote ? view.Note.rect.height : 0;
             var status = view.SourceStatus.rectTransform;
             status.anchoredPosition = new Vector2(status.anchoredPosition.x, -offset);
-            if (showStatus && !searching) view.SourceStatus.text = Loc.T("InventoryEmpty");
+            if (showStatus) view.SourceStatus.text = Loc.T("InventoryEmpty");
 
             if (source == null)
             {

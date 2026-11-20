@@ -445,22 +445,25 @@ namespace OutpostLoop
             if (scavengeRun.BeginSurvivalAction(action, index)) CloseSurvivalPanels();
         }
 
+        /// <summary>底部只显示当前 E 键能成功完成的主操作。失败反馈仍由旧输入处理。</summary>
         private string SurvivalInteraction()
         {
-            if (scavengeRun.Driving) return "下车";
-            if (scavengeRun.Survival.sleeping) return "起身";
-            if (SurvivalPanelOpen) return "关闭";
-            if (scavengeRun.CanEnterVehicle) return "上车";
-            if (scavengeRun.AtExit) return scavengeRun.Survival.Ready ? "撤离" : "提前撤离";
+            if (scavengeRun.Driving) return scavengeRun.CanLeaveVehicle ? Loc.T("ContextLeaveVehicle") : null;
+            if (scavengeRun.Survival.sleeping) return Loc.T("ContextWake");
+            if (SurvivalPanelOpen) return SurvivalInventoryOpen ? null : Loc.T("ContextClose");
+            if (scavengeRun.CanEnterVehicle) return Loc.T("ContextEnterVehicle");
+            if (scavengeRun.AtExit) return Loc.T(scavengeRun.Survival.Ready ? "ContextExtract" : "ContextEarlyExtract");
             int door = scavengeRun.NearbySurvivalDoor;
             if (door >= 0 && scavengeRun.Survival.rooms[door].durability > 0)
-                return scavengeRun.Survival.rooms[door].open ? "关门" : "开门";
-            if (scavengeRun.NearbySurvivalBed >= 0) return "睡觉";
-            if (scavengeRun.NearbySurvivalCabinet >= 0) return "打开储物柜";
-            if (NearbySurvivalDrop() != null) return "查看地面物品";
-            if (scavengeRun.CanTalkToClinicSurvivor) return "和幸存者交谈";
-            int cache = scavengeRun.NearbyCache;
-            return cache < 0 ? null : "搜索" + scavengeRun.CacheNames[cache];
+                return scavengeRun.SurvivalDoorBlocked(door) != null ? null :
+                    Loc.T(scavengeRun.Survival.rooms[door].open ? "ContextCloseDoor" : "ContextOpenDoor");
+            int bed = scavengeRun.NearbySurvivalBed;
+            if (bed >= 0) return scavengeRun.SurvivalSleepBlocked(bed) == null ? Loc.T("ContextSleep") : null;
+            if (scavengeRun.NearbySurvivalCabinet >= 0) return Loc.T("ContextStorage");
+            if (NearbySurvivalDrop() != null) return Loc.T("ContextGround");
+            if (scavengeRun.CanTalkToClinicSurvivor) return Loc.T("ContextTalk");
+            if (scavengeRun.NearbyCache >= 0) return Loc.T("ContextSearch");
+            return null;
         }
 
         private SurvivalContainer NearbySurvivalDrop()
@@ -510,22 +513,25 @@ namespace OutpostLoop
             float panelHeight = SurvivalInventoryOpen ? SurvivalInventoryHeight() : 395;
             return new Rect(18, 172, Mathf.Min(600, width - 36), Mathf.Min(panelHeight, height - 248));
         }
-        private static Rect SurvivalContext(float width, float height) => new Rect(width / 2 - 175, height - 61, 350, 40);
+        private static Rect SurvivalClaimRect(float width, float height) => new Rect(width - 205, height - 61, 184, 40);
 
-        /// <summary>物品面板自己处理关闭，独立保留下车和起身入口。</summary>
-        private bool ShowSurvivalContext =>
-            !SurvivalInventoryOpen || scavengeRun.Driving || scavengeRun.Survival.sleeping;
+        private static Rect SurvivalBuildRect(float width, float height) => new Rect(width - 205, height - 108, 184, 38);
+
+        private bool ShowSurvivalClaim => !scavengeRun.Driving && scavengeRun.InsideSurvivalRoom >= 0 &&
+            scavengeRun.Survival.baseRoom != scavengeRun.InsideSurvivalRoom;
+
+        private bool ShowSurvivalBuild => !scavengeRun.Driving && scavengeRun.NearbySurvivalDoor >= 0;
 
         private bool SurvivalHudContains(Vector2 cursor)
         {
             float scale = HudScale;
             float width = Screen.width / scale, height = Screen.height / scale;
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
-            return SurvivalInfo.Contains(point) || (ShowSurvivalContext && SurvivalContext(width, height).Contains(point)) ||
+            return SurvivalInfo.Contains(point) || SurvivalContextContains(point, width, height) ||
                 SurvivalJourneyContains(point, width, height) ||
                 ScavengeMapRect(width).Contains(point) || InventoryContains(cursor, point, width, height) ||
-                (scavengeRun.InsideSurvivalRoom >= 0 && new Rect(width - 205, height - 61, 184, 40).Contains(point)) ||
-                (scavengeRun.NearbySurvivalDoor >= 0 && new Rect(width - 205, height - 108, 184, 38).Contains(point));
+                (ShowSurvivalClaim && SurvivalClaimRect(width, height).Contains(point)) ||
+                (ShowSurvivalBuild && SurvivalBuildRect(width, height).Contains(point));
         }
 
         private void DrawSurvival(float width, float height)
@@ -564,22 +570,15 @@ namespace OutpostLoop
                 survivalFeedbackVersion = scavengeRun.SurvivalFeedbackVersion;
                 survivalFeedbackUntil = Time.unscaledTime + 4;
             }
-            string notice = state.sleeping ? "正在睡觉 · 移动键起身" : state.action != SurvivalAction.None ?
-                $"{SurvivalActionName(state.action)} · {state.actionTime:0.0} 秒" :
+            string notice = state.action == SurvivalAction.None && scavengeRun.SearchRemaining <= 0 &&
                 Time.unscaledTime <= survivalFeedbackUntil ? scavengeRun.SurvivalFeedback : "";
             if (!string.IsNullOrEmpty(notice)) GUI.Box(new Rect(width / 2 - 180, height - 103, 360, 34), notice);
             if (state.Warning)
                 GUI.Box(new Rect(width / 2 - 155, 20, 310, 35), state.Ready ? "前往撤离点" : "即将达标 · 请向撤离点靠拢");
-            string interaction = SurvivalInteraction();
-            if (ShowSurvivalContext && interaction != null && GUI.Button(SurvivalContext(width, height), interaction + "  E"))
-                InteractSurvival();
 
-            int inside = scavengeRun.InsideSurvivalRoom;
-            if (!scavengeRun.Driving && inside >= 0 && state.baseRoom != inside &&
-                GUI.Button(new Rect(width - 205, height - 61, 184, 40), "设为基地"))
+            if (ShowSurvivalClaim && GUI.Button(SurvivalClaimRect(width, height), "设为基地"))
                 scavengeRun.ClaimSurvivalRoom();
-            if (!scavengeRun.Driving && scavengeRun.NearbySurvivalDoor >= 0 &&
-                GUI.Button(new Rect(width - 205, height - 108, 184, 38), "入口操作  V"))
+            if (ShowSurvivalBuild && GUI.Button(SurvivalBuildRect(width, height), "入口操作  V"))
                 OpenSurvivalBuild();
 
             if (survivalBuildOpen)
@@ -712,13 +711,6 @@ namespace OutpostLoop
             SurvivalItem.Aid => "急救包", SurvivalItem.Crowbar => "撬棍", SurvivalItem.Pistol => "手枪",
             SurvivalItem.Ammo => "子弹", SurvivalItem.Torch => "手电", SurvivalItem.Battery => "电池",
             SurvivalItem.Boards => "建材", SurvivalItem.Parts => "维修零件", _ => "警报器"
-        };
-
-        private static string SurvivalActionName(SurvivalAction action) => action switch
-        {
-            SurvivalAction.Drink => "饮水", SurvivalAction.Eat => "进食", SurvivalAction.Aid => "使用急救包",
-            SurvivalAction.Bandage => "包扎", SurvivalAction.Reload => "装填", SurvivalAction.Fortify => "加固入口",
-            SurvivalAction.Repair => "维修入口", SurvivalAction.Alarm => "安装警报器", _ => "更换电池"
         };
     }
 }

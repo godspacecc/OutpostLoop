@@ -122,6 +122,13 @@ namespace OutpostLoop
             }
         }
 
+        /// <summary>提示与下车执行共用相同的落点检测。</summary>
+        internal bool CanLeaveVehicle => Driving && TryLeaveVehicle(out _);
+
+        private bool TryLeaveVehicle(out Vector2 landing) =>
+            TryVehicleLanding(vehicle.position, vehicle.heading, -1, out landing) ||
+            TryVehicleLanding(vehicle.position, vehicle.heading, 1, out landing);
+
         /// <summary>按驾驶侧、另一侧依次找落点，成功下车时立即停住。</summary>
         internal bool InteractVehicle()
         {
@@ -134,8 +141,7 @@ namespace OutpostLoop
                 Survival.facing = VehicleForward(vehicle.heading);
                 return true;
             }
-            if (!TryVehicleLanding(vehicle.position, vehicle.heading, -1, out var landing) &&
-                !TryVehicleLanding(vehicle.position, vehicle.heading, 1, out landing))
+            if (!TryLeaveVehicle(out var landing))
                 return ReportSurvival("两侧无法下车，请挪车");
             vehicle.occupied = false;
             VehicleSpeed = 0;

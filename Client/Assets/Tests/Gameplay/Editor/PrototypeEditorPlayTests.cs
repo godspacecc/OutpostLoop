@@ -1365,6 +1365,164 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyContextFollowsActionProgressAndModals()
+        {
+            const string batch = "RiverValleyInteraction-20261120";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/" + batch));
+            var save = System.IO.Path.Combine(folder, "Save-" + System.Guid.NewGuid().ToString("N"));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(save));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            foreach (var patrol in run.Patrols) patrol.Health = 0;
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var poll = type.GetMethod("PollSurvival", flags);
+            var late = type.GetMethod("LateUpdate", flags);
+            var sync = type.GetMethod("SyncScavenge", flags);
+            var hudContains = type.GetMethod("SurvivalHudContains", flags);
+            var language = Game.Game.Interface.GetModel<Game.LocalizationModel>();
+            var originalLanguage = language.CurrentLanguageCode.Value;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                language.SetLanguageCode("zh-CN");
+                player.SetValue(run, run.CachePoints[12] + Vector2.left);
+                sync.Invoke(controller, new object[] { true });
+                late.Invoke(controller, null);
+                var canvas = GameObject.Find("RiverValleyContextCanvas");
+                Assert.NotNull(canvas);
+                var context = canvas.transform.Find("Interaction");
+                var label = context.Find("Label").GetComponent<TMPro.TMP_Text>();
+                var button = context.GetComponent<Button>();
+                var progress = context.Find("Progress");
+                var fill = (RectTransform)progress.Find("Fill");
+                Canvas.ForceUpdateCanvases();
+                var rect = (RectTransform)context;
+                var cursor = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
+                Assert.AreEqual("E  搜索", label.text);
+                Assert.IsTrue((bool)hudContains.Invoke(controller, new object[] { cursor }));
+                yield return CaptureSurvivalEvidence("search-ready-zh", 1280, 720, batch);
+
+                PressInventoryButton(button);
+                Assert.AreEqual(12, run.OpenCache);
+                run.Tick(.2f, Vector2.zero);
+                late.Invoke(controller, null);
+                Assert.IsTrue(progress.gameObject.activeSelf);
+                Assert.IsFalse(button.interactable);
+                Assert.That(fill.anchorMax.x, Is.EqualTo(1f / 3f).Within(.01f));
+                StringAssert.StartsWith("搜索中", label.text);
+                var inventory = GameObject.Find("RiverValleyInventoryCanvas");
+                Assert.NotNull(inventory);
+                DriveScavengeKey(controller, poll, keyboard, Key.M);
+                late.Invoke(controller, null);
+                Assert.IsFalse(context.gameObject.activeSelf);
+                Assert.IsFalse(inventory.activeSelf);
+                float remaining = run.SearchRemaining;
+                yield return null;
+                Assert.AreEqual(remaining, run.SearchRemaining);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                late.Invoke(controller, null);
+                Assert.AreEqual(12, run.OpenCache);
+                Assert.IsTrue(inventory.activeSelf);
+                Assert.IsTrue(progress.gameObject.activeInHierarchy);
+                yield return CaptureSurvivalEvidence("search-progress-zh", 1280, 720, batch);
+                run.Tick(.65f, Vector2.zero);
+                late.Invoke(controller, null);
+                Assert.IsFalse(context.gameObject.activeSelf);
+                Assert.IsFalse((bool)hudContains.Invoke(controller, new object[] { cursor }));
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(-1, run.OpenCache);
+
+                run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Water));
+                run.Survival.water = 50;
+                type.GetMethod("StartSurvivalAction", flags).Invoke(controller, new object[] { SurvivalAction.Drink, 0 });
+                run.Tick(.5f, Vector2.zero);
+                language.SetLanguageCode("en");
+                late.Invoke(controller, null);
+                StringAssert.StartsWith("Drinking", label.text);
+                Assert.That(fill.anchorMax.x, Is.EqualTo(.25f).Within(.01f));
+                yield return CaptureSurvivalEvidence("action-progress-en", 1920, 1080, batch);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                Assert.AreEqual(SurvivalAction.None, run.Survival.action);
+
+                player.SetValue(run, run.RoomSet.Door(0).center);
+                Assert.AreEqual(0, run.NearbySurvivalDoor);
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Open door", label.text);
+                DriveScavengeKey(controller, poll, keyboard, Key.V);
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Close", label.text);
+                Assert.IsFalse(inventory.activeSelf);
+                PressInventoryButton(button);
+                Assert.IsFalse((bool)type.GetField("survivalBuildOpen", flags).GetValue(controller));
+
+                Vector3 left = Quaternion.Euler(0, run.VehicleHeading, 0) * Vector3.left;
+                player.SetValue(run, run.VehiclePosition + new Vector2(left.x, left.z) * 1.55f);
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Enter vehicle", label.text);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsTrue(run.Driving);
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Exit vehicle", label.text);
+                DriveScavengeKey(controller, poll, keyboard, Key.M);
+                late.Invoke(controller, null);
+                Assert.IsFalse(context.gameObject.activeSelf);
+                DriveScavengeKey(controller, poll, keyboard, Key.M);
+                Assert.IsTrue(run.Driving);
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Exit vehicle", label.text);
+                yield return CaptureSurvivalEvidence("driving-en", 1920, 1080, batch);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsFalse(run.Driving);
+
+                player.SetValue(run, run.ExitPoint + Vector2.left * 2);
+                run.Tick(.05f, Vector2.zero);
+                Assert.IsTrue(run.ExitKnown);
+                Assert.IsFalse(run.AtExit);
+                late.Invoke(controller, null);
+                Assert.IsFalse(context.gameObject.activeSelf, "发现撤离点后仍须走到交互范围内");
+                player.SetValue(run, run.ExitPoint);
+                sync.Invoke(controller, new object[] { true });
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Extract early", label.text);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                late.Invoke(controller, null);
+                Assert.IsFalse(context.gameObject.activeSelf);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                late.Invoke(controller, null);
+                PressInventoryButton(button);
+                late.Invoke(controller, null);
+                Assert.IsFalse(context.gameObject.activeSelf);
+                Assert.IsTrue((bool)type.GetField("survivalConfirmExit", flags).GetValue(controller));
+                yield return CaptureSurvivalEvidence("early-extraction-confirm-en", 1280, 720, batch);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
+                Assert.IsFalse((bool)type.GetField("scavengePaused", flags).GetValue(controller));
+
+                run.Survival.elapsed = ScavengeSurvival.Goal;
+                late.Invoke(controller, null);
+                Assert.AreEqual("E  Extract", label.text);
+                yield return CaptureSurvivalEvidence("extraction-ready-en", 1920, 1080, batch);
+            }
+            finally
+            {
+                language.SetLanguageCode(originalLanguage);
+                InputSystem.RemoveDevice(keyboard);
+            }
+            yield return new ExitPlayMode();
+        }
+
+
+        [UnityTest]
         public IEnumerator BootRiverValleyInventoryUsesLocalizedTmpAndTransfersItems()
         {
             const string batch = "InventoryPrefab-20261120";
