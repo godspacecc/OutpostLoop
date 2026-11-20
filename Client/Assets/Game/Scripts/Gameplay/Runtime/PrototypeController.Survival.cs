@@ -516,12 +516,25 @@ namespace OutpostLoop
         }
         private static Rect SurvivalContext(float width, float height) => new Rect(width / 2 - 175, height - 61, 350, 40);
 
+        /// <summary>样片的关闭按钮位于面板内，底栏交互随之隐藏。</summary>
+        private bool ShowSurvivalContext
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return !LootPreviewActive;
+#else
+                return true;
+#endif
+            }
+        }
+
         private bool SurvivalHudContains(Vector2 cursor)
         {
             float scale = HudScale;
             float width = Screen.width / scale, height = Screen.height / scale;
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
-            return SurvivalInfo.Contains(point) || SurvivalContext(width, height).Contains(point) ||
+            return SurvivalInfo.Contains(point) || (ShowSurvivalContext && SurvivalContext(width, height).Contains(point)) ||
                 SurvivalJourneyContains(point, width, height) ||
                 ScavengeMapRect(width).Contains(point) || (SurvivalPanelOpen && SurvivalInventory(width, height).Contains(point)) ||
                 (scavengeRun.InsideSurvivalRoom >= 0 && new Rect(width - 205, height - 61, 184, 40).Contains(point)) ||
@@ -570,7 +583,7 @@ namespace OutpostLoop
             if (state.Warning)
                 GUI.Box(new Rect(width / 2 - 155, 20, 310, 35), state.Ready ? "前往撤离点" : "即将达标 · 请向撤离点靠拢");
             string interaction = SurvivalInteraction();
-            if (interaction != null && GUI.Button(SurvivalContext(width, height), interaction + "  E"))
+            if (ShowSurvivalContext && interaction != null && GUI.Button(SurvivalContext(width, height), interaction + "  E"))
                 InteractSurvival();
 
             int inside = scavengeRun.InsideSurvivalRoom;

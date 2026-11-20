@@ -230,9 +230,8 @@ namespace OutpostLoop
         {
             if (index < 0 || index >= source.Count || ReferenceEquals(source, target)) return false;
             var item = source[index];
-            int amount = item.item == SurvivalItem.Ammo ? item.count : 1;
-            var merge = target.Find(s => s.item == item.item && s.count + amount <= s.StackLimit);
-            if (merge == null && Slots(target) + item.Slots > capacity) return false;
+            int amount = TransferAmount(item);
+            if (!CanReceive(item, target, capacity, out var merge)) return false;
             if (merge != null) merge.count += amount;
             else if (amount == item.count) target.Add(item);
             else target.Add(new SurvivalStack(item.item, amount));
@@ -243,6 +242,17 @@ namespace OutpostLoop
                 source.RemoveAt(index);
             }
             return true;
+        }
+
+        private static int TransferAmount(SurvivalStack item) => item.item == SurvivalItem.Ammo ? item.count : 1;
+
+        /// <summary>转移和按钮状态共用的容量判定，满格时也允许合并未满的一组物品。</summary>
+        internal static bool CanReceive(SurvivalStack item, List<SurvivalStack> target, int capacity,
+            out SurvivalStack merge)
+        {
+            int amount = TransferAmount(item);
+            merge = target.Find(s => s.item == item.item && s.count + amount <= s.StackLimit);
+            return merge != null || Slots(target) + item.Slots <= capacity;
         }
 
         /// <summary>换下的装备使用被换上装备释放的格位。</summary>

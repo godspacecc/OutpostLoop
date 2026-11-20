@@ -27,7 +27,7 @@ namespace OutpostLoop
             var state = scavengeRun.Survival;
             int visibleRows = scavengeRun.SearchRemaining > 0 ? 1 : state.caches[scavengeRun.OpenCache].items.Count;
             int rows = Mathf.Max(2, Mathf.Max(visibleRows, state.pack.Count));
-            return Mathf.Min(395, 124 + rows * 39 + (scavengeRun.CanReadWarehouseTransferNote ? 28 : 0));
+            return Mathf.Min(395, 92 + rows * 39 + (scavengeRun.CanReadWarehouseTransferNote ? 28 : 0));
         }
 
         /// <summary>切换编辑器样片，记住当前机器的评审选择。</summary>
@@ -51,40 +51,39 @@ namespace OutpostLoop
             var state = scavengeRun.Survival;
             var container = state.caches[opened];
             bool searching = scavengeRun.SearchRemaining > 0;
-            bool full = state.Used >= ScavengeSurvival.Capacity;
             bool canMoveItems = !searching && state.action == SurvivalAction.None && !state.sleeping;
             float x = panel.x + 16;
             float innerWidth = panel.width - 32;
             float columnWidth = (innerWidth - 14) / 2;
             float right = x + columnWidth + 14;
             float top = panel.y + 77;
-            float footer = panel.yMax - 42;
 
             ScavengeFill(panel, LootBackground);
             if (Event.current.type == EventType.Repaint && LootTexture("frame") is Texture2D frame)
                 GUI.DrawTexture(panel, frame, ScaleMode.StretchToFill, true, 0, LootLine, new Vector4(7, 7, 7, 7), Vector4.zero);
             ScavengeFill(new Rect(x, panel.y + 49, innerWidth, 1), LootLine);
             LootLabel(new Rect(x, panel.y + 9, innerWidth - 210, 33), scavengeRun.CacheNames[opened], 21, LootText, true);
-            if (LootButton(new Rect(panel.xMax - 202, panel.y + 11, 132, 29), "使用 / 装备", !searching))
+            if (LootButton(new Rect(panel.xMax - 214, panel.y + 11, 130, 29), "使用 / 装备", !searching))
             {
                 CloseSurvivalPanels();
                 survivalPackOpen = true;
                 return true;
             }
-            if (LootButton(new Rect(panel.xMax - 64, panel.y + 11, 48, 29), "关闭", true))
+            if (LootButton(new Rect(panel.xMax - 76, panel.y + 11, 60, 29), "关闭 E", true))
             {
                 CloseSurvivalPanels();
                 return true;
             }
             LootLabel(new Rect(x, panel.y + 51, columnWidth, 25), "箱内物资", 13, LootMuted, true);
-            LootLabel(new Rect(right, panel.y + 51, columnWidth, 25),
-                $"随身背包   {state.Used}/{ScavengeSurvival.Capacity}", 13, LootMuted, true);
+            LootLabel(new Rect(right, panel.y + 51, 85, 25), "随身背包", 13, LootMuted, true);
+            DrawLootCapacity(right + 94, panel.y + 51, state.Used);
             if (scavengeRun.CanReadWarehouseTransferNote)
             {
                 LootLabel(new Rect(x, top, innerWidth, 26), "药品转运记录 · 急救用品已转运至区域医院一楼。", 13, LootWarning);
                 top += 28;
             }
-            var viewport = new Rect(x, top, innerWidth, footer - top - 4);
+            var viewport = new Rect(x, top, innerWidth, panel.yMax - top - 12);
+            ScavengeFill(new Rect(right - 8, top, 1, viewport.height), LootLine);
             int rows = Mathf.Max(searching ? 1 : container.items.Count, state.pack.Count);
             survivalScroll = GUI.BeginScrollView(viewport, survivalScroll,
                 new Rect(0, 0, innerWidth - 17, Mathf.Max(rows * 39, viewport.height - 1)));
@@ -101,12 +100,21 @@ namespace OutpostLoop
                     LootLabel(new Rect(right - x, 0, cellWidth - 8, 38), "背包为空", 14, LootMuted);
             }
             finally { GUI.EndScrollView(); }
-
-            ScavengeFill(new Rect(x, footer, innerWidth, 1), LootLine);
-            LootLabel(new Rect(x, footer + 1, innerWidth, 31),
-                full ? "背包已满 · 可先放入箱内，或拾取可合并的物品" : "搜取期间，行动仍在继续",
-                13, full ? LootWarning : LootMuted);
             return true;
+        }
+
+        /// <summary>用逐格填充表示真实占用，颜色和数字同时提示满包。</summary>
+        private static void DrawLootCapacity(float x, float y, int used)
+        {
+            const int capacity = ScavengeSurvival.Capacity;
+            Color fill = used >= capacity ? LootWarning : new Color(.52f, .76f, .64f);
+            for (int slot = 0; slot < capacity; slot++)
+            {
+                var cell = new Rect(x + slot * 16, y + 7, 13, 11);
+                ScavengeFill(cell, LootLine);
+                ScavengeFill(new Rect(cell.x + 1, cell.y + 1, 11, 9), slot < used ? fill : LootBackground);
+            }
+            LootLabel(new Rect(x + capacity * 16 + 6, y, 52, 25), $"{used}/{capacity}", 13, fill, true);
         }
 
         /// <summary>以图标和原物品名称展示每一组物品，沿用单次拾取与放入规则。</summary>
@@ -117,15 +125,18 @@ namespace OutpostLoop
             {
                 var item = source[i];
                 var row = new Rect(x, i * 39, width, 35);
-                bool hover = row.Contains(Event.current.mousePosition);
+                bool available = enabled && ScavengeSurvival.CanReceive(item, target, capacity, out _);
+                bool hover = available && row.Contains(Event.current.mousePosition);
                 ScavengeFill(row, hover ? new Color(.16f, .24f, .22f) : new Color(.092f, .137f, .132f));
-                ScavengeFill(new Rect(row.x, row.y, 34, 35), new Color(.14f, .20f, .19f));
+                float iconX = take ? row.x : row.x + 72;
+                ScavengeFill(new Rect(iconX, row.y, 34, 35), new Color(.14f, .20f, .19f));
                 if (Event.current.type == EventType.Repaint && LootTexture(item.item.ToString()) is Texture2D icon)
-                    GUI.DrawTexture(new Rect(row.x + 3, row.y + 3, 28, 28), icon, ScaleMode.ScaleToFit);
+                    GUI.DrawTexture(new Rect(iconX + 3, row.y + 3, 28, 28), icon, ScaleMode.ScaleToFit);
                 if (item.item is SurvivalItem.Crowbar or SurvivalItem.Pistol)
-                    LootLabel(new Rect(row.x + 4, row.y, 29, 35), item.item == SurvivalItem.Crowbar ? "工具" : "武器", 11, LootMuted);
-                LootLabel(new Rect(row.x + 41, row.y, width - 106, 35), DescribeSurvivalItem(item), 14, LootText);
-                if (!LootButton(new Rect(row.xMax - 59, row.y + 4, 55, 27), take ? "拾取" : "放入", enabled))
+                    LootLabel(new Rect(iconX + 4, row.y, 29, 35), item.item == SurvivalItem.Crowbar ? "工具" : "武器", 11, LootMuted);
+                LootLabel(new Rect(iconX + 41, row.y, width - 117, 35), DescribeSurvivalItem(item), 14, LootText);
+                float buttonX = take ? row.xMax - 68 : row.x + 4;
+                if (!LootButton(new Rect(buttonX, row.y + 4, 64, 27), take ? "拾取 →" : "← 放入", available))
                     continue;
                 if (!ScavengeSurvival.Transfer(source, i, target, capacity))
                     scavengeRun.ReportSurvival(take ? "背包已满" : "容器已满");
@@ -159,7 +170,8 @@ namespace OutpostLoop
             bool previous = GUI.enabled;
             Color previousColor = GUI.backgroundColor;
             GUI.enabled = previous && enabled;
-            GUI.backgroundColor = Event.current != null && rect.Contains(Event.current.mousePosition)
+            GUI.backgroundColor = !GUI.enabled ? new Color(.16f, .18f, .17f) :
+                rect.Contains(Event.current.mousePosition)
                 ? new Color(.42f, .58f, .48f) : new Color(.27f, .38f, .34f);
             try { return GUI.Button(rect, label, style); }
             finally

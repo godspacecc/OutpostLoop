@@ -38,9 +38,19 @@ namespace OutpostLoop
         }
 
         /// <summary>常驻按钮和目标卡吞掉攻击输入，避免点击界面时挥击或开枪。</summary>
-        private static bool SurvivalJourneyContains(Vector2 point, float width, float height) =>
+        private bool SurvivalJourneyContains(Vector2 point, float width, float height) =>
             new Rect(18, height - 61, 437, 40).Contains(point) ||
-            new Rect(410, 18, Mathf.Min(430, width - 650), 112).Contains(point);
+            SurvivalObjectiveRect(width).Contains(point);
+
+        /// <summary>样片打开时缩小目标卡，绘制与输入拦截使用相同范围。</summary>
+        private Rect SurvivalObjectiveRect(float width)
+        {
+            float height = 112;
+#if UNITY_EDITOR
+            if (LootPreviewActive) height = 38;
+#endif
+            return new Rect(410, 18, Mathf.Min(430, width - 650), height);
+        }
 
         /// <summary>根据真实身体状态和行动阶段给出下一步提示，不提前展示世界观背景。</summary>
         private string SurvivalObjective()
@@ -64,11 +74,14 @@ namespace OutpostLoop
         /// <summary>不阻断落地操作的目标说明、快捷入口及按权威剩余时间绘制的动作进度。</summary>
         private void DrawSurvivalJourney(float width, float height)
         {
-            float cardWidth = Mathf.Min(430, width - 650);
-            GUI.Box(new Rect(410, 18, cardWidth, 112), "");
-            GUI.Label(new Rect(422, 24, cardWidth - 24, 26), "河谷镇 · 在镇中生存三天");
-            var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
-            GUI.Label(new Rect(422, 52, cardWidth - 24, 70), SurvivalObjective(), wrapped);
+            var card = SurvivalObjectiveRect(width);
+            GUI.Box(card, "");
+            GUI.Label(new Rect(422, 24, card.width - 24, 26), "河谷镇 · 在镇中生存三天");
+            if (card.height > 38)
+            {
+                var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
+                GUI.Label(new Rect(422, 52, card.width - 24, 70), SurvivalObjective(), wrapped);
+            }
             if (GUI.Button(new Rect(18, height - 61, 135, 40), "暂停  Esc")) scavengePaused = true;
             if (GUI.Button(new Rect(161, height - 61, 143, 40), "操作与目标")) survivalHelpOpen = true;
             if (GUI.Button(new Rect(312, height - 61, 143, 40), "区域地图 M")) OpenRiverValleyRegion();
