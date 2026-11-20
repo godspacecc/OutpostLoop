@@ -13,6 +13,7 @@ namespace OutpostLoop
         public SurvivalJourneyProgress journey;
         public int seed;
         public Vector2 player;
+        public RiverValley.ResidenceSurface playerSurface;
         public bool exitKnown;
         public ScavengeSurvival run;
         public SurvivalPatrolSave[] patrols;
@@ -35,6 +36,11 @@ namespace OutpostLoop
     {
         // 生存入口沿用大镇寻路，动态房门仅影响该入口。
         internal ScavengeSurvival Survival { get; }
+        // 地面是旧地图及其他建筑的默认表面。
+        private RiverValley.ResidenceSurface playerSurface;
+        internal RiverValley.ResidenceSurface PlayerSurface => playerSurface;
+        internal bool PlayerOnGround => playerSurface == RiverValley.ResidenceSurface.Ground;
+        internal float PlayerHeightOffset => FullTown?.Residence?.HeightOffset(Player, playerSurface) ?? 0f;
         internal bool SurvivalSprint { get; set; }
         // 接受一次攻击后递增，供表现读取；不把动画回调用于伤害或存档。
         internal int SurvivalAttackVersion { get; private set; }
@@ -43,7 +49,7 @@ namespace OutpostLoop
         // 即使连续出现相同提示，表现层也能重新显示短暂反馈。
         internal int SurvivalFeedbackVersion { get; private set; }
         /// <summary>同在诊所室内、近距离且无遮挡时可以重复交谈。</summary>
-        internal bool CanTalkToClinicSurvivor => FullTown != null && Outcome == ScavengeOutcome.Exploring &&
+        internal bool CanTalkToClinicSurvivor => PlayerOnGround && FullTown != null && Outcome == ScavengeOutcome.Exploring &&
             !Driving && Survival?.action == SurvivalAction.None && FullTown.Interiors[2].Contains(Player) &&
             (Player - FullTown.ClinicSurvivor).sqrMagnitude <= 1.8f * 1.8f && ClearRunLine(Player, FullTown.ClinicSurvivor);
 
@@ -117,6 +123,7 @@ namespace OutpostLoop
 
         private int NearbySurvivalPoint(Func<int, Vector2> point, float range)
         {
+            if (!PlayerOnGround) return -1;
             for (int i = 0; i < Survival.rooms.Length; i++)
                 if (Vector2.Distance(Player, point(i)) <= range) return i;
             return -1;
@@ -124,6 +131,7 @@ namespace OutpostLoop
 
         private int NearbySurvivalInterior(Func<int, Vector2> point)
         {
+            if (!PlayerOnGround) return -1;
             int room = InsideSurvivalRoom;
             return room >= 0 && Vector2.Distance(Player, point(room)) <= 1.65f ? room : -1;
         }
@@ -280,7 +288,7 @@ namespace OutpostLoop
             if (pistol && aimedHead >= 0 && aimedHead < patrols.Length)
             {
                 var head = patrols[aimedHead];
-                if (head.Alive && Vector2.Distance(head.Position, Player) <= range && ClearRunLine(Player, head.Position))
+                if (PlayerOnGround && head.Alive && Vector2.Distance(head.Position, Player) <= range && ClearRunLine(Player, head.Position))
                 {
                     target = head;
                     hit = aimedHead;
@@ -292,7 +300,7 @@ namespace OutpostLoop
                 var candidate = patrols[i];
                 var offset = candidate.Position - Player;
                 float distance = offset.magnitude;
-                if (!candidate.Alive || distance >= range || !ClearRunLine(Player, candidate.Position)) continue;
+                if (!PlayerOnGround || !candidate.Alive || distance >= range || !ClearRunLine(Player, candidate.Position)) continue;
                 if (pistol && (Vector2.Dot(direction, offset) <= 0 ||
                     (offset - direction * Vector2.Dot(direction, offset)).sqrMagnitude > .24f)) continue;
                 if (!pistol && Vector2.Dot(direction, offset.normalized) < .45f) continue;
@@ -312,7 +320,9 @@ namespace OutpostLoop
                 for (float distance = .2f; distance <= range; distance += .2f)
                 {
                     var point = Player + direction * distance;
-                    if (ClearRunLine(Player, point)) continue;
+                    bool clear = PlayerOnGround ? ClearRunLine(Player, point) :
+                        FullTown.Residence.ContainsShot(point, playerSurface);
+                    if (clear) continue;
                     GunshotEnd = point;
                     break;
                 }
@@ -456,7 +466,8 @@ namespace OutpostLoop
         {
             var snapshot = new SurvivalSave
             {
-                available = true, seed = Seed, player = Player, exitKnown = ExitKnown, run = Survival, vehicle = vehicle,
+                available = true, seed = Seed, player = Player, playerSurface = playerSurface,
+                exitKnown = ExitKnown, run = Survival, vehicle = vehicle,
                 gunshot = gunshot, gunshotRemaining = gunshotRemaining, patrols = new SurvivalPatrolSave[patrols.Length]
             };
             for (int i = 0; i < patrols.Length; i++)
@@ -480,12 +491,15 @@ namespace OutpostLoop
                 Player = save.player, ExitKnown = save.exitKnown,
                 gunshot = save.gunshot, gunshotRemaining = save.gunshotRemaining
             };
+            if (geometry?.Residence?.CanRestore(save.player, save.playerSurface) == true)
+                restored.playerSurface = save.playerSurface;
             if (geometry != null && save.vehicle.version == 1 &&
                 restored.VehiclePoseClear(save.vehicle.position, save.vehicle.heading))
             {
                 restored.vehicle = save.vehicle;
                 if (restored.Driving)
                 {
+                    restored.playerSurface = RiverValley.ResidenceSurface.Ground;
                     restored.Player = restored.VehiclePosition;
                     restored.Survival.facing = VehicleForward(restored.VehicleHeading);
                 }

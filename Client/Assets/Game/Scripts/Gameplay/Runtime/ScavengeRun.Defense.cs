@@ -148,7 +148,7 @@ namespace OutpostLoop
             float sight = IsTown ? (patrol.Fast ? 7f : 5.4f) : warehouse ? 5f : 2.65f;
             if (Survival != null && Survival.Night)
                 sight = sight * .52f + Survival.Light * 6f;
-            bool seesPlayer = (!warehouse || Player.x > 1.25f || patrol.Engaged) &&
+            bool seesPlayer = PlayerOnGround && (!warehouse || Player.x > 1.25f || patrol.Engaged) &&
                 CanSee(patrol, Player, IsTown || warehouse ? sight : 2f, IsTown || warehouse ? 1.65f : .9f);
             if (Survival != null && AttackSurvivalDoor(patrol)) return;
             var shelter = Shelter.GetValueOrDefault();

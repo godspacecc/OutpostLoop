@@ -26,7 +26,7 @@ namespace OutpostLoop
             var lookAhead = scavengeRun.Driving
                 ? Quaternion.Euler(0, scavengeRun.VehicleHeading, 0) * Vector3.forward * 3
                 : ScavengeGroundRotation * Vector3.forward * 1.5f;
-            var desired = SurvivalPosition(scavengeRun.Player, 0) + lookAhead;
+            var desired = ScavengePlayerPosition(0) + lookAhead;
             scavengeCameraFocus = snap ? desired : Vector3.Lerp(scavengeCameraFocus, desired,
                 1 - Mathf.Exp(-10f * Time.unscaledDeltaTime));
             float distance = Mathf.Max(ScavengeCameraDistance, 25f / gameCamera.aspect);
@@ -41,11 +41,12 @@ namespace OutpostLoop
         private void UpdateScavengeOccluders()
         {
             var origin = gameCamera.transform.position;
-            var ground = SurvivalPosition(scavengeRun.Player, 0);
+            var ground = ScavengePlayerPosition(0);
             var torso = new OcclusionRay(origin, ground + Vector3.up * .95f);
             var feet = new OcclusionRay(origin, ground + Vector3.up * .22f);
             int cache = scavengeRun.OpenCache >= 0 ? scavengeRun.OpenCache : scavengeRun.NearbyCache;
-            if (cache >= 0 && !CanSeeSurvivalInteriorAt(scavengeRun.CachePoints[cache])) cache = -1;
+            if (cache >= 0 && !CanSeeSurvivalContainerAt(scavengeRun.CachePoints[cache],
+                scavengeRun.Survival?.caches[cache].surface ?? OutpostLoop.RiverValley.ResidenceSurface.Ground)) cache = -1;
             // 搜点高度可能遍历整张地图的道路；每帧只查询一次。
             var cacheRay = cache >= 0 ? new OcclusionRay(origin, SurvivalPosition(scavengeRun.CachePoints[cache], .36f)) : default;
             UpdateSurvivalShells(torso, feet, cacheRay, cache >= 0);

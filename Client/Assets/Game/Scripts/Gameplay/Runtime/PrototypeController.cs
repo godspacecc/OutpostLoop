@@ -865,6 +865,13 @@ namespace OutpostLoop
         {
             point = default;
             var ray = gameCamera.ScreenPointToRay(screenPoint);
+            if (scavengeRun?.PlayerOnGround == false)
+            {
+                if (!new Plane(Vector3.up, ScavengePlayerPosition(0)).Raycast(ray, out float elevatedDistance)) return false;
+                var elevatedHit = ray.GetPoint(elevatedDistance);
+                point = new Vector2(elevatedHit.x, elevatedHit.z);
+                return true;
+            }
             if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float distance)) return false;
             var hit = ray.GetPoint(distance);
             if (survivalWorldGeometry != null)

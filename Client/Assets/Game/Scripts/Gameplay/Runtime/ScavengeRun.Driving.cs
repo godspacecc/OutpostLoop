@@ -112,7 +112,7 @@ namespace OutpostLoop
         {
             get
             {
-                if (!HasVehicle || Driving || Outcome != ScavengeOutcome.Exploring || OpenCache >= 0 ||
+                if (!PlayerOnGround || !HasVehicle || Driving || Outcome != ScavengeOutcome.Exploring || OpenCache >= 0 ||
                     Survival.sleeping || Survival.action != SurvivalAction.None) return false;
                 var outward = -VehicleRight(VehicleForward(vehicle.heading));
                 var door = vehicle.position + outward * (VehicleSize.x * .5f);
@@ -175,15 +175,17 @@ namespace OutpostLoop
         /// <summary>只限制步行角色，避免旧档恰好落在新车占地里时被困住。</summary>
         private void MovePlayerOnFoot(Vector2 step)
         {
-            if (!HasVehicle) { Player = MoveInRun(Player, step); return; }
+            var residence = FullTown?.Residence;
+            if (!HasVehicle && residence == null) { Player = MoveInRun(Player, step); return; }
             var body = VehicleBody;
             var point = Player;
             int pieces = Mathf.Max(1, Mathf.CeilToInt(step.magnitude / .12f));
             for (int i = 0; i < pieces; i++)
             {
-                var next = MoveInRunStep(point, step / pieces);
-                if (body.Contains(point, FootClearance) || !body.Intersects(point, next, FootClearance))
-                    point = next;
+                var next = PlayerOnGround ? MoveInRunStep(point, step / pieces) : point + step / pieces;
+                if (HasVehicle && PlayerOnGround && !body.Contains(point, FootClearance) &&
+                    body.Intersects(point, next, FootClearance)) continue;
+                point = residence == null ? next : residence.Move(point, next, ref playerSurface);
             }
             Player = point;
         }

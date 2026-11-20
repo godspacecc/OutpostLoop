@@ -42,6 +42,8 @@ namespace OutpostLoop
     {
         public List<SurvivalStack> items = new List<SurvivalStack>();
         public Vector2 point;
+        // 现有搜点与旧档掉落物默认位于地面。
+        public RiverValley.ResidenceSurface surface;
         public bool searched;
         public bool known;
         public bool active;

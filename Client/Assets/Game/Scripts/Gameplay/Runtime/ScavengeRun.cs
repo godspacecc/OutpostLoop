@@ -114,7 +114,7 @@ namespace OutpostLoop
         public bool ExitKnown { get; private set; }
         // 发现撤离点和现场标签使用同一近距离，交互另有更小的范围。
         internal const float ExitDiscoveryDistance = 4;
-        public bool AtExit => !Driving && ExitKnown && Vector2.Distance(Player, ExitPoint) <= 1.65f;
+        public bool AtExit => PlayerOnGround && !Driving && ExitKnown && Vector2.Distance(Player, ExitPoint) <= 1.65f;
         public ScavengeOutcome Outcome { get; private set; }
         // 工地和休整机会仅属于当前行动。
         public Vector2? Shelter { get; private set; }
@@ -138,6 +138,8 @@ namespace OutpostLoop
                     for(int i=0;i<survival.caches.Length;i++)survival.caches[i].point=geometry.Caches[i];
             }
             else if(geometry?.Shop!=null)throw new System.InvalidOperationException("旧版本存档不能复用新版室内几何。");
+            if (survival?.layoutVersion >= RiverValley.RiverValleyResidence.Version)
+                geometry?.EnableResidence();
             RoomSet = new SurvivalRoomSet(geometry == null ? null : new[] { geometry.Interiors[0], geometry.Interiors[1] });
             if (survival?.layoutVersion > 0 && geometry == null) throw new System.InvalidOperationException("整图存档缺少对应地图几何。");
             if (survival != null) RefreshSurvivalWalls();
@@ -179,7 +181,7 @@ namespace OutpostLoop
                 float closestDistance = 1.65f * 1.65f;
                 for (int i = 0; i < CachePoints.Length; i++)
                 {
-                    if (Survival != null && !Survival.caches[i].active) continue;
+                    if (Survival != null && (!Survival.caches[i].active || Survival.caches[i].surface != playerSurface)) continue;
                     var position = CachePoints[i];
                     float distance = (Player - position).sqrMagnitude;
                     if (distance > closestDistance || !ClearRunLine(Player, position)) continue;
@@ -219,7 +221,7 @@ namespace OutpostLoop
                     if (Survival == null) discovered[i] = true;
                     else Survival.caches[i].known = true;
                 }
-            if (Vector2.Distance(Player, ExitPoint) < ExitDiscoveryDistance &&
+            if (PlayerOnGround && Vector2.Distance(Player, ExitPoint) < ExitDiscoveryDistance &&
                 ClearRunLine(Player, ExitPoint)) ExitKnown = true;
 
             if (OpenCache >= 0)
@@ -343,7 +345,8 @@ namespace OutpostLoop
             return true;
         }
 
-        private bool CanReachCache(int index) => (Survival == null || Survival.caches[index].active) &&
+        private bool CanReachCache(int index) => (Survival == null ||
+            (Survival.caches[index].active && Survival.caches[index].surface == playerSurface)) &&
             Vector2.Distance(Player, CachePoints[index]) <= 1.65f &&
             ClearRunLine(Player, CachePoints[index]);
 

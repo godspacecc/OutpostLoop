@@ -210,7 +210,7 @@ namespace OutpostLoop
         private void SyncScavenge(bool snapCamera = false)
         {
             SyncSurvivalRoomsVisibility();
-            scavengePlayer.position = SurvivalPosition(scavengeRun.Player, 0);
+            scavengePlayer.position = ScavengePlayerPosition(0);
             scavengePlayer.gameObject.SetActive(!scavengeRun.Driving);
             SyncSurvivalVehicle();
             for (int i = 0; i < scavengeEnemies.Length; i++)
@@ -238,7 +238,7 @@ namespace OutpostLoop
                     scavengeCrates[i].position = SurvivalPosition(scavengeRun.CachePoints[i], .33f);
                     if(i==1 && survivalWorldGeometry?.Shop!=null)
                         scavengeCrates[i].position=SurvivalPosition(survivalWorldGeometry.Shop.CounterCrate,1.03f);
-                    scavengeCrates[i].gameObject.SetActive(cache.active && CanSeeSurvivalInteriorAt(scavengeRun.CachePoints[i]));
+                    scavengeCrates[i].gameObject.SetActive(cache.active && CanSeeSurvivalContainerAt(scavengeRun.CachePoints[i], cache.surface));
                     scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
                     continue;
                 }

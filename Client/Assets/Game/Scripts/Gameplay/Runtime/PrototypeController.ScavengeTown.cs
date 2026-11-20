@@ -205,8 +205,9 @@ namespace OutpostLoop
             townGunAudio.PlayOneShot(gunClip, .55f);
             townGunFlash = .12f;
             var origin = scavengeRun.Player;
-            townGunTrace.SetPosition(0, At(origin + aim.normalized * .5f, .82f));
-            townGunTrace.SetPosition(1, At(scavengeRun.GunshotEnd, .82f));
+            float height = ScavengePlayerPosition(.82f).y;
+            townGunTrace.SetPosition(0, At(origin + aim.normalized * .5f, height));
+            townGunTrace.SetPosition(1, At(scavengeRun.GunshotEnd, height));
         }
 
         private void ReleaseTownAudio()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Game;
+using OutpostLoop.RiverValley;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -118,7 +119,7 @@ namespace OutpostLoop
             var save = read.Data;
             return save.run != null && save.run.elapsed >= 0 && save.run.elapsed < ScavengeSurvival.Deadline &&
                 save.patrols?.Length == ScavengeTown.PatrolCount && save.run.rooms?.Length == SurvivalRooms.BuildingIds.Length &&
-                save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= OutpostLoop.RiverValley.RiverValleyShopInterior.Version ? save : null;
+                save.run.caches?.Length == ScavengeTown.Caches.Length && save.run.layoutVersion >= 0 && save.run.layoutVersion <= RiverValleyResidence.Version ? save : null;
         }
 
         /// <summary>新开前保护有效续玩档。新开和续玩共用地图加载流程。</summary>
@@ -139,7 +140,7 @@ namespace OutpostLoop
                 RefreshOverlay();
                 yield break;
             }
-            survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? OutpostLoop.RiverValley.RiverValleyShopInterior.Version;
+            survivalLayoutVersion = survivalResume?.run?.layoutVersion ?? RiverValleyResidence.Version;
             survivalMode = true;
             foreach (var step in LoadScavenge(true)) yield return step;
         }
@@ -210,8 +211,11 @@ namespace OutpostLoop
                 var section = ScavengeBox("现有外墙", SurvivalPosition(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls);
                 RegisterSurvivalShell(room, section.GetComponentsInChildren<Renderer>());
             }
-            var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, 2.92f), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
+            bool twoLevels = room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null;
+            float roofHeight = twoLevels ? 2.92f + RiverValleyResidence.StoreyHeight : 2.92f;
+            var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, roofHeight), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
             RegisterSurvivalShell(room, cover.GetComponentsInChildren<Renderer>(), roof: true);
+            if (twoLevels) CreateResidenceUpperFloor(interior, walls, floor, wood);
             var door = CurrentSurvivalRooms.Door(room);
             survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
@@ -287,7 +291,7 @@ namespace OutpostLoop
             survivalTorch.enabled = state.Light > 0;
             survivalTorch.range = Mathf.Lerp(3, 12, state.Light);
             survivalTorch.intensity = Mathf.Lerp(.4f, 2.6f, state.Light);
-            survivalTorch.transform.SetPositionAndRotation(SurvivalPosition(scavengeRun.Player, 1.05f),
+            survivalTorch.transform.SetPositionAndRotation(ScavengePlayerPosition(1.05f),
                 Quaternion.LookRotation(At(state.facing, -.12f)));
             for (int i = 0; i < survivalDoors.Length; i++)
             {
@@ -311,11 +315,13 @@ namespace OutpostLoop
             for (int i = 0; i < state.drops.Count; i++)
             {
                 var drop = state.drops[i];
+                float height = survivalWorldGeometry?.Residence?.HeightOffset(drop.point, drop.surface) ?? 0f;
+                var position = SurvivalPosition(drop.point, .13f + height);
                 if (i == survivalDropMarkers.Count)
-                    survivalDropMarkers.Add(ScavengeBox("地面物品", SurvivalPosition(drop.point, .13f),
+                    survivalDropMarkers.Add(ScavengeBox("地面物品", position,
                         new Vector3(.43f, .26f, .37f), survivalDropMaterial));
-                survivalDropMarkers[i].position = SurvivalPosition(drop.point, .13f);
-                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0 && CanSeeSurvivalInteriorAt(drop.point));
+                survivalDropMarkers[i].position = position;
+                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0 && CanSeeSurvivalContainerAt(drop.point, drop.surface));
             }
             for (int i = state.drops.Count; i < survivalDropMarkers.Count; i++)
                 survivalDropMarkers[i].gameObject.SetActive(false);
@@ -405,7 +411,8 @@ namespace OutpostLoop
                 return;
             }
 
-            if (survivalContainer != null && Vector2.Distance(survivalContainer.point, scavengeRun.Player) > 1.8f)
+            if (survivalContainer != null && (survivalContainer.surface != scavengeRun.PlayerSurface ||
+                Vector2.Distance(survivalContainer.point, scavengeRun.Player) > 1.8f))
                 CloseSurvivalPanels();
             if (survivalBuildOpen && scavengeRun.NearbySurvivalDoor < 0) CloseSurvivalPanels();
             if (interactPressed && (driving ||
@@ -512,7 +519,8 @@ namespace OutpostLoop
         private SurvivalContainer NearbySurvivalDrop()
         {
             foreach (var drop in scavengeRun.Survival.drops)
-                if (drop.items.Count > 0 && Vector2.Distance(drop.point, scavengeRun.Player) <= 1.4f) return drop;
+                if (drop.items.Count > 0 && drop.surface == scavengeRun.PlayerSurface &&
+                    Vector2.Distance(drop.point, scavengeRun.Player) <= 1.4f) return drop;
             return null;
         }
 
@@ -662,7 +670,7 @@ namespace OutpostLoop
             var drop = NearbySurvivalDrop();
             if (drop == null)
             {
-                drop = new SurvivalContainer { point = scavengeRun.Player };
+                drop = new SurvivalContainer { point = scavengeRun.Player, surface = scavengeRun.PlayerSurface };
                 state.drops.Add(drop);
             }
             ScavengeSurvival.Transfer(state.pack, index, drop.items, int.MaxValue);

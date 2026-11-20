@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using OutpostLoop.RiverValley;
 
 namespace OutpostLoop
 {
@@ -43,16 +44,21 @@ namespace OutpostLoop
             return -1;
         }
 
-        private bool CanSeeSurvivalInteriorAt(Vector2 point)
+        private bool CanSeeSurvivalInteriorAt(Vector2 point) =>
+            CanSeeSurvivalContainerAt(point, ResidenceSurface.Ground);
+
+        private bool CanSeeSurvivalContainerAt(Vector2 point, ResidenceSurface surface)
         {
             int room = SurvivalRoomAt(point);
+            if (room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null)
+                return room == visibleSurvivalRoom && surface == scavengeRun.PlayerSurface;
             return room < 0 || room == visibleSurvivalRoom;
         }
 
         /// <summary>登记独立墙段、屋顶、房门或一栋封闭建筑的外壳。</summary>
-        private void RegisterSurvivalShell(int room, Renderer[] parts, bool roof = false)
+        private void RegisterSurvivalShell(int room, Renderer[] parts, bool roof = false, bool upperResidence = false)
         {
-            if (parts.Length > 0) survivalShells.Add(new SurvivalShell(room, parts, roof));
+            if (parts.Length > 0) survivalShells.Add(new SurvivalShell(room, parts, roof, upperResidence));
         }
 
         /// <summary>室内沿用切除。室外只在实际挡住角色时半透明，搜点射线不能打开别的房间。</summary>
@@ -61,7 +67,7 @@ namespace OutpostLoop
             foreach (var shell in survivalShells)
             {
                 bool inside = shell.Room >= 0 && shell.Room == visibleSurvivalRoom;
-                if (inside && shell.Roof)
+                if (inside && (shell.Roof || (shell.UpperResidence && scavengeRun.PlayerHeightOffset < 1.8f)))
                 {
                     shell.Present(true, false, this);
                     continue;
@@ -130,15 +136,17 @@ namespace OutpostLoop
         {
             internal readonly int Room;
             internal readonly bool Roof;
+            internal readonly bool UpperResidence;
             internal readonly Renderer[] Parts;
             internal readonly Bounds Bounds;
             private Material[][] originals, fadedMaterials;
             private bool hidden, faded;
 
-            internal SurvivalShell(int room, Renderer[] parts, bool roof)
+            internal SurvivalShell(int room, Renderer[] parts, bool roof, bool upperResidence)
             {
                 Room = room;
                 Roof = roof;
+                UpperResidence = upperResidence;
                 Parts = parts;
                 var bounds = parts[0].bounds;
                 if (room < 0)

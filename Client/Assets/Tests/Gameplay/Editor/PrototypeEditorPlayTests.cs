@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Collections;
 using NUnit.Framework;
+using OutpostLoop.RiverValley;
 using QFramework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -748,7 +749,7 @@ namespace OutpostLoop.Tests
             var field = type.GetField("scavengeRun", flags);
             var run = (ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
-            Assert.AreEqual(2, run.Survival.layoutVersion);
+            Assert.AreEqual(RiverValleyResidence.Version, run.Survival.layoutVersion);
             Assert.AreEqual(2000, run.MapBounds.width);
             Assert.AreEqual(2000, run.MapBounds.height);
             Assert.AreEqual(6, run.FullTown.Interiors.Length);
@@ -929,13 +930,27 @@ namespace OutpostLoop.Tests
             var savedPosition=run.Player;
             type.GetMethod("SaveAndLeaveSurvival",flags).Invoke(controller,null);
             yield return null;
-            Assert.AreEqual(2,store.Read("town-survival-v1.json").Data.run.layoutVersion);
+            Assert.AreEqual(RiverValleyResidence.Version,store.Read("town-survival-v1.json").Data.run.layoutVersion);
             Click("ContinueSurvival");
             yield return WaitForCrossing();
             run=(ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
             Assert.That(Vector2.Distance(savedPosition,run.Player),Is.LessThan(.01f));
             type.GetMethod("LeaveScavenge",flags).Invoke(controller,null);
+            yield return null;
+            var previousFull = store.Read("town-survival-v1.json").Data;
+            previousFull.run.layoutVersion = RiverValleyShopInterior.Version;
+            store.Save("town-survival-v1.json", previousFull);
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run = (ScavengeRun)field.GetValue(controller);
+            Assert.NotNull(run.FullTown.Shop);
+            Assert.IsNull(run.FullTown.Residence);
+            Assert.IsTrue(run.PlayerOnGround);
+            Assert.AreEqual(savedPosition, run.Player);
+            type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
             yield return null;
             // 版本 1 的空房间允许保存在未来货架占地内；继续时必须保持原坐标。
             var oldFull=store.Read("town-survival-v1.json").Data;
@@ -973,7 +988,7 @@ namespace OutpostLoop.Tests
             yield return WaitForCrossing();
             run=(ScavengeRun)field.GetValue(controller);
             Assert.NotNull(run.FullTown);
-            Assert.AreEqual(2,run.Survival.layoutVersion);
+            Assert.AreEqual(RiverValleyResidence.Version,run.Survival.layoutVersion);
             Assert.IsEmpty(run.Survival.pack);
             yield return new ExitPlayMode();
         }
@@ -1960,6 +1975,120 @@ namespace OutpostLoop.Tests
                 settings.editorInputBehaviorInPlayMode = editorInput;
                 settings.backgroundBehavior = background;
             }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator BootResidenceStairsConnectFloorsAndRestoreTheUpperRoom()
+        {
+            const string batch = "RiverValleyResidence-20261120";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/" + batch + "/Save-" + System.Guid.NewGuid().ToString("N")));
+            var store = new Game.JsonFileStore<SurvivalSave>(directory);
+            type.GetField("survivalStore", flags).SetValue(controller, store);
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var runField = type.GetField("scavengeRun", flags);
+            var sync = type.GetMethod("SyncScavenge", flags);
+            var camera = GameObject.Find("PreviewCamera").GetComponent<Camera>();
+            var run = (ScavengeRun)runField.GetValue(controller);
+            var residence = run.FullTown.Residence;
+            Assert.NotNull(residence);
+            foreach (var patrol in run.Patrols) patrol.Health = 0;
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var door = run.RoomSet.Door(RiverValleyResidence.RoomIndex).center;
+            player.SetValue(run, door - Vector2.right);
+            Assert.IsTrue(run.ToggleSurvivalDoor());
+            var stair = residence.Stairwell;
+            var bottom = new Vector2(stair.xMin - .65f, stair.center.y);
+            var top = new Vector2(stair.xMax + .65f, stair.center.y);
+            var landing = new Vector2(top.x, residence.Footprint.center.y);
+            void WalkTo(Vector2 target)
+            {
+                for (int i = 0; i < 180 && Vector2.Distance(run.Player, target) > .03f; i++)
+                    run.Tick(.025f, Vector2.ClampMagnitude((target - run.Player) / .1f, 1));
+                Assert.That(Vector2.Distance(run.Player, target), Is.LessThan(.04f),
+                    $"目标 {target}，当前位置 {run.Player}，表面 {run.PlayerSurface}");
+            }
+
+            WalkTo(door + Vector2.right);
+            WalkTo(new Vector2(bottom.x, door.y));
+            WalkTo(bottom);
+            sync.Invoke(controller, new object[] { true });
+            var floorPart = GameObject.Find("住宅二楼楼板").GetComponent<Renderer>();
+            Assert.IsTrue(floorPart.forceRenderingOff);
+            Assert.NotNull(GameObject.Find("Polygon Generic 住宅楼梯"));
+            CaptureVisibilityCamera(camera, directory, "01-ground", 1280, 720);
+
+            WalkTo(stair.center);
+            Assert.AreEqual(ResidenceSurface.Stairs, run.PlayerSurface);
+            Assert.That(run.PlayerHeightOffset, Is.EqualTo(1.5f).Within(.04f));
+            var stop = run.Player;
+            run.Tick(.1f, Vector2.zero);
+            Assert.AreEqual(stop, run.Player);
+            var stairSave = JsonUtility.FromJson<SurvivalSave>(JsonUtility.ToJson(run.CaptureSurvival()));
+            var stairResume = ScavengeRun.RestoreSurvival(stairSave, run.FullTown);
+            Assert.AreEqual(ResidenceSurface.Stairs, stairResume.PlayerSurface);
+            Assert.AreEqual(stop, stairResume.Player);
+            sync.Invoke(controller, new object[] { true });
+            CaptureVisibilityCamera(camera, directory, "02-stairs", 1280, 720);
+            WalkTo(bottom);
+            Assert.AreEqual(ResidenceSurface.Ground, run.PlayerSurface);
+            WalkTo(top);
+            Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
+            Assert.That(run.PlayerHeightOffset, Is.EqualTo(3).Within(.001f));
+            WalkTo(landing);
+            WalkTo(residence.Footprint.center);
+            for (int i = 0; i < 140; i++) run.Tick(.025f, Vector2.up);
+            Assert.That(run.Player.y, Is.InRange(residence.Footprint.yMax - .73f, residence.Footprint.yMax - .62f));
+            Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
+            WalkTo(residence.Footprint.center);
+            Assert.AreEqual(-1, run.NearbyCache);
+            Assert.AreEqual(-1, run.NearbySurvivalCabinet);
+            var floorDrop = new SurvivalContainer { point = run.Player };
+            floorDrop.items.Add(new SurvivalStack(SurvivalItem.Food));
+            run.Survival.drops.Add(floorDrop);
+            var nearbyDrop = type.GetMethod("NearbySurvivalDrop", flags);
+            Assert.IsNull(nearbyDrop.Invoke(controller, null));
+            var upperDrop = new SurvivalContainer { point = run.Player, surface = ResidenceSurface.Upper };
+            upperDrop.items.Add(new SurvivalStack(SurvivalItem.Water));
+            run.Survival.drops.Add(upperDrop);
+            Assert.AreSame(upperDrop, nearbyDrop.Invoke(controller, null));
+            var enemy = run.Patrols[0];
+            enemy.Health = 2;
+            enemy.Position = run.Player;
+            var health = run.Survival.health;
+            run.Tick(.05f, Vector2.zero);
+            Assert.AreEqual(health, run.Survival.health);
+            run.Survival.weapon = new SurvivalStack(SurvivalItem.Pistol) { rounds = 1 };
+            Assert.IsTrue(run.SurvivalAttack(run.Player + Vector2.right, 0));
+            Assert.AreEqual(2, enemy.Health);
+            enemy.Health = 0;
+            sync.Invoke(controller, new object[] { true });
+            Assert.IsFalse(floorPart.forceRenderingOff, "二楼脚下楼板应可见");
+            CaptureVisibilityCamera(camera, directory, "03-upper", 1280, 720);
+
+            var savedPosition = run.Player;
+            type.GetMethod("SaveAndLeaveSurvival", flags).Invoke(controller, null);
+            yield return null;
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run = (ScavengeRun)runField.GetValue(controller);
+            Assert.AreEqual(savedPosition, run.Player);
+            Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
+            Assert.AreEqual(SurvivalItem.Water, ((SurvivalContainer)nearbyDrop.Invoke(controller, null)).items[0].item);
+            WalkTo(landing);
+            WalkTo(top);
+            WalkTo(bottom);
+            Assert.AreEqual(ResidenceSurface.Ground, run.PlayerSurface);
             yield return new ExitPlayMode();
         }
 

@@ -104,6 +104,10 @@ namespace OutpostLoop.RiverValley
 
         // 新布局显式启用一次；旧整图实例保持空值，继续原坐标与空室内。
         internal RiverValleyShopInterior Shop { get; private set; }
+        // 只在住宅样板版本中生成楼层，旧布局仍是原有的一层室内。
+        internal RiverValleyResidence Residence { get; private set; }
+        internal void EnableResidence() =>
+            Residence ??= new RiverValleyResidence(Interiors[RiverValleyResidence.RoomIndex]);
         /// <summary>只为新版行动加入一次陈设实体，随后重建搜索位置与绕行节点。</summary>
         internal void EnableShopInterior()
         {

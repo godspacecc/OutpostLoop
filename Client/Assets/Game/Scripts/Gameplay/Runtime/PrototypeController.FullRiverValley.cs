@@ -16,6 +16,8 @@ namespace OutpostLoop
         private static readonly string[] FullTownInteriorNames = { "主街杂货店", "住宅", "社区诊所", "仓库", "医院入口层", "西岸桥头店铺" };
         /// <summary>把领域平面位置投到当前地图真实地面或桥面高度。</summary>
         private Vector3 SurvivalPosition(Vector2 point, float offset) => At(point, (survivalWorldGeometry?.Height(point) ?? 0) + offset);
+        private Vector3 ScavengePlayerPosition(float offset) =>
+            SurvivalPosition(scavengeRun.Player, offset + scavengeRun.PlayerHeightOffset);
 
         /// <summary>保持原物资总量，整图版仅重排到已确认的区域与容器位置。</summary>
         private ScavengeSurvival CreateSurvivalState(int seed)
@@ -31,7 +33,7 @@ namespace OutpostLoop
         private void StartFreshSurvivalFromResult()
         {
             if (!CloseSurvivalSave()) return;
-            if (survivalLayoutVersion >= RiverValleyShopInterior.Version) { RestartScavenge(); return; }
+            if (survivalLayoutVersion >= RiverValleyResidence.Version) { RestartScavenge(); return; }
             LeaveScavenge();
             CrossToSurvival();
         }
@@ -48,6 +50,7 @@ namespace OutpostLoop
             yield return (.86f, "正在布置可进入的建筑");
             survivalWorldGeometry = town.WorldGeometry;
             if(survivalLayoutVersion>=RiverValleyShopInterior.Version)survivalWorldGeometry.EnableShopInterior();
+            if (survivalLayoutVersion >= RiverValleyResidence.Version) survivalWorldGeometry.EnableResidence();
             currentSurvivalRooms = new SurvivalRoomSet(new[] { survivalWorldGeometry.Interiors[0], survivalWorldGeometry.Interiors[1] });
             riverValleyRegion = JsonUtility.FromJson<RiverValleyRegion>(content.layout.text);
             var wood = ScavengeMaterial(new Color(.43f,.32f,.23f));

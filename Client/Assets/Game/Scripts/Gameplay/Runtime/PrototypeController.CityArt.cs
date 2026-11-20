@@ -11,13 +11,13 @@ namespace OutpostLoop
         private void ApplyRiverValleyCityVisual(Transform target, string name, Vector3 size)
         {
             if (!survivalMode || survivalLayoutVersion < 1 || survivalCityArt == null) return;
-            if (name == "现有外墙" || name == "重点建筑入口墙")
+            if (name == "现有外墙" || name == "重点建筑入口墙" || name == "住宅二楼外墙")
             {
                 survivalCityArt.ReplaceWall(target,size.z > size.x);
                 return;
             }
             string key = name.StartsWith("可搜箱 ") ? "crate" :
-                name == "房间地面" || name == "重点建筑室内地面" ? "floor" :
+                name == "房间地面" || name == "重点建筑室内地面" || name == "住宅二楼楼板" ? "floor" :
                 name == "屋顶" || name == "重点建筑屋顶" ? "roof" :
                 name == "现有房门" ? "door" : name == "储物柜" || name == "仓库货架" ? "shelf" :
                 name == "室内服务设施" ? "desk" : name == "医院标志" ? "hospitalSign" : null;
