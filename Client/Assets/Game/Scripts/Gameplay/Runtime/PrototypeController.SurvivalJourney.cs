@@ -56,11 +56,9 @@ namespace OutpostLoop
             if (state.energy < 25) return "需要休息：找有床的安全房间，走近床按 E 睡觉。";
             if (state.pack.Count == 0 && state.weapon == null && state.torch == null)
                 return "先找补给：WASD 移动，靠近镇口容器按 E 搜索，点击拾取水和食品。";
-            if (state.elapsed < 120 && state.baseRoom < 0)
+            if (state.elapsed < 120)
                 return "已找到物品：按 Tab 查看背包，点击使用或装备；暂时不用的物品可留着。";
-            if (state.baseRoom < 0)
-                return "活过三天：寻找商铺后屋或住宅。进屋可设为基地，也可轮换落脚。";
-            return "活过三天：按需补水、进食和睡眠，留意夜间巡逻与基地入口。";
+            return "活过三天：按需补水、进食和睡眠，可在商铺后屋或住宅轮换落脚。";
         }
 
         /// <summary>在行动中显示当前目标，物品面板打开时只保留标题。</summary>
@@ -85,7 +83,7 @@ namespace OutpostLoop
             if (scavengeRun.Outcome == ScavengeOutcome.WindowClosed)
                 return "未在达标后的两分钟内撤离。重新行动从镇口空手开始。\n提示：最后五分钟会预告撤离，请提前向出口靠拢。";
             string carried = $"撤离时背包 {state.Used}/6 格 · 武器：{(state.weapon == null ? "无" : DescribeSurvivalItem(state.weapon))}";
-            return carried + "\n本趟物资与基地留在当地，空间不存放物品。再次行动空手开始。";
+            return carried + "\n本趟物资留在当地，空间不存放物品。再次行动空手开始。";
         }
 
         /// <summary>主动查看帮助或提前撤离时给出明确后果；关闭后恢复原有暂停状态。</summary>

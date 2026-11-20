@@ -819,7 +819,6 @@ namespace OutpostLoop.Tests
                 if(i<2)
                 {
                     Assert.AreEqual(i,run.InsideSurvivalRoom);
-                    Assert.IsTrue(run.ClaimSurvivalRoom());
                     if(i==0)
                     {
                         var shop=run.FullTown.Shop;
@@ -1083,9 +1082,20 @@ namespace OutpostLoop.Tests
                 player.SetValue(run, door - Vector2.right);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsTrue(run.Survival.rooms[0].open);
-                player.SetValue(run, run.RoomSet.Footprint(0).center);
-                Assert.IsTrue(run.ClaimSurvivalRoom());
                 Assert.That(run.Survival.pack, Is.Empty);
+                for (int room = 0; room < run.Survival.rooms.Length; room++)
+                {
+                    player.SetValue(run, run.RoomSet.Door(room).center - Vector2.right);
+                    DriveScavengeKey(controller, poll, keyboard, Key.V);
+                    Assert.IsTrue((bool)type.GetField("survivalBuildOpen", flags).GetValue(controller));
+                    run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Boards));
+                    type.GetMethod("StartSurvivalAction", flags).Invoke(controller, new object[] { SurvivalAction.Fortify, -1 });
+                    Assert.AreEqual(SurvivalAction.Fortify, run.Survival.action);
+                    run.Survival.actionTime = .01f;
+                    run.Tick(.05f, Vector2.zero);
+                    Assert.IsTrue(run.Survival.rooms[room].fortified);
+                    Assert.That(run.Survival.pack, Is.Empty);
+                }
                 run.Survival.elapsed = 1600;
                 run.Survival.water = 43;
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
@@ -1103,8 +1113,9 @@ namespace OutpostLoop.Tests
                 Assert.AreNotSame(run, resumed);
                 Assert.That(resumed.Survival.elapsed, Is.InRange(paused, paused + 2));
                 Assert.That(resumed.Survival.water, Is.InRange(42f, 43f));
-                Assert.AreEqual(0, resumed.Survival.baseRoom);
                 Assert.IsTrue(resumed.Survival.rooms[0].open);
+                Assert.IsTrue(resumed.Survival.rooms[0].fortified);
+                Assert.IsTrue(resumed.Survival.rooms[1].fortified);
                 Assert.IsNull(resumed.Survival.weapon);
                 Assert.IsNull(resumed.Survival.torch);
                 resumed.Survival.elapsed = ScavengeSurvival.Goal;

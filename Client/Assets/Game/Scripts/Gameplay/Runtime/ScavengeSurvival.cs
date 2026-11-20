@@ -132,7 +132,7 @@ namespace OutpostLoop
         public float health = 100, water = 80, food = 80, energy = 80;
         public float dehydration, starvation, bleedClock, lastHit = -11, attackCooldown;
         public bool bleeding, sleeping, torchOn;
-        public int baseRoom = -1, sleepRoom = -1;
+        public int sleepRoom = -1;
         public Vector2 facing = Vector2.up;
         public SurvivalAction action;
         public float actionTime;

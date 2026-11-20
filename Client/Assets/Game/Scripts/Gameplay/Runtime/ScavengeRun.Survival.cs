@@ -128,15 +128,6 @@ namespace OutpostLoop
             return room >= 0 && Vector2.Distance(Player, point(room)) <= 1.65f ? room : -1;
         }
 
-        /// <summary>房间已有设施随位置可用，登记基地只开放针对该房间的施工。</summary>
-        internal bool ClaimSurvivalRoom()
-        {
-            int room = InsideSurvivalRoom;
-            if (room < 0 || HasRoomThreat(room)) return ReportSurvival("先清理房内威胁");
-            Survival.baseRoom = room;
-            return ReportSurvival("基地已设在" + SurvivalRooms.Names[room], true);
-        }
-
         internal bool ToggleSurvivalDoor()
         {
             int index = NearbySurvivalDoor;
@@ -364,8 +355,8 @@ namespace OutpostLoop
                     if (Survival.torch == null) return ReportSurvival("先装备手电");
                     item = SurvivalItem.Battery; time = 3; break;
                 default:
-                    if (room < 0 || Survival.baseRoom != room || Survival.rooms[room].durability == 0)
-                        return ReportSurvival("需要在基地完好的入口旁操作");
+                    if (room < 0 || Survival.rooms[room].durability == 0)
+                        return ReportSurvival("需要在尚可使用的房门旁操作");
                     var door = Survival.rooms[room];
                     if (action == SurvivalAction.Fortify && !door.fortified) { item = SurvivalItem.Boards; time = 20; }
                     else if (action == SurvivalAction.Repair && door.durability < door.MaxDurability)
@@ -406,8 +397,7 @@ namespace OutpostLoop
             int amount = 1;
             Survival.action = SurvivalAction.None;
             var room = Survival.actionRoom >= 0 ? Survival.rooms[Survival.actionRoom] : null;
-            if ((int)action >= (int)SurvivalAction.Fortify &&
-                (room == null || room.durability == 0 || Survival.actionRoom != Survival.baseRoom))
+            if ((int)action >= (int)SurvivalAction.Fortify && (room == null || room.durability == 0))
             {
                 ReportSurvival("入口状态已变，操作中断");
                 return;

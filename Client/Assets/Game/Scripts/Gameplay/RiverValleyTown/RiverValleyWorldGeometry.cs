@@ -16,7 +16,7 @@ namespace OutpostLoop.RiverValley
         // 水道、桥面和道路使用原图中心线与宽度。
         internal readonly List<Channel> Water = new List<Channel>(), Bridges = new List<Channel>();
         internal readonly List<Channel> Roads = new List<Channel>();
-        // 六处实际室内，前两处可设为基地。
+        // 六处实际室内，前两处有可操作房门和落脚设施。
         internal readonly Rect[] Interiors = new Rect[6];
         // 幸存者站在诊所搜点另一侧，远离入口与柜台。
         internal Vector2 ClinicSurvivor => Interiors[2].center + Vector2.right * 4;

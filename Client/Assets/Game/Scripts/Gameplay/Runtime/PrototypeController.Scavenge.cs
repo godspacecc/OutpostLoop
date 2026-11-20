@@ -621,9 +621,6 @@ namespace OutpostLoop
             if (scavengeRun.Shelter is Vector2 shelter)
                 ScavengeFill(new Rect(ScavengeMapPoint(map, shelter) - Vector2.one * 3, Vector2.one * 6),
                     new Color(.66f, .88f, .52f));
-            if (survivalMode && scavengeRun.Survival.baseRoom >= 0)
-                ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.RoomSet.Footprint(scavengeRun.Survival.baseRoom).center) -
-                    Vector2.one * 3, Vector2.one * 6), new Color(.66f, .88f, .52f));
             ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.Player) - Vector2.one * 3, Vector2.one * 6),
                 new Color(1, .94f, .7f));
         }

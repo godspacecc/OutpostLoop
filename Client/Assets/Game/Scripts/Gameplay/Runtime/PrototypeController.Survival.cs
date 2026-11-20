@@ -536,12 +536,7 @@ namespace OutpostLoop
             float panelHeight = SurvivalInventoryOpen ? SurvivalInventoryHeight() : 395;
             return new Rect(18, 172, Mathf.Min(600, width - 36), Mathf.Min(panelHeight, height - 248));
         }
-        private static Rect SurvivalClaimRect(float width, float height) => new Rect(width - 205, height - 61, 184, 40);
-
         private static Rect SurvivalBuildRect(float width, float height) => new Rect(width - 205, height - 108, 184, 38);
-
-        private bool ShowSurvivalClaim => !scavengeRun.Driving && scavengeRun.InsideSurvivalRoom >= 0 &&
-            scavengeRun.Survival.baseRoom != scavengeRun.InsideSurvivalRoom;
 
         private bool ShowSurvivalBuild => !scavengeRun.Driving && scavengeRun.NearbySurvivalDoor >= 0;
 
@@ -553,7 +548,6 @@ namespace OutpostLoop
             return SurvivalStatusContains(cursor, point) || SurvivalContextContains(point, width, height) ||
                 SurvivalObjectiveRect(width).Contains(point) ||
                 ScavengeMapRect(width, opensRegion: true).Contains(point) || InventoryContains(cursor, point, width, height) ||
-                (ShowSurvivalClaim && SurvivalClaimRect(width, height).Contains(point)) ||
                 (ShowSurvivalBuild && SurvivalBuildRect(width, height).Contains(point));
         }
 
@@ -582,8 +576,6 @@ namespace OutpostLoop
             if (state.Warning)
                 GUI.Box(new Rect(width / 2 - 155, 20, 310, 35), state.Ready ? "前往撤离点" : "即将达标 · 请向撤离点靠拢");
 
-            if (ShowSurvivalClaim && GUI.Button(SurvivalClaimRect(width, height), "设为基地"))
-                scavengeRun.ClaimSurvivalRoom();
             if (ShowSurvivalBuild && GUI.Button(SurvivalBuildRect(width, height), "入口操作  V"))
                 OpenSurvivalBuild();
 
