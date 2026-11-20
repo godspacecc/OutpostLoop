@@ -1243,6 +1243,7 @@ namespace OutpostLoop
 
         private void OnDestroy()
         {
+            ReleaseRegionRoutes();
             ReleaseScavengeMaterials();
             ReleaseFog();
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);
