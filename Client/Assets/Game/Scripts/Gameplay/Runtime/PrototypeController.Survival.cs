@@ -506,7 +506,14 @@ namespace OutpostLoop
         }
 
         private static Rect SurvivalInfo => new Rect(18, 18, 374, 141);
-        private static Rect SurvivalInventory(float width, float height) => new Rect(18, 172, Mathf.Min(600, width - 36), Mathf.Min(395, height - 248));
+        private Rect SurvivalInventory(float width, float height)
+        {
+            float panelHeight = 395;
+#if UNITY_EDITOR
+            if (LootPreviewActive) panelHeight = LootPreviewHeight();
+#endif
+            return new Rect(18, 172, Mathf.Min(600, width - 36), Mathf.Min(panelHeight, height - 248));
+        }
         private static Rect SurvivalContext(float width, float height) => new Rect(width / 2 - 175, height - 61, 350, 40);
 
         private bool SurvivalHudContains(Vector2 cursor)
@@ -583,6 +590,9 @@ namespace OutpostLoop
 
         private void DrawSurvivalPanels(Rect panel)
         {
+#if UNITY_EDITOR
+            if (TryDrawLootPreview(panel)) return;
+#endif
             var state = scavengeRun.Survival;
             GUI.Box(panel, "");
             if (survivalBuildOpen)
