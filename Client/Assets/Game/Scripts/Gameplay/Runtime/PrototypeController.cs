@@ -174,7 +174,8 @@ namespace OutpostLoop
                 Priority = 1,
                 CanExecute = () => this != null && isActiveAndEnabled && initialized && !crossing &&
                     Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() != true &&
-                    Game.UIHelper.GetUICtrl<PrototypeTestCommandCtrl>()?.IsShow() != true,
+                    Game.UIHelper.GetUICtrl<PrototypeTestCommandCtrl>()?.IsShow() != true &&
+                    !RiverValleyPauseSharesLogKey(),
                 Execute = () =>
                 {
                     var log = Game.UIHelper.GetUICtrl<PrototypeLogCtrl>();
@@ -654,7 +655,7 @@ namespace OutpostLoop
 
         /// <summary>设置和日志窗口打开时，暂停热键与局内按钮均不响应。</summary>
         private bool CanTogglePause() => this != null && isActiveAndEnabled && initialized && started && !crossing &&
-            World.Run.Outcome == 0 && !UtilityWindowOpen;
+            World.Run.Outcome == 0 && !UtilityWindowOpen && !RiverValleyActionActive;
 
         private bool UtilityWindowOpen => Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() == true ||
             Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true ||

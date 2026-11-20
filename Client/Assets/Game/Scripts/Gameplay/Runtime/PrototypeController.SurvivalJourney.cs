@@ -16,10 +16,10 @@ namespace OutpostLoop
         }
 
         /// <summary>确认和帮助期间暂停局时；关闭窗口的按键不再传给战场。</summary>
-        private bool PollSurvivalJourney(Keyboard keyboard)
+        private bool PollSurvivalJourney(Keyboard keyboard, bool pausePressed)
         {
             bool mapPressed = keyboard?.mKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.M);
-            if (mapPressed && !survivalHelpOpen && !survivalConfirmExit && !scavengePaused)
+            if (mapPressed && !pausePressed && !survivalHelpOpen && !survivalConfirmExit && !scavengePaused)
             {
                 if (survivalRegionMapOpen) survivalRegionMapOpen = false;
                 else OpenRiverValleyRegion();
@@ -79,7 +79,9 @@ namespace OutpostLoop
                 var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
                 GUI.Label(new Rect(422, 52, card.width - 24, 70), SurvivalObjective(), wrapped);
             }
-            if (GUI.Button(new Rect(18, height - 61, 135, 40), "暂停  Esc")) scavengePaused = true;
+            string pauseKey = Game.HotKeyDefaults.DisplayKey(RiverValleyPauseKey);
+            if (GUI.Button(new Rect(18, height - 61, 135, 40), Game.Loc.T("HudPause") + "  " + pauseKey))
+                scavengePaused = true;
             if (GUI.Button(new Rect(161, height - 61, 143, 40), "操作与目标")) survivalHelpOpen = true;
             if (GUI.Button(new Rect(312, height - 61, 143, 40), "区域地图 M")) OpenRiverValleyRegion();
 

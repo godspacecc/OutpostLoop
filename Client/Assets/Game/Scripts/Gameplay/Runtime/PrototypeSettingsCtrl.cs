@@ -4,7 +4,6 @@ using Cysharp.Threading.Tasks;
 using Game;
 using QFramework;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace OutpostLoop
@@ -136,8 +135,7 @@ namespace OutpostLoop
                 HotKeyActionIds.ToggleRuntimeLog => "SettingsKeyLog",
                 _ => "SettingsKeyOther"
             });
-            var key = binding.BindingPath == HotKeyDefaults.Escape ? "Esc" :
-                InputControlPath.ToHumanReadableString(binding.BindingPath, InputControlPath.HumanReadableStringOptions.OmitDevice);
+            var key = HotKeyDefaults.DisplayKey(binding.BindingPath);
             return Loc.T("SettingsKeyLabel", action, string.IsNullOrWhiteSpace(key) ? Loc.T("SettingsKeyUnbound") : key);
         }
 

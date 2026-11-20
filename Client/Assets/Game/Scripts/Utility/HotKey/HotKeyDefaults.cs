@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine.InputSystem;
 
 namespace Game
 {
@@ -18,6 +19,10 @@ namespace Game
     {
         public const string Escape = "<Keyboard>/escape";
         public const string F1 = "<Keyboard>/f1";
+
+        /// <summary>设置和 HUD 共用键帽文案，输入系统继续使用原始绑定路径。</summary>
+        internal static string DisplayKey(string path) => string.IsNullOrEmpty(path) ? "" : path == Escape ? "Esc" :
+            InputControlPath.ToHumanReadableString(path, InputControlPath.HumanReadableStringOptions.OmitDevice);
 
         public static List<HotKeyBinding> Create()
         {

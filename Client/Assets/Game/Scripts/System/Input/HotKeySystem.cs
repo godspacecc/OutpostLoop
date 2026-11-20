@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using QFramework;
@@ -113,6 +114,39 @@ namespace Game
             return EventSystem.current != null &&
                    EventSystem.current.currentSelectedGameObject != null &&
                    EventSystem.current.currentSelectedGameObject.GetComponent<TMP_InputField>() != null;
+        }
+
+        /// <summary>由拥有模态顺序的玩法读取当前绑定，沿用统一的键盘输入动作。</summary>
+        internal bool WasPressedThisFrame(string actionId) =>
+            !isCapturing && !IsTextInputFocused() &&
+            this.GetModel<HotKeyModel>().TryGet(actionId, out var binding) &&
+            actionsByPath.TryGetValue(binding.BindingPath, out var action) &&
+            (action.WasPressedThisFrame() || WasPressedInEditor(binding.BindingPath));
+
+        /// <summary>编辑器 Game 视图有时只向旧输入系统转发键盘事件，按同一绑定读取一次。</summary>
+        private static bool WasPressedInEditor(string bindingPath)
+        {
+#if UNITY_EDITOR && ENABLE_LEGACY_INPUT_MANAGER
+            const string keyboardPrefix = "<Keyboard>/";
+            if (!bindingPath.StartsWith(keyboardPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+            string keyName = bindingPath.Substring(keyboardPrefix.Length).ToLowerInvariant();
+            if (keyName.Length == 1 && keyName[0] >= '0' && keyName[0] <= '9')
+                keyName = "Alpha" + keyName;
+            else if (keyName.StartsWith("numpad", StringComparison.Ordinal))
+                keyName = "Keypad" + keyName.Substring("numpad".Length);
+            else
+                keyName = keyName switch
+                {
+                    "enter" => nameof(KeyCode.Return),
+                    "leftctrl" => nameof(KeyCode.LeftControl),
+                    "rightctrl" => nameof(KeyCode.RightControl),
+                    "contextmenu" => nameof(KeyCode.Menu),
+                    _ => keyName
+                };
+            return Enum.TryParse<KeyCode>(keyName, true, out var key) && Input.GetKeyDown(key);
+#else
+            return false;
+#endif
         }
 
         public bool IsCapturingRebind => isCapturing;

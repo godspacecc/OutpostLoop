@@ -339,19 +339,27 @@ namespace OutpostLoop
             if (scavengeRun.Outcome != ScavengeOutcome.Exploring) return;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            if (PollSurvivalJourney(keyboard)) return;
-            if (keyboard?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape))
+            bool escape = keyboard?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape);
+            bool pausePressed = !CurrentSurvivalPauseBlocked() &&
+                (Game.Game.Interface.GetSystem<Game.HotKeySystem>().WasPressedThisFrame(Game.HotKeyActionIds.TogglePause) ||
+                 (escape && RiverValleyPauseKey == Game.HotKeyDefaults.Escape));
+            if (PollSurvivalJourney(keyboard, pausePressed)) return;
+
+            // Esc 始终先关闭当前物品页或中止动作。开启暂停使用设置中的绑定。
+            if (escape && survivalPackOpen)
             {
-                if (survivalPackOpen)
-                {
-                    CloseSurvivalPanels();
-                    return;
-                }
-                if (scavengeRun.Survival.action != SurvivalAction.None && !scavengePaused)
-                    scavengeRun.CancelSurvivalAction();
-                else if (survivalPackOpen || survivalBuildOpen || survivalContainer != null || scavengeRun.OpenCache >= 0)
-                    CloseSurvivalPanels();
-                else scavengePaused = !scavengePaused;
+                CloseSurvivalPanels();
+                return;
+            }
+            if (escape && scavengeRun.Survival.action != SurvivalAction.None && !scavengePaused)
+                scavengeRun.CancelSurvivalAction();
+            else if (escape && SurvivalPanelOpen)
+                CloseSurvivalPanels();
+            else if (pausePressed || (escape && scavengePaused))
+            {
+                scavengePaused = !scavengePaused;
+                SyncSurvivalPresentation();
+                return;
             }
             if (scavengePaused) { SyncSurvivalPresentation(); return; }
 

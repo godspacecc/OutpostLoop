@@ -62,8 +62,13 @@ namespace OutpostLoop.Tests
             var poll = type.GetMethod("PollScavenge", PrivateInstance);
             var paused = type.GetField("scavengePaused", PrivateInstance);
             var preview = architecture.GetSystem<DisplayPreviewTransaction>();
+            var keys = architecture.GetSystem<HotKeySystem>();
+            var hotKeys = architecture.GetModel<HotKeyModel>();
             try
             {
+                // 先核对默认 Esc，再通过设置事务保存自定义键。测试结束恢复用户原绑定。
+                Assert.IsTrue(hotKeys.TryReplace(HotKeyDefaults.Create()[0]));
+                keys.RebuildActions();
                 language.SetLanguageCode("zh-CN");
                 PressKey(Key.Tab);
                 yield return null;
@@ -125,21 +130,58 @@ namespace OutpostLoop.Tests
                 Assert.IsTrue(architecture.GetSystem<HotKeySystem>().IsCapturingRebind);
                 PressKey(Key.Escape, GameObject.Find("Settings"));
                 yield return null;
-                Assert.IsFalse(architecture.GetSystem<HotKeySystem>().IsCapturingRebind);
+                Assert.IsFalse(keys.IsCapturingRebind);
                 Assert.IsTrue(ctrl.IsShow());
+                yield return null;
+                Press("Bind-" + HotKeyActionIds.TogglePause);
+                Assert.IsTrue(keys.ReceiveBindingPath("<Keyboard>/p").Success);
+                yield return null;
+                PressKey(Key.P, GameObject.Find("Settings"));
+                Assert.IsTrue(ctrl.IsShow());
+                Assert.IsTrue((bool)paused.GetValue(controller));
                 PressKey(Key.Escape, GameObject.Find("Settings"));
                 yield return null;
                 yield return null;
                 Assert.IsFalse(ctrl.IsShow());
                 Assert.AreEqual(.42f, memory.Saved.Audio.MasterVolume);
+                Assert.IsTrue(memory.Saved.HotKeys.Exists(binding =>
+                    binding.ActionId == HotKeyActionIds.TogglePause && binding.BindingPath == "<Keyboard>/p"));
                 Assert.IsTrue((bool)paused.GetValue(controller));
                 Assert.AreEqual(elapsed, run.Survival.elapsed);
-                Press("ResumeSurvival");
-                yield return null;
+                PressKey(Key.P);
                 yield return null;
                 Assert.IsFalse((bool)paused.GetValue(controller));
                 Assert.Greater(run.Survival.elapsed, elapsed);
                 Assert.AreSame(run, type.GetField("scavengeRun", PrivateInstance).GetValue(controller));
+
+                PressKey(Key.Escape);
+                Assert.IsFalse((bool)paused.GetValue(controller), "自定义键后 Esc 不再从探索状态打开暂停");
+                PressKey(Key.Tab);
+                yield return null;
+                Assert.NotNull(GameObject.Find("CloseManagement"));
+                PressKey(Key.P);
+                yield return null;
+                Assert.NotNull(GameObject.Find("CloseManagement"), "自定义暂停键不抢占物品页");
+                Assert.IsFalse((bool)paused.GetValue(controller));
+                PressKey(Key.Escape);
+                yield return null;
+                Assert.IsNull(GameObject.Find("CloseManagement"));
+
+                PressKey(Key.M);
+                var map = type.GetField("survivalRegionMapOpen", PrivateInstance);
+                Assert.IsTrue((bool)map.GetValue(controller));
+                PressKey(Key.P);
+                Assert.IsTrue((bool)map.GetValue(controller), "自定义暂停键不抢占地图");
+                Assert.IsFalse((bool)paused.GetValue(controller));
+                PressKey(Key.Escape);
+                Assert.IsFalse((bool)map.GetValue(controller));
+
+                PressKey(Key.P);
+                yield return null;
+                Assert.IsTrue((bool)paused.GetValue(controller));
+                Press("ResumeSurvival");
+                yield return null;
+                Assert.IsFalse((bool)paused.GetValue(controller));
             }
             finally
             {

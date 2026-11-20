@@ -9,6 +9,30 @@ namespace OutpostLoop
         // 此处只装配界面，继续与保存仍执行现有行动逻辑。
         private SurvivalPauseMenuView survivalPauseMenu;
 
+        private bool RiverValleyActionActive => survivalMode && scavengeRoot != null && scavengeRoot.gameObject.activeSelf;
+
+        private static string RiverValleyPauseKey
+        {
+            get
+            {
+                Game.Game.Interface.GetModel<HotKeyModel>().TryGet(HotKeyActionIds.TogglePause, out var binding);
+                return binding?.BindingPath;
+            }
+        }
+
+        /// <summary>暂停与日志共键时，在可用的局内上下文中由河谷镇暂停取得优先级。</summary>
+        private bool RiverValleyPauseSharesLogKey()
+        {
+            if (!RiverValleyActionActive || CurrentSurvivalPauseBlocked() || UtilityWindowOpen) return false;
+            return Game.Game.Interface.GetModel<HotKeyModel>().TryGet(HotKeyActionIds.ToggleRuntimeLog, out var log) &&
+                log.BindingPath == RiverValleyPauseKey;
+        }
+
+        private bool CurrentSurvivalPauseBlocked() =>
+            scavengeRun == null || scavengeRun.Outcome != ScavengeOutcome.Exploring ||
+            RiverValleyPortalPlaying || survivalHelpOpen || survivalRegionMapOpen || survivalConfirmExit ||
+            SurvivalPanelOpen || (!scavengePaused && scavengeRun.Survival.action != SurvivalAction.None);
+
         private int CurrentSurvivalPausePage()
         {
             if (!isActiveAndEnabled || !initialized || crossing || !survivalMode || scavengeRun == null ||
