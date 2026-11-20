@@ -494,13 +494,19 @@ namespace OutpostLoop.Tests
             var visuals = (RiverValleyInfectedVisual[])type.GetField("infectedVisuals", flags).GetValue(controller);
             Assert.AreEqual(12, visuals.Length);
             int fastCount = 0;
+            var canSeePatrol = type.GetMethod("CanSeeSurvivalInteriorAt", flags);
             for (int i = 0; i < visuals.Length; i++)
             {
-                Assert.IsTrue(visuals[i].GetComponentInChildren<Animator>().isHuman);
-                if (run.Patrols[i].Fast) fastCount++;
-                StringAssert.StartsWith(run.Patrols[i].Fast ? "快速感染者" : "普通感染者", visuals[i].name);
-                Assert.AreEqual(run.Patrols[i].Position.x, visuals[i].transform.position.x, .002f);
-                Assert.AreEqual(run.Patrols[i].Position.y, visuals[i].transform.position.z, .002f);
+                var patrol = run.Patrols[i];
+                Assert.IsTrue(visuals[i].GetComponentInChildren<Animator>(true).isHuman);
+                if (patrol.Fast) fastCount++;
+                StringAssert.StartsWith(patrol.Fast ? "快速感染者" : "普通感染者", visuals[i].name);
+                // 尚未进入的室内沿用遮挡规则，隐藏的表现对象不接收位置刷新。
+                bool visible = patrol.Alive && (bool)canSeePatrol.Invoke(controller, new object[] { patrol.Position });
+                Assert.AreEqual(visible, visuals[i].gameObject.activeSelf);
+                if (!visible) continue;
+                Assert.AreEqual(patrol.Position.x, visuals[i].transform.position.x, .002f);
+                Assert.AreEqual(patrol.Position.y, visuals[i].transform.position.z, .002f);
             }
             Assert.AreEqual(2, fastCount);
 

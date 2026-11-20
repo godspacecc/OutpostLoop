@@ -12,6 +12,7 @@ namespace Game
         public const string Space = "Art/Cosmic/Space";
         public const string Crossing = "Art/Cosmic/Crossing";
         public const string Infected = "Art/RiverValleyInfected/Content/";
+        private const string InfectedAnimationFolder = "Assets/ThirdParty/Pxltiger/Zombie Draft/Animations/";
 
         public static readonly string[] Required =
         {
@@ -26,5 +27,14 @@ namespace Game
 
         public static bool IsEntry(string address) =>
             Array.IndexOf(Required, address) >= 0 || Array.IndexOf(InfectedOptional, address) >= 0;
+
+        /// <summary>感染者原始动画可移动目录，编辑器和 YooAsset 继续使用原逻辑地址。</summary>
+        public static string InfectedAnimationAssetPath(string address) => address switch
+        {
+            Infected + "Z_Idle" => InfectedAnimationFolder + "Z_Idle.anim",
+            Infected + "Z_Walk_InPlace" => InfectedAnimationFolder + "Z_Walk_InPlace.anim",
+            Infected + "Z_Run_InPlace" => InfectedAnimationFolder + "Z_Run_InPlace.anim",
+            _ => null
+        };
     }
 }

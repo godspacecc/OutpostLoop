@@ -103,3 +103,11 @@ MonoBehaviour:
         FilterRuleName: OutpostGameplayArtFilter
         AssetTags:
         UserData:
+      - CollectPath: Assets/ThirdParty
+        CollectorGUID: f3a8f00249849f84887feca4f80c9777
+        CollectorType: 0
+        AddressRuleName: OutpostInfectedAnimationRule
+        PackRuleName: PackSeparately
+        FilterRuleName: OutpostInfectedAnimationRule
+        AssetTags:
+        UserData:

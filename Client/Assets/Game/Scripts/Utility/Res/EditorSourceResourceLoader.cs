@@ -38,6 +38,9 @@ namespace OutpostLoop.Resources
                 path="Assets/Game/"+resolved+".prefab";
             else if (GameplayArtAddress.IsEntry(address))
             {
+                string sourceAnimation = GameplayArtAddress.InfectedAnimationAssetPath(address);
+                if (sourceAnimation != null)
+                    return UnityEditor.AssetDatabase.LoadAssetAtPath<T>(sourceAnimation);
                 var root = "Assets/Game/" + address;
                 path = null;
                 foreach (var candidate in Directory.GetFiles(Path.GetDirectoryName(root), Path.GetFileName(root) + ".*"))

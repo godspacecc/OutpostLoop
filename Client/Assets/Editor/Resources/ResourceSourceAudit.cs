@@ -40,8 +40,21 @@ namespace OutpostLoop.Resources.Editor
         public bool IsCollectAsset(FilterRuleData data)
         {
             const string root = "Assets/Game/";
-            return data.AssetPath.StartsWith(root, StringComparison.Ordinal) &&
-                Game.GameplayArtAddress.IsEntry(Path.ChangeExtension(data.AssetPath.Substring(root.Length), null));
+            if (!data.AssetPath.StartsWith(root, StringComparison.Ordinal)) return false;
+            string address = Path.ChangeExtension(data.AssetPath.Substring(root.Length), null);
+            return Game.GameplayArtAddress.IsEntry(address) && Game.GameplayArtAddress.InfectedAnimationAssetPath(address) == null;
+        }
+    }
+    /// <summary>只收集游戏独立加载的三段供应者动画，使用迁移前的逻辑地址。</summary>
+    public sealed class OutpostInfectedAnimationRule : IFilterRule, IAddressRule
+    {
+        public string FindAssetType => "AnimationClip";
+        public string GetAssetAddress(AddressRuleData data) =>
+            Game.GameplayArtAddress.Infected + Path.GetFileNameWithoutExtension(data.AssetPath);
+        public bool IsCollectAsset(FilterRuleData data)
+        {
+            string address = Game.GameplayArtAddress.Infected + Path.GetFileNameWithoutExtension(data.AssetPath);
+            return data.AssetPath == Game.GameplayArtAddress.InfectedAnimationAssetPath(address);
         }
     }
     public static class ResourceSourceAudit

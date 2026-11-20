@@ -17,6 +17,11 @@ if ((Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash -ne $expected) {
 
 $root = Join-Path $PSScriptRoot '../Client/Assets/Game/Art/RiverValleyInfected'
 $assets = Join-Path $root 'Content'
+$vendor = Join-Path $PSScriptRoot '../Client/Assets/ThirdParty/Pxltiger/Zombie Draft'
+if ((Test-Path -LiteralPath (Join-Path $root 'Source')) -or
+    (Get-ChildItem -LiteralPath $assets -Filter 'Z_*.anim' -File -ErrorAction SilentlyContinue)) {
+    throw '旧感染者原件仍存在。先将 Source 下的 FBX、材质、贴图目录及 Content 下的 Z_*.anim 迁入 ThirdParty/Pxltiger/Zombie Draft，以免产生重复 GUID。'
+}
 $staging = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ("outpost-zombie-" + [guid]::NewGuid()))).FullName
 try {
     & tar.exe -xzf $package -C $staging
@@ -24,9 +29,12 @@ try {
     foreach ($entry in (Get-ChildItem -LiteralPath $staging -Recurse -Filter 'pathname' -File)) {
         $name = (Get-Content -LiteralPath $entry.FullName -TotalCount 1).Trim().Trim([char]0)
         if ($name -match '^Assets/Zombie/(?<part>FBXs/Zombie[123]\.FBX|Materials/Zombie\.mat|Textures/(Zombie\.tga|Zombie_ao\.png|Zombie_nm\.png|zombie_emission\.tga|Zombie_metallic\.tga))$') {
-            $dest = Join-Path "$root/Source" $Matches.part
+            $dest = Join-Path $vendor $Matches.part
         }
-        elseif ($name -match '^Assets/Zombie/(Prefabs|Animations)/(?<file>Zombie[23]\.prefab|Z_(Idle|Walk_InPlace|Run_InPlace)\.anim)$') {
+        elseif ($name -match '^Assets/Zombie/(?<part>Animations/Z_(Idle|Walk_InPlace|Run_InPlace)\.anim)$') {
+            $dest = Join-Path $vendor $Matches.part
+        }
+        elseif ($name -match '^Assets/Zombie/Prefabs/(?<file>Zombie[23]\.prefab)$') {
             $dest = Join-Path $assets $Matches.file
         }
         else { continue }

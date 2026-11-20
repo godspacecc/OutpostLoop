@@ -31,7 +31,11 @@ $selected = @{
     '338e9578d1797374b858ead231938d29' = 'Scripts/ARPGFXRotation.cs'
     '22e815ce54ff10c4cb16c17eb2c27586' = 'Scripts/ARPGFXLightFlicker.cs'
 }
-$root = Join-Path $PSScriptRoot '../Client/Assets/Game/Art/RiverValleyPortal'
+$root = Join-Path $PSScriptRoot '../Client/Assets/ThirdParty/Archanor VFX/Action RPG FX'
+$legacy = Join-Path $PSScriptRoot '../Client/Assets/Game/Art/RiverValleyPortal'
+if (Test-Path -LiteralPath $legacy -PathType Container) {
+    throw '旧传送门目录仍存在。先在 Unity 将原目录移动到 Assets/ThirdParty/Archanor VFX/Action RPG FX，以免产生重复 GUID。'
+}
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')
 $staging = (New-Item -ItemType Directory -Path (Join-Path $tempRoot ('outpost-portal-' + [guid]::NewGuid()))).FullName
 try {
