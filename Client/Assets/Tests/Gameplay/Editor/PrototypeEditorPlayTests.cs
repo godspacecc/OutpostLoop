@@ -963,6 +963,57 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootWeaponCommandGrantsOnlyToAnActiveSurvivalPackWithSpace()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var commands = Game.Game.Interface.GetSystem<Game.DebugCommandSystem>();
+            var logs = Game.Game.Interface.GetModel<Game.RuntimeLogModel>();
+            Game.RuntimeLogEntry Execute(string input)
+            {
+                commands.ExecuteAsync(input).GetAwaiter().GetResult();
+                var entries = logs.Snapshot();
+                return entries[entries.Count - 1];
+            }
+
+            Assert.That(Execute("#weapon.give crowbar").Type, Is.EqualTo(LogType.Warning));
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var controllerType = typeof(PrototypeController);
+            var directory = System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/WeaponDebugCommand-20261120",
+                System.Guid.NewGuid().ToString("N"));
+            controllerType.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            controllerType.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            controllerType.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+
+            var run = (ScavengeRun)controllerType.GetField("scavengeRun", flags).GetValue(controller);
+            var state = run.Survival;
+            Assert.That(Execute("#help").Message, Does.Contain("#weapon.give"));
+            Assert.That(Execute("#weapon.give unknown").Type, Is.EqualTo(LogType.Warning));
+            Assert.That(state.pack, Is.Empty);
+            Assert.That(Execute("#weapon.give crowbar").Type, Is.EqualTo(LogType.Log));
+            Assert.That(Execute("#weapon.give PISTOL").Type, Is.EqualTo(LogType.Log));
+            Assert.That(state.pack[0].item, Is.EqualTo(SurvivalItem.Crowbar));
+            Assert.That(state.pack[1].item, Is.EqualTo(SurvivalItem.Pistol));
+            Assert.That(state.pack[1].rounds, Is.EqualTo(ScavengeSurvival.PistolMagazineCapacity));
+            Assert.That(state.weapon, Is.Null);
+
+            state.pack.Add(new SurvivalStack(SurvivalItem.Boards));
+            state.pack.Add(new SurvivalStack(SurvivalItem.Boards));
+            var fullPack = Execute("#weapon.give pistol");
+            Assert.That(fullPack.Type, Is.EqualTo(LogType.Warning));
+            Assert.That(state.pack.Count, Is.EqualTo(4));
+            Assert.That(state.Used, Is.EqualTo(ScavengeSurvival.Capacity));
+            Assert.That(state.Equip(1), Is.True);
+            Assert.That(state.weapon.item, Is.EqualTo(SurvivalItem.Pistol));
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootRainStaysOutsideRoomsWhenRoofsAreHidden()
         {
             const string batch="IndoorRain-20261119";

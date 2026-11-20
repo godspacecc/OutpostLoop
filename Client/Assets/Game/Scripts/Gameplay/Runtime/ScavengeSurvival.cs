@@ -122,6 +122,8 @@ namespace OutpostLoop
     internal sealed class ScavengeSurvival
     {
         public const int Day = 24 * 60, Goal = 3 * Day, Deadline = Goal + 120, Capacity = 6;
+        // 手枪测试发放和正常装填使用同一弹匣容量。
+        public const int PistolMagazineCapacity = 6;
         public static readonly int[] ActiveCaches = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14 };
 
         public double elapsed;

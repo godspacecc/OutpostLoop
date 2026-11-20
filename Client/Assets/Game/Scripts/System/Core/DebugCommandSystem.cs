@@ -1,15 +1,15 @@
 using System;
 using Boot;
 using Cysharp.Threading.Tasks;
+using OutpostLoop;
 using QFramework;
 using UnityEngine;
 
 namespace Game
 {
-    /// <summary>串行执行白名单调试指令；只通过现有系统操作本地基础服务，不执行任意代码或服务端管理操作。</summary>
+    /// <summary>执行白名单调试指令，操作交给本地基础服务和当前行动。</summary>
     public sealed class DebugCommandSystem : AbstractSystem
     {
-        // 本项目的白名单指令只查询或同步提交本地数据。
         protected override void OnInit() { }
 
         /// <summary>执行单条白名单指令，将结果写入运行时日志。</summary>
@@ -32,7 +32,7 @@ namespace Game
             return UniTask.CompletedTask;
         }
 
-        /// <summary>调用基础模块的既有接口，不持有玩法或服务器状态。</summary>
+        /// <summary>将诊断或测试操作转交给对应模块。</summary>
         private (bool success, string message) Execute(DebugCommandRequest request)
         {
             switch (request.Definition.Name)
@@ -54,6 +54,11 @@ namespace Game
                     bool saved = this.GetSystem<SaveSystem>().Flush(out var error);
                     return (saved, saved ? "本地修改已保存；没有待保存修改时不重复写盘。" : error);
                 case "log.clear": this.GetSystem<RuntimeLogSystem>().Clear(); return (true, "内存日志已清空，错误文件保留。");
+                case "weapon.give":
+                    var controller = UnityEngine.Object.FindObjectOfType<PrototypeController>();
+                    return controller != null
+                        ? controller.GiveSurvivalTestWeapon(request.Arguments[0])
+                        : (false, "请先进入河谷镇行动。");
                 default: return (false, "指令目录与执行入口不一致。");
             }
         }

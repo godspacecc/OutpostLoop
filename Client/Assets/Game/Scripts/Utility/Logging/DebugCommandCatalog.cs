@@ -34,6 +34,7 @@ namespace Game
             new DebugCommandDefinition("resource.status", "#resource.status", "查看当前资源来源、版本与更新检查状态"),
             new DebugCommandDefinition("save.status", "#save.status", "查看本地存档身份、待保存状态与最近错误"),
             new DebugCommandDefinition("save.flush", "#save.flush", "立即保存本地待提交修改"),
+            new DebugCommandDefinition("weapon.give", "#weapon.give <crowbar|pistol>", "将撬棍或装满弹匣的手枪放入河谷镇行动背包", 1),
             new DebugCommandDefinition("log.clear", "#log.clear", "清空内存日志；保留错误文件")
         });
 

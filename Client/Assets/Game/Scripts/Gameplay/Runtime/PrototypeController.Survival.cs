@@ -33,6 +33,28 @@ namespace OutpostLoop
         private int survivalFeedbackVersion = -1;
         private float survivalFeedbackUntil;
 
+        /// <summary>在进行中的行动发放一件测试武器，沿用普通背包的容量和装备规则。</summary>
+        internal (bool success, string message) GiveSurvivalTestWeapon(string weaponId)
+        {
+            if (!survivalMode || crossing || scavengeRun?.Survival == null ||
+                scavengeRun.Outcome != ScavengeOutcome.Exploring)
+                return (false, "请先进入进行中的河谷镇行动。");
+
+            var weapon = weaponId.ToLowerInvariant() switch
+            {
+                "crowbar" => new SurvivalStack(SurvivalItem.Crowbar),
+                "pistol" => new SurvivalStack(SurvivalItem.Pistol) { rounds = ScavengeSurvival.PistolMagazineCapacity },
+                _ => null
+            };
+            if (weapon == null) return (false, "可用武器：crowbar（撬棍）、pistol（手枪）。");
+
+            var state = scavengeRun.Survival;
+            if (!ScavengeSurvival.Transfer(new List<SurvivalStack> { weapon }, 0, state.pack, ScavengeSurvival.Capacity))
+                return (false, "背包已满，腾出一格后再试。");
+
+            return (true, $"已将{DescribeSurvivalItem(weapon)}放入背包。打开背包后可装备。");
+        }
+
         internal bool HasSurvivalSave
         {
             get
@@ -725,7 +747,7 @@ namespace OutpostLoop
                 SurvivalItem.Ammo => "子弹", SurvivalItem.Torch => "手电", SurvivalItem.Battery => "电池",
                 SurvivalItem.Boards => "建材", SurvivalItem.Parts => "维修零件", _ => "警报器"
             };
-            if (stack.item == SurvivalItem.Pistol) return $"{name} {stack.rounds}/6";
+            if (stack.item == SurvivalItem.Pistol) return $"{name} {stack.rounds}/{ScavengeSurvival.PistolMagazineCapacity}";
             if (stack.item == SurvivalItem.Torch) return $"{name} {stack.charge / 3.6f:0}%";
             return stack.count > 1 ? $"{name} ×{stack.count}" : name;
         }

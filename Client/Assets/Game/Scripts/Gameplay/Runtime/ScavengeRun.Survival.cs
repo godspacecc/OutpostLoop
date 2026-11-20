@@ -345,7 +345,7 @@ namespace OutpostLoop
                     if (Survival.health >= 100) return ReportSurvival("生命已满");
                     item = SurvivalItem.Aid; time = 6; break;
                 case SurvivalAction.Reload:
-                    if (Survival.weapon?.item != SurvivalItem.Pistol || Survival.weapon.rounds >= 6)
+                    if (Survival.weapon?.item != SurvivalItem.Pistol || Survival.weapon.rounds >= ScavengeSurvival.PistolMagazineCapacity)
                         return ReportSurvival("需要装备手枪且枪内有空位");
                     item = SurvivalItem.Ammo; time = 2.5f; break;
                 case SurvivalAction.Battery:
@@ -407,7 +407,7 @@ namespace OutpostLoop
                 case SurvivalAction.Bandage: Survival.bleeding = false; Survival.bleedClock = 0; break;
                 case SurvivalAction.Aid: Survival.health = Mathf.Min(100, Survival.health + 25); break;
                 case SurvivalAction.Reload:
-                    int needed = 6 - Survival.weapon.rounds;
+                    int needed = ScavengeSurvival.PistolMagazineCapacity - Survival.weapon.rounds;
                     for (int i = Survival.pack.Count - 1; i >= 0 && needed > 0; i--)
                     {
                         if (Survival.pack[i].item != SurvivalItem.Ammo) continue;
