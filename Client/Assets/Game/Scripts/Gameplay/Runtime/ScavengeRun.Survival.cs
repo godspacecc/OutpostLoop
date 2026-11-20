@@ -135,6 +135,8 @@ namespace OutpostLoop
             var room = Survival.rooms[index];
             string blocked = SurvivalDoorBlocked(index);
             if (blocked != null) return ReportSurvival(blocked);
+            if (!room.open)
+                room.opensOutward = Player.x >= RoomSet.Door(index).center.x;
             room.open = !room.open;
             RefreshSurvivalWalls();
             return ReportSurvival(room.open ? "门已打开" : "门已关上", true);

@@ -52,6 +52,8 @@ namespace OutpostLoop
     internal sealed class SurvivalRoom
     {
         public bool open;
+        // 开门时记住门板摆向，旧档默认采用原来的向内方向。
+        public bool opensOutward;
         public bool fortified;
         public int durability = 60;
         public bool alarm;

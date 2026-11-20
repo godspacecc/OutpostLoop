@@ -1082,6 +1082,24 @@ namespace OutpostLoop.Tests
                 player.SetValue(run, door - Vector2.right);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsTrue(run.Survival.rooms[0].open);
+                var doorState = run.Survival.rooms[0];
+                Assert.IsFalse(doorState.opensOutward);
+                var doorVisual = ((Transform[])type.GetField("survivalDoors", flags).GetValue(controller))[0];
+                var syncDoor = type.GetMethod("SyncSurvivalDoorPose", flags);
+                var doorway = run.RoomSet.Door(0);
+                // 受控推进半段关门动画，检查同一门轴上的中间姿态。
+                syncDoor.Invoke(controller, new object[] { 0, doorway, doorState, .28f });
+                Assert.That(Mathf.DeltaAngle(0, doorVisual.eulerAngles.y), Is.EqualTo(90).Within(.1f));
+                Assert.IsTrue(run.ToggleSurvivalDoor());
+                syncDoor.Invoke(controller, new object[] { 0, doorway, doorState, .14f });
+                Assert.That(Mathf.DeltaAngle(0, doorVisual.eulerAngles.y), Is.EqualTo(45).Within(.1f));
+                syncDoor.Invoke(controller, new object[] { 0, doorway, doorState, .28f });
+                player.SetValue(run, door + Vector2.right);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.IsTrue(doorState.open);
+                Assert.IsTrue(doorState.opensOutward);
+                syncDoor.Invoke(controller, new object[] { 0, doorway, doorState, .28f });
+                Assert.That(Mathf.DeltaAngle(0, doorVisual.eulerAngles.y), Is.EqualTo(-90).Within(.1f));
                 Assert.That(run.Survival.pack, Is.Empty);
                 for (int room = 0; room < run.Survival.rooms.Length; room++)
                 {
@@ -1114,6 +1132,7 @@ namespace OutpostLoop.Tests
                 Assert.That(resumed.Survival.elapsed, Is.InRange(paused, paused + 2));
                 Assert.That(resumed.Survival.water, Is.InRange(42f, 43f));
                 Assert.IsTrue(resumed.Survival.rooms[0].open);
+                Assert.IsTrue(resumed.Survival.rooms[0].opensOutward);
                 Assert.IsTrue(resumed.Survival.rooms[0].fortified);
                 Assert.IsTrue(resumed.Survival.rooms[1].fortified);
                 Assert.IsNull(resumed.Survival.weapon);

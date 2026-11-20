@@ -23,6 +23,8 @@ namespace OutpostLoop
         private readonly AudioSource[] survivalAlarms = new AudioSource[2];
         private readonly AudioSource[] survivalImpacts = new AudioSource[2];
         private readonly int[] survivalDoorDurability = new int[2];
+        // 门板当前的表现角度，续玩时从存档姿态起步。
+        private readonly float[] survivalDoorAngles = new float[2];
         private readonly List<Transform> survivalDropMarkers = new List<Transform>();
         private Material survivalDropMaterial;
         private AudioClip survivalAlarmClip, survivalDoorImpact;
@@ -191,7 +193,11 @@ namespace OutpostLoop
             survivalPackOpen = survivalBuildOpen = false;
             survivalSaveError = null;
             for (int i = 0; i < survivalDoorDurability.Length; i++)
-                survivalDoorDurability[i] = scavengeRun.Survival.rooms[i].durability;
+            {
+                var room = scavengeRun.Survival.rooms[i];
+                survivalDoorDurability[i] = room.durability;
+                survivalDoorAngles[i] = SurvivalDoorTargetAngle(room);
+            }
         }
 
         private void CreateSurvivalRoom(int room, Material walls, Material floor, Material wood, Material roof)
@@ -291,8 +297,7 @@ namespace OutpostLoop
                 var render = door.GetComponent<Renderer>();
                 render.enabled = room.durability > 0;
                 survivalDoorBraces[i].gameObject.SetActive(room.fortified && room.durability > 0);
-                door.position = SurvivalPosition(room.open ? new Vector2(hinge.center.x + .8f, hinge.yMin) : hinge.center, 1.02f);
-                door.rotation = Quaternion.Euler(0, room.open ? 90 : 0, 0);
+                SyncSurvivalDoorPose(i, hinge, room, scavengePaused ? 0 : Time.unscaledDeltaTime);
                 var audio = survivalAlarms[i];
                 if (room.durability < survivalDoorDurability[i] && !scavengePaused &&
                     Vector2.Distance(scavengeRun.Player, hinge.center) <= 12)
@@ -314,6 +319,21 @@ namespace OutpostLoop
             }
             for (int i = state.drops.Count; i < survivalDropMarkers.Count; i++)
                 survivalDropMarkers[i].gameObject.SetActive(false);
+        }
+
+        /// <summary>开启时向玩家所在侧的对面摆动，关闭时回到门框。</summary>
+        private static float SurvivalDoorTargetAngle(SurvivalRoom room) =>
+            room.open ? (room.opensOutward ? -90f : 90f) : 0f;
+
+        /// <summary>由门轴反算门板中心，使门板和附着的横板一起绕轴旋转。</summary>
+        private void SyncSurvivalDoorPose(int index, Rect doorway, SurvivalRoom room, float deltaTime)
+        {
+            const float swingDuration = .28f;
+            float angle = survivalDoorAngles[index] = Mathf.MoveTowards(survivalDoorAngles[index],
+                SurvivalDoorTargetAngle(room), 90f / swingDuration * deltaTime);
+            var rotation = Quaternion.Euler(0, angle, 0);
+            var pivot = SurvivalPosition(new Vector2(doorway.center.x, doorway.yMin), 1.02f);
+            survivalDoors[index].SetPositionAndRotation(pivot + rotation * (Vector3.forward * (doorway.height * .5f)), rotation);
         }
 
         private void ReleaseSurvivalPresentation()
