@@ -39,6 +39,9 @@ namespace Game
         [JsonProperty("testCommands")]
         public TestCommandPreferences TestCommands { get; set; } = new TestCommandPreferences();
 
+        [JsonProperty("perceptionLayout")]
+        public PerceptionLayout Perception { get; set; } = new PerceptionLayout();
+
         public static SettingsData CreateDefault()
         {
             return new SettingsData().Sanitize();
@@ -53,7 +56,8 @@ namespace Game
                 Display = Display?.Clone(),
                 Audio = Audio?.Clone(),
                 HotKeys = HotKeys?.Select(item => item?.Clone()).ToList(),
-                TestCommands = TestCommands?.Clone()
+                TestCommands = TestCommands?.Clone(),
+                Perception = Perception?.Clone()
             }.Sanitize();
         }
 
@@ -65,6 +69,7 @@ namespace Game
             Audio = (Audio ?? AudioSettingsData.CreateDefault()).Sanitize();
             HotKeys = SanitizeHotKeys(HotKeys);
             TestCommands = (TestCommands ?? new TestCommandPreferences()).Clone();
+            Perception = (Perception ?? new PerceptionLayout()).Clone();
             return this;
         }
 

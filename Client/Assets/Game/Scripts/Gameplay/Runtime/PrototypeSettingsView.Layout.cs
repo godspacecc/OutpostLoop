@@ -20,7 +20,8 @@ namespace OutpostLoop
         // 设置分组只决定当前显示；候选与已提交设置仍由现有事务管理。
         private readonly List<Button> navigation = new();
         private PrototypeMenuWidgets widgets;
-        private RectTransform content;
+        private RectTransform content, settingsPanel;
+        private PerceptionLayoutView perceptionEditor;
         private ScrollRect scrollView;
         private TMP_Text title, displayCountdown;
         private Button back;
@@ -44,6 +45,7 @@ namespace OutpostLoop
 
         private void CloseMenu()
         {
+            ClosePerception();
             captured?.UnRegister();
             captured = null;
         }
@@ -51,7 +53,7 @@ namespace OutpostLoop
         private void CreateMenu()
         {
             widgets = new PrototypeMenuWidgets();
-            var panel = Panel(transform, "SettingsPanel", 1100, 770);
+            var panel = settingsPanel = Panel(transform, "SettingsPanel", 1100, 770);
             title = widgets.Label(panel, "Title", 34, 20, 940, 68, "", 39, TextColor);
             Graphic(panel, "TitleRule", 34, 99, 1032, 2, Line);
             for (int i = 0; i < SectionKeys.Length; i++)
@@ -87,6 +89,11 @@ namespace OutpostLoop
         {
             if (!content || !FoundationRuntime.IsInitialized) return;
             bool esc = Keyboard.current?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape);
+            if (perceptionEditor)
+            {
+                if (esc) perceptionEditor.Escape();
+                return;
+            }
             if (esc && escapeCaptureFrame != Time.frameCount) HandleBack();
             if (!isActiveAndEnabled) return;
 
@@ -225,7 +232,30 @@ namespace OutpostLoop
                 pageDirty = true;
             });
             RowButton("ResetSettings", 16, 454, 262, Loc.T("SettingsReset"), ResetSettings);
+            RowButton("PerceptionLayout", 298, 454, 262, Loc.T("PerceptionLayout"), OpenPerception)
+                .interactable = !preview.IsActive;
             return 516;
+        }
+
+        /// <summary>设置宿主保持打开，由现有局内门禁维持暂停。</summary>
+        private void OpenPerception()
+        {
+            if (perceptionEditor || Architecture.GetSystem<DisplayPreviewTransaction>().IsActive) return;
+            settingsPanel.gameObject.SetActive(false);
+            var layer = Graphic(transform, "PerceptionEditor", 0, 0, 1, 1, Shade, true);
+            Stretch(layer.rectTransform);
+            perceptionEditor = layer.gameObject.AddComponent<PerceptionLayoutView>();
+            var camera = FromActiveSurvival ? FindObjectOfType<PrototypeController>()?.PerceptionPreviewCamera : null;
+            perceptionEditor.Open(Architecture.GetSystem<SettingsSystem>().Perception, camera, ClosePerception);
+        }
+
+        private void ClosePerception()
+        {
+            if (!perceptionEditor) return;
+            perceptionEditor.gameObject.SetActive(false);
+            Destroy(perceptionEditor.gameObject);
+            perceptionEditor = null;
+            settingsPanel.gameObject.SetActive(true);
         }
 
         private void CancelDisplayPreview()

@@ -16,6 +16,78 @@ namespace OutpostLoop
         public TMP_Text WaterDetail, FoodDetail, EnergyDetail;
         public Button Pack;
 
+        // 运行时将旧预制体控件拆到可独立定位的组，保留原来的文字和仪表绑定。
+        private RectTransform action, equipment, pack;
+        private RectTransform[] instruments;
+
+        internal void InitializeLayout()
+        {
+            var root = (RectTransform)transform;
+            action = Group(root, "ActionInfo");
+            equipment = Group(root, "CurrentEquipment");
+            pack = (RectTransform)Pack.transform;
+            pack.SetParent(root, false);
+
+            Move(Clock.rectTransform, action, 10, 3, 300);
+            Move(Objective.rectTransform, action, 10, 30, 300);
+            Move(Weapon.rectTransform, equipment, 10, 3, 220);
+            Move(Torch.rectTransform, equipment, 10, 30, 220);
+            Speed.rectTransform.SetParent(root, false);
+
+            var life = Panel.Find("Life");
+            var lifeTrack = (RectTransform)Panel.Find("LifeTrack");
+            var water = (RectTransform)Panel.Find("Water");
+            var food = (RectTransform)Panel.Find("Food");
+            var energy = (RectTransform)Panel.Find("Energy");
+            instruments = new[] { (RectTransform)life, lifeTrack, HealthValue.rectTransform, water, food, energy };
+            foreach (RectTransform item in Panel)
+            {
+                if (item.name.EndsWith("Divider", System.StringComparison.Ordinal)) item.gameObject.SetActive(false);
+                else item.anchoredPosition += new Vector2(0, 27);
+            }
+            Panel.GetComponent<Image>().raycastTarget = false;
+        }
+
+        private static RectTransform Group(Transform parent, string name) =>
+            PrototypeMenuWidgets.Graphic(parent, name, 0, 0, 0, 0, new Color(.045f, .07f, .07f, .76f)).rectTransform;
+
+        private static void Move(RectTransform child, RectTransform parent, float x, float y, float width)
+        {
+            child.SetParent(parent, false);
+            child.anchoredPosition = new Vector2(x, -y);
+            child.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+        }
+
+        internal void ApplyLayout(Rect actionRect, Rect bodyRect, Rect equipmentRect, Rect packRect, Rect contextRect,
+            bool showAction, bool showBody, bool showEquipment, bool showPack, bool showSpeed, ScavengeSurvival state)
+        {
+            bool warning = state.Ready || state.Warning;
+            action.gameObject.SetActive(showAction || warning);
+            Clock.gameObject.SetActive(showAction);
+            Objective.gameObject.SetActive(showAction || warning);
+            equipment.gameObject.SetActive(showEquipment && (state.weapon != null || state.torch != null));
+            Panel.gameObject.SetActive(showBody || state.bleeding ||
+                state.water < LowNeed || state.food < LowNeed || state.energy < LowNeed);
+            // 低需求文字与图形同在一组。隐藏身体仪表时仅保留有预警的需求。
+            instruments[0].gameObject.SetActive(showBody);
+            instruments[1].gameObject.SetActive(showBody);
+            instruments[2].gameObject.SetActive(showBody);
+            instruments[3].gameObject.SetActive(showBody || state.water < LowNeed);
+            instruments[4].gameObject.SetActive(showBody || state.food < LowNeed);
+            instruments[5].gameObject.SetActive(showBody || state.energy < LowNeed);
+
+            PerceptionGeometry.Place(action, actionRect, PerceptionGeometry.BaseSize(PerceptionGroup.Action));
+            PerceptionGeometry.Place(Panel, bodyRect, PerceptionGeometry.BaseSize(PerceptionGroup.Body));
+            PerceptionGeometry.Place(equipment, equipmentRect, PerceptionGeometry.BaseSize(PerceptionGroup.Equipment));
+            PerceptionGeometry.Place(pack, packRect, packRect.size);
+            pack.gameObject.SetActive(showPack);
+            float speedScale = contextRect.width / PerceptionGeometry.BaseSize(PerceptionGroup.Interaction).x;
+            var speedSize = new Vector2(140, 25);
+            var speedRect = new Rect(contextRect.x + 10 * speedScale, contextRect.y, 140 * speedScale, 25 * speedScale);
+            PerceptionGeometry.Place(Speed.rectTransform, speedRect, speedSize);
+            Speed.gameObject.SetActive(showSpeed);
+        }
+
         // 保留旧 HUD 的生存预警阈值。低生命颜色是显示反馈。
         private const float LowNeed = 25;
         private static readonly Color Critical = new(.98f, .62f, .52f);
@@ -24,7 +96,7 @@ namespace OutpostLoop
         private static readonly Color Readout = new(.81f, .88f, .85f);
 
         // 仅在读取到新显示值时重新格式化文案，填充量可逐帧平滑变化。
-        private (string Language, int Day, int Minute, int Remaining, bool Ready) timeText;
+        private (string Language, int Day, int Minute, int Remaining, bool Ready, bool Warning) timeText;
         private (string Language, int Water, int Food, int Energy, bool WaterLow, bool FoodLow,
             bool EnergyLow, bool Bleeding, bool Details) needText;
         private (string Language, bool Driving, bool PackOpen, int Used, SurvivalItem? WeaponId,
@@ -84,12 +156,14 @@ namespace OutpostLoop
             int minute = Mathf.FloorToInt(state.Hour * 60);
             int remaining = Mathf.CeilToInt((float)System.Math.Max(0,
                 (state.Ready ? ScavengeSurvival.Deadline : ScavengeSurvival.Goal) - state.elapsed));
-            var next = (language, day, minute, remaining, state.Ready);
+            var next = (language, day, minute, remaining, state.Ready, state.Warning);
             if (timeText == next) return;
             timeText = next;
             Clock.text = Loc.T("SurvivalStatusClock", day, minute / 60, minute % 60);
-            Objective.text = Loc.T(state.Ready ? "SurvivalStatusExtraction" : "SurvivalStatusRemaining", remaining / 60, remaining % 60);
-            Objective.color = state.Ready ? Low : Readout;
+            string key = state.Ready ? "SurvivalStatusExtraction" :
+                state.Warning ? "PerceptionExtractionSoon" : "SurvivalStatusRemaining";
+            Objective.text = Loc.T(key, remaining / 60, remaining % 60);
+            Objective.color = state.Ready || state.Warning ? Low : Readout;
         }
 
         private void RefreshGear(ScavengeSurvival state, bool driving, float vehicleSpeed, bool packOpen, string language)
@@ -100,7 +174,6 @@ namespace OutpostLoop
                 Kph: driving ? Mathf.RoundToInt(Mathf.Abs(vehicleSpeed) * 3.6f) : 0);
             if (gearText == next) return;
             gearText = next;
-            Pack.gameObject.SetActive(!driving);
             Speed.text = driving ? Loc.T("SurvivalStatusSpeed", next.Kph) : "";
             PackLabel.text = packOpen ? Loc.T("SurvivalStatusPackOpen") :
                 Loc.T("SurvivalStatusPack", next.Used, ScavengeSurvival.Capacity);

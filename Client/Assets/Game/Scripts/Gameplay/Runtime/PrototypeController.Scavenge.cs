@@ -587,6 +587,22 @@ namespace OutpostLoop
         private void DrawScavengeMap(float width, bool opensRegion = false)
         {
             var panel = ScavengeMapRect(width, opensRegion);
+            if (!opensRegion) { DrawScavengeMapContents(panel, false); return; }
+            if (!ShowPerceptionMap()) return;
+            var bounds = PerceptionRect(Game.PerceptionGroup.Map);
+            var matrix = GUI.matrix;
+            try
+            {
+                float scale = bounds.width / panel.width;
+                GUI.matrix = matrix * Matrix4x4.TRS(bounds.position, Quaternion.identity, Vector3.one * scale);
+                DrawScavengeMapContents(new Rect(Vector2.zero, panel.size), true);
+            }
+            finally { GUI.matrix = matrix; }
+        }
+
+        /// <summary>地图标记和按钮共用缩放后的局部画布。</summary>
+        private void DrawScavengeMapContents(Rect panel, bool opensRegion)
+        {
             if (opensRegion)
             {
                 if (GUI.Button(panel, GUIContent.none)) OpenRiverValleyRegion();

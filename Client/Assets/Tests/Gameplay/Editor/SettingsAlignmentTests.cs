@@ -51,6 +51,47 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(1, store.Loads);
         }
 
+        [Test] public void PerceptionLayoutReadsVersionOneSettingsAndRoundTripsIndependently()
+        {
+            var disk = new SettingsFileStore(folder);
+            Directory.CreateDirectory(disk.SettingsDirectory);
+            File.WriteAllText(disk.SettingsPath, "{\"version\":1,\"languageCode\":\"en\"}");
+            var legacy = disk.LoadOrDefault(out var loadResult);
+            Assert.AreEqual(SettingsLoadResult.LoadedPrimary, loadResult);
+            Assert.AreEqual(1f, legacy.Perception.Map.X);
+            Assert.AreEqual(true, legacy.Perception.Interaction.Visible);
+
+            var candidate = legacy.Clone();
+            candidate.Perception.Map.Visible = false;
+            candidate.Perception.Map.X = .35f;
+            candidate.Perception.Map.Scale = 2;
+            candidate.Perception.Body.Y = float.NaN;
+            Assert.IsTrue(disk.Save(candidate, out var error), error);
+            var saved = disk.LoadOrDefault(out _);
+            Assert.AreEqual("en", saved.LanguageCode);
+            Assert.AreEqual(false, saved.Perception.Map.Visible);
+            Assert.AreEqual(.35f, saved.Perception.Map.X);
+            Assert.AreEqual(1.4f, saved.Perception.Map.Scale);
+            Assert.AreEqual(1f, saved.Perception.Body.Y);
+            Assert.AreEqual(true, legacy.Perception.Map.Visible);
+
+            // 参考坐标下覆盖 16:9、超宽和 4:3，并验证有刘海偏移时整个分组仍在安全区。
+            var rectangles = new Rect[PerceptionGeometry.Count];
+            foreach (var area in new[] { new Rect(0, 0, 1280, 720), new Rect(28, 10, 1520, 700), new Rect(0, 0, 1280, 960) })
+            {
+                PerceptionGeometry.Resolve(saved.Perception, area, rectangles);
+                for (int i = 0; i < rectangles.Length; i++)
+                {
+                    var rect = rectangles[i];
+                    Assert.GreaterOrEqual(rect.xMin, area.xMin + 16);
+                    Assert.GreaterOrEqual(rect.yMin, area.yMin + 16);
+                    Assert.LessOrEqual(rect.xMax, area.xMax - 15.99f);
+                    Assert.LessOrEqual(rect.yMax, area.yMax - 15.99f);
+                    for (int j = 0; j < i; j++) Assert.IsFalse(rect.Overlaps(rectangles[j]));
+                }
+            }
+        }
+
         [Test] public void AtomicSaveAndCorruptPrimaryRecoverBackup()
         {
             var file = new SettingsFileStore(folder);

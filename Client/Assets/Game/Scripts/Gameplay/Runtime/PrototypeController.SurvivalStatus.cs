@@ -21,7 +21,17 @@ namespace OutpostLoop
             if (!survivalStatusView && !LoadSurvivalStatusView()) return;
 
             survivalStatusView.gameObject.SetActive(true);
-            survivalStatusView.Render(scavengeRun.Survival, scavengeRun.Driving, scavengeRun.VehicleSpeed, SurvivalInventoryOpen);
+            var state = scavengeRun.Survival;
+            bool driving = scavengeRun.Driving;
+            survivalStatusView.Render(state, driving, scavengeRun.VehicleSpeed, SurvivalInventoryOpen);
+            var action = PerceptionRect(PerceptionGroup.Action);
+            var body = PerceptionRect(PerceptionGroup.Body);
+            var equipment = PerceptionRect(PerceptionGroup.Equipment);
+            var pack = PerceptionGeometry.Pack(lastPerceptionArea);
+            survivalStatusView.ApplyLayout(action, body, equipment, pack, PerceptionRect(PerceptionGroup.Interaction),
+                ShowPerceptionGroup(PerceptionGroup.Action, action), ShowPerceptionGroup(PerceptionGroup.Body, body),
+                !driving && ShowPerceptionGroup(PerceptionGroup.Equipment, equipment),
+                !driving && !SurvivalInventoryOpen, driving, state);
         }
 
         private bool LoadSurvivalStatusView()
@@ -37,6 +47,7 @@ namespace OutpostLoop
 
             survivalStatusView = Instantiate(template, transform, false);
             survivalStatusView.name = "RiverValleyStatusCanvas";
+            survivalStatusView.InitializeLayout();
             survivalStatusView.Pack.onClick.AddListener(() =>
             {
                 if (CanShowSurvivalHud() && !scavengeRun.Driving) OpenSurvivalPack();
@@ -44,11 +55,9 @@ namespace OutpostLoop
             return true;
         }
 
-        /// <summary>状态层挡住对世界的点击，命中边界取自可编辑预制体。</summary>
-        private bool SurvivalStatusContains(Vector2 cursor, Vector2 hudPoint) =>
-            survivalStatusView
-                ? survivalStatusView.isActiveAndEnabled &&
-                    RectTransformUtility.RectangleContainsScreenPoint(survivalStatusView.Panel, cursor)
-                : SurvivalInfo.Contains(hudPoint);
+        /// <summary>背包入口独立命中，纯读数不会拦截世界点击。</summary>
+        private bool SurvivalStatusContains(Vector2 hudPoint) =>
+            CanShowSurvivalHud() && !scavengeRun.Driving && !SurvivalInventoryOpen &&
+            PerceptionGeometry.Pack(PerceptionGeometry.ScreenArea).Contains(hudPoint);
     }
 }

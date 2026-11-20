@@ -35,6 +35,9 @@ namespace Game
         /// <summary>本次启动采用主文件、备份或默认值的结果。</summary>
         private SettingsLoadResult lastLoadResult;
 
+        // 布局只在完整设置快照写入成功后切换。
+        internal PerceptionLayout Perception { get; private set; } = new PerceptionLayout().Clone();
+
         public SettingsLoadResult LastLoadResult => lastLoadResult;
 
         protected override void OnInit()
@@ -72,6 +75,7 @@ namespace Game
         {
             data = (data ?? SettingsData.CreateDefault()).Sanitize();
             this.GetModel<LocalizationModel>().SetLanguageCode(data.LanguageCode);
+            Perception = data.Perception.Clone();
             this.GetModel<DisplaySettingsModel>().Apply(data.Display);
             this.GetModel<AudioSettingsModel>().Apply(data.Audio);
             this.GetModel<HotKeyModel>().Apply(data.HotKeys);
@@ -123,7 +127,19 @@ namespace Game
         /// <summary>
         /// 将当前模型中的设置快照写入本地文件；保存失败只返回 false 并记录诊断，不改变脏标记的后续重试语义。
         /// </summary>
-        public bool SaveCurrent()
+        public bool SaveCurrent() => SaveSnapshot(Perception, out _);
+
+        /// <summary>合并最新设置与布局草稿，失败时保留已生效布局。</summary>
+        internal bool SavePerception(PerceptionLayout draft, out string error)
+        {
+            var candidate = draft.Clone();
+            if (!SaveSnapshot(candidate, out error)) return false;
+            Perception = candidate;
+            dirty = false;
+            return true;
+        }
+
+        private bool SaveSnapshot(PerceptionLayout layout, out string error)
         {
             var data = new SettingsData
             {
@@ -131,10 +147,11 @@ namespace Game
                 Display = this.GetModel<DisplaySettingsModel>().ToData(),
                 Audio = this.GetModel<AudioSettingsModel>().ToData(),
                 HotKeys = this.GetModel<HotKeyModel>().ToData(),
-                TestCommands = this.GetSystem<DebugCommandSystem>().CopyPreferences()
+                TestCommands = this.GetSystem<DebugCommandSystem>().CopyPreferences(),
+                Perception = layout
             }.Sanitize();
 
-            if (!this.GetUtility<ISettingsFileStore>().Save(data, out var error))
+            if (!this.GetUtility<ISettingsFileStore>().Save(data, out error))
             {
                 Log.Error($"[SettingsSystem] 保存设置失败：{error}");
                 return false;

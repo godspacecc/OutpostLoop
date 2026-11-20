@@ -13,12 +13,20 @@ namespace OutpostLoop
         private TMP_Text survivalContextLabel;
         private Image survivalContextTrack, survivalContextFill;
         private string survivalContextShownAction;
-        private static Rect SurvivalContext(float width, float height) => new(width / 2 - 175, height - 61, 350, 40);
+        private Rect SurvivalContextRect
+        {
+            get
+            {
+                var bounds = PerceptionRect(PerceptionGroup.Interaction);
+                float visualHeight = bounds.height * (40f / PerceptionGeometry.BaseSize(PerceptionGroup.Interaction).y);
+                return new Rect(bounds.x, bounds.yMax - visualHeight, bounds.width, visualHeight);
+            }
+        }
 
         /// <summary>点击拦截只覆盖当前可见的底部操作或进度。</summary>
-        private bool SurvivalContextContains(Vector2 point, float width, float height) =>
-            CanShowSurvivalHud() && SurvivalContext(width, height).Contains(point) &&
-            (SurvivalContextHasProgress || SurvivalInteraction() != null);
+        private bool SurvivalContextContains(Vector2 point) =>
+            CanShowSurvivalHud() && PerceptionVisible(PerceptionGroup.Interaction) &&
+            !SurvivalContextHasProgress && SurvivalContextRect.Contains(point) && SurvivalInteraction() != null;
 
         private bool SurvivalContextHasProgress => scavengeRun.SearchRemaining > 0 ||
             scavengeRun.Survival.action != SurvivalAction.None;
@@ -28,7 +36,7 @@ namespace OutpostLoop
         {
             bool hud = CanShowSurvivalHud();
             bool progress = hud && SurvivalContextHasProgress;
-            string action = hud && !progress ? SurvivalInteraction() : null;
+            string action = hud && !progress && PerceptionVisible(PerceptionGroup.Interaction) ? SurvivalInteraction() : null;
             survivalContextShownAction = action;
             if (action == null && !progress)
             {
@@ -37,7 +45,9 @@ namespace OutpostLoop
             }
 
             if (!survivalContextPanel) CreateSurvivalContext();
+            PerceptionGeometry.Place(survivalContextPanel, SurvivalContextRect, new Vector2(350, 40));
             survivalContextPanel.gameObject.SetActive(true);
+            survivalContextButton.targetGraphic.raycastTarget = action != null;
             survivalContextButton.interactable = action != null;
             survivalContextTrack.gameObject.SetActive(progress);
             if (!progress)
@@ -72,10 +82,6 @@ namespace OutpostLoop
             var panel = new GameObject("Interaction", typeof(Image), typeof(Button));
             survivalContextPanel = (RectTransform)panel.transform;
             survivalContextPanel.SetParent(root.transform, false);
-            survivalContextPanel.anchorMin = survivalContextPanel.anchorMax = new Vector2(.5f, 0);
-            Rect bounds = SurvivalContext(1280, 720);
-            survivalContextPanel.sizeDelta = bounds.size;
-            survivalContextPanel.anchoredPosition = new Vector2(0, 720 - bounds.center.y);
             var frame = panel.GetComponent<Image>();
             frame.color = LootBackground;
             survivalContextButton = panel.GetComponent<Button>();

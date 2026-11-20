@@ -37,43 +37,6 @@ namespace OutpostLoop
             return true;
         }
 
-        /// <summary>物品面板打开时缩小目标卡，绘制与输入拦截使用相同范围。</summary>
-        private Rect SurvivalObjectiveRect(float width)
-        {
-            float height = SurvivalInventoryOpen ? 38 : 112;
-            return new Rect(410, 18, Mathf.Min(430, width - 650), height);
-        }
-
-        /// <summary>根据真实身体状态和行动阶段给出下一步提示，不提前展示世界观背景。</summary>
-        private string SurvivalObjective()
-        {
-            var state = scavengeRun.Survival;
-            if (state.Ready) return "目标已达成：前往地图上的青绿色撤离点，按 E 撤离。";
-            if (state.Warning) return "即将活满三天：带好饮水和医疗用品，向撤离点靠拢。";
-            if (state.bleeding) return "你正在出血：找掩护，在背包使用绷带；急救包不能止血。";
-            if (state.water < 25) return "饮水不足：按 Tab 使用密封饮水；没有饮水就搜索附近容器。";
-            if (state.food < 25) return "需要进食：按 Tab 使用包装食品。";
-            if (state.energy < 25) return "需要休息：找有床的安全房间，走近床按 E 睡觉。";
-            if (state.pack.Count == 0 && state.weapon == null && state.torch == null)
-                return "先找补给：WASD 移动，靠近镇口容器按 E 搜索，点击拾取水和食品。";
-            if (state.elapsed < 120)
-                return "已找到物品：按 Tab 查看背包，点击使用或装备；暂时不用的物品可留着。";
-            return "活过三天：按需补水、进食和睡眠，可在商铺后屋或住宅轮换落脚。";
-        }
-
-        /// <summary>在行动中显示当前目标，物品面板打开时只保留标题。</summary>
-        private void DrawSurvivalObjective(float width)
-        {
-            var card = SurvivalObjectiveRect(width);
-            GUI.Box(card, "");
-            GUI.Label(new Rect(422, 24, card.width - 24, 26), "河谷镇 · 在镇中生存三天");
-            if (card.height > 38)
-            {
-                var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
-                GUI.Label(new Rect(422, 52, card.width - 24, 70), SurvivalObjective(), wrapped);
-            }
-        }
-
         /// <summary>结算只展示本趟状态，不把物品登记成空间库存。</summary>
         private string SurvivalResultDetails()
         {
