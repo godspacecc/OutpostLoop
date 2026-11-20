@@ -148,15 +148,38 @@ namespace OutpostLoop.Tests
 
         [Test] public void HotKeyRebindExecutesRegisteredActionAndPersists()
         {
+            var file = new SettingsFileStore(folder);
+            architecture.RegisterUtility<ISettingsFileStore>(file);
             int calls = 0;
-            architecture.GetUtility<HotKeyActionRegistry>().Register(new HotKeyAction { ActionId = HotKeyActionIds.TogglePause, Execute = () => calls++ });
+            architecture.GetUtility<HotKeyActionRegistry>().Register(new HotKeyAction
+            {
+                ActionId = HotKeyActionIds.ToggleRuntimeLog,
+                Execute = () => calls++
+            });
             var hotkeys = architecture.GetSystem<HotKeySystem>();
-            Assert.IsTrue(hotkeys.BeginRebind(HotKeyActionIds.TogglePause).Success);
-            Assert.IsTrue(hotkeys.ReceiveBindingPath("<Keyboard>/p").Success);
-            Assert.IsTrue(hotkeys.ExecuteBinding("<Keyboard>/p"));
+            Assert.IsTrue(hotkeys.BeginRebind(HotKeyActionIds.ToggleRuntimeLog).Success);
+            Assert.IsTrue(hotkeys.ReceiveBindingPath("<Keyboard>/l").Success);
+            Assert.IsTrue(hotkeys.ExecuteBinding("<Keyboard>/l"));
             Assert.AreEqual(1, calls);
-            settings.Flush();
-            Assert.AreEqual("<Keyboard>/p", store.Saved.HotKeys.Find(x => x.ActionId == HotKeyActionIds.TogglePause).BindingPath);
+            Assert.IsTrue(settings.Flush());
+            StringAssert.Contains("<Keyboard>/l", File.ReadAllText(file.SettingsPath));
+
+            // 重建架构并从真实 JSON 读取，覆盖默认键表与已保存键表的合并。
+            FoundationRuntime.Shutdown();
+            architecture = Game.Game.Interface;
+            architecture.RegisterUtility<ISettingsFileStore>(new SettingsFileStore(folder));
+            architecture.RegisterUtility<IDisplayResolutionApplier>(display);
+            FoundationRuntime.Initialize();
+            architecture.GetUtility<HotKeyActionRegistry>().Register(new HotKeyAction
+            {
+                ActionId = HotKeyActionIds.ToggleRuntimeLog,
+                Execute = () => calls++
+            });
+            hotkeys = architecture.GetSystem<HotKeySystem>();
+            Assert.AreEqual(SettingsLoadResult.LoadedPrimary, architecture.GetSystem<SettingsSystem>().LastLoadResult);
+            Assert.IsTrue(hotkeys.ExecuteBinding("<Keyboard>/l"), "重启后应使用文件中已保存的日志键");
+            Assert.IsFalse(hotkeys.ExecuteBinding(HotKeyDefaults.F1));
+            Assert.AreEqual(2, calls);
         }
 
         [Test] public void LanguageResourceAndBorderlessSizingUseReferenceRules()

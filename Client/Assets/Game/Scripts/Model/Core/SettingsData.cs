@@ -32,7 +32,8 @@ namespace Game
         [JsonProperty("audio")]
         public AudioSettingsData Audio { get; set; } = AudioSettingsData.CreateDefault();
 
-        [JsonProperty("hotKeys")]
+        // 已保存的键表替换初始列表，缺少的动作再由 SanitizeHotKeys 补默认值。
+        [JsonProperty("hotKeys", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<HotKeyBinding> HotKeys { get; set; } = HotKeyDefaults.Create();
 
         public static SettingsData CreateDefault()
