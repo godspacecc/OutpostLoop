@@ -60,6 +60,7 @@ namespace OutpostLoop
         {
             UpdateSurvivalContext();
             UpdateSurvivalStatus();
+            UpdateSurvivalPauseMenu();
             if (!CanShowInventoryCanvas())
             {
                 if (inventoryRoot && inventoryRoot.activeSelf) inventoryRoot.SetActive(false);

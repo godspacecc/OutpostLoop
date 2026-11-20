@@ -24,7 +24,7 @@ namespace OutpostLoop
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.sizeDelta = Vector2.zero;
-            root.GetComponent<Image>().color = new Color(0, 0, 0, .8f);
+            root.GetComponent<Image>().color = PrototypeMenuWidgets.Shade;
             return root.AddComponent<PrototypeSettingsView>();
         }
         protected override void OnInit() { view = (PrototypeSettingsView)BaseUI; view.Close = Hide; }
@@ -37,17 +37,18 @@ namespace OutpostLoop
             session?.SetPaused(true);
             view.Open();
         }
+        internal void EnterFromSurvival() => view.FromActiveSurvival = true;
         internal void CheckUpdateFromStart() => view.CheckFromStart();
         protected override void OnHide()
         {
             view.Cancel();
             if (FoundationRuntime.IsInitialized) session?.SetPaused(wasPaused);
         }
-        protected override void OnUnload() { view.Cancel(); view.ReleaseFont(); }
+        protected override void OnUnload() { view.Cancel(); }
     }
 
     /// <summary>原型设置表现层，提供语言、音量、显示预览、按键及更新公告的实际入口。</summary>
-    internal sealed class PrototypeSettingsView : BaseUI
+    internal sealed partial class PrototypeSettingsView : BaseUI
     {
         // 候选显示值在用户确认前不写入模型。异步请求使用会话代次过滤关闭后的结果。
         internal Action Close;
@@ -60,30 +61,27 @@ namespace OutpostLoop
         private int generation;
         // 保存结构化结果，切换语言后按当前语言重新显示。
         private ResourceUpdateCheckWithNoticeResult? lastUpdate;
-        private bool showUpdateFirst;
-        private Vector2 scroll;
-        private Font font;
+        internal bool FromActiveSurvival;
         private IArchitecture Architecture => Game.Game.Interface;
 
         internal void Open()
         {
-            showUpdateFirst = false;
+            FromActiveSurvival = false;
             restartPending = false;
             lastUpdate = null;
             message = "";
-            scroll = Vector2.zero;
             LoadDisplay();
+            OpenMenu();
         }
 
         internal void CheckFromStart()
         {
-            showUpdateFirst = true;
+            SelectSection(Section.Updates);
             Check().Forget();
         }
 
         private void LoadDisplay()
         {
-            if (font == null) font = Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 18);
             var model = Architecture.GetModel<DisplaySettingsModel>();
             resolution = model.CurrentResolutionCode.Value;
             mode = model.CurrentWindowMode.Value;
@@ -92,6 +90,7 @@ namespace OutpostLoop
         internal void Cancel()
         {
             generation++;
+            CloseMenu();
             checking = false;
             restartPending = false;
             Architecture.GetSystem<DisplayPreviewTransaction>().Cancel();
@@ -99,125 +98,14 @@ namespace OutpostLoop
             Architecture.GetSystem<SettingsSystem>().Flush();
         }
 
-        private void OnGUI()
-        {
-            if (!FoundationRuntime.IsInitialized) return;
-            var previousFont = GUI.skin.font;
-            GUI.skin.font = font;
-            float scale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
-            var oldMatrix = GUI.matrix;
-            GUI.matrix = Matrix4x4.Scale(Vector3.one * scale);
-            GUILayout.BeginArea(new Rect(290, 30, 700, 660), GUI.skin.box);
-            scroll = GUILayout.BeginScrollView(scroll);
-            GUILayout.Label(Loc.T("SettingsTitle"));
-            if (showUpdateFirst) DrawUpdate();
-            var language = Architecture.GetModel<LocalizationModel>();
-            GUILayout.BeginHorizontal();
-            foreach (var item in LocalizationLanguages.All)
-            {
-                if (GUILayout.Button(item.Label))
-                {
-                    language.SetLanguageCode(item.Code);
-                    Architecture.GetSystem<SettingsSystem>().MarkDirty();
-                }
-            }
-            GUILayout.EndHorizontal();
-            var audio = Architecture.GetModel<AudioSettingsModel>();
-            var master = Volume("SettingsMaster", audio.MasterVolume.Value);
-            var music = Volume("SettingsMusic", audio.MusicVolume.Value);
-            var sound = Volume("SettingsSound", audio.SoundVolume.Value);
-            bool mute = GUILayout.Toggle(audio.Mute.Value, Loc.T("SettingsMute"));
-            if (master != audio.MasterVolume.Value || music != audio.MusicVolume.Value || sound != audio.SoundVolume.Value || mute != audio.Mute.Value)
-            {
-                audio.MasterVolume.Value = master;
-                audio.MusicVolume.Value = music;
-                audio.SoundVolume.Value = sound;
-                audio.Mute.Value = mute;
-                Architecture.GetSystem<AudioSystem>().ApplyVolumes();
-                Architecture.GetSystem<SettingsSystem>().MarkDirty();
-            }
-
-            GUILayout.Label(Loc.T("SettingsDisplay"));
-            GUILayout.BeginHorizontal();
-            foreach (var preset in DisplayResolutionPresets.All)
-                if (GUILayout.Toggle(resolution == preset.Code, preset.Label, GUI.skin.button)) resolution = preset.Code;
-            GUILayout.EndHorizontal();
-            mode = GUILayout.Toggle(mode == FullScreenMode.FullScreenWindow, Loc.T("SettingsFullscreen")) ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
-            var preview = Architecture.GetSystem<DisplayPreviewTransaction>();
-            if (preview.IsActive)
-            {
-                GUILayout.Label(Loc.T("SettingsCountdown", Mathf.CeilToInt(preview.RemainingSeconds)));
-                if (GUILayout.Button(Loc.T("CommonConfirm"))) preview.Confirm();
-                if (GUILayout.Button(Loc.T("CommonCancel"))) { preview.Cancel(); LoadDisplay(); }
-            }
-            else if (GUILayout.Button(Loc.T("SettingsPreview"))) preview.BeginPreview(resolution, mode);
-
-            GUILayout.Label(Loc.T("SettingsKeys"));
-            var keys = Architecture.GetSystem<HotKeySystem>();
-            foreach (var binding in Architecture.GetModel<HotKeyModel>().Bindings)
-                if (GUILayout.Button(HotKeyLabel(binding))) keys.BeginRebind(binding.ActionId);
-            if (keys.IsCapturingRebind)
-            {
-                GUILayout.Label(Loc.T("SettingsCapture"));
-                if (GUILayout.Button(Loc.T("SettingsReplace"))) message = keys.ConfirmPendingBinding(true).Error;
-                if (GUILayout.Button(Loc.T("CommonCancel"))) keys.CancelRebind();
-            }
-            if (GUILayout.Button(Loc.T("SettingsReset")))
-            {
-                preview.Cancel();
-                Architecture.GetSystem<SettingsSystem>().ResetAllToDefault();
-                Architecture.GetSystem<AudioSystem>().ApplyVolumes();
-                var display = Architecture.GetModel<DisplaySettingsModel>();
-                Architecture.GetUtility<IDisplayResolutionApplier>().Apply(display.GetCurrentResolution(), display.CurrentWindowMode.Value);
-                LoadDisplay();
-            }
-            if (!showUpdateFirst) DrawUpdate();
-            if (GUILayout.Button(Loc.T("CommonBack"))) Close?.Invoke();
-            GUILayout.EndScrollView();
-            GUILayout.EndArea();
-            GUI.matrix = oldMatrix;
-            GUI.skin.font = previousFont;
-        }
-
-        private void DrawUpdate()
-        {
-            var wasEnabled = GUI.enabled;
-            GUI.enabled = wasEnabled && !checking;
-            if (GUILayout.Button(Loc.T("SettingsCheck"))) Check().Forget();
-            GUI.enabled = wasEnabled;
-            var snapshot = lastUpdate?.Snapshot ?? Architecture.GetSystem<ResourceUpdateSystem>().Snapshot;
-            GUILayout.Label(PrototypeUpdateText.CurrentVersion(snapshot));
-            GUILayout.Label(checking ? Loc.T("UpdateChecking") : PrototypeUpdateText.Status(snapshot));
-            if (lastUpdate is { } result)
-            {
-                if (snapshot.Status == ResourceUpdateStatus.UpdateAvailable && snapshot.HasKnownDownloadSize)
-                    GUILayout.Label(Loc.T("UpdateResourceSize", snapshot.TotalDownloadCount, snapshot.TotalDownloadBytes / 1048576d));
-                if (result.ApplicationUpdate is { } app)
-                    GUILayout.Label(Loc.T("UpdateApplication", Application.version, app.versionName, app.sizeBytes / 1048576d));
-                if (result.Notice.HasNotice)
-                    GUILayout.Label(ResourceUpdateNoticeDocument.FormatForNotify(result.Notice.Content, true));
-            }
-            if (!string.IsNullOrEmpty(message)) GUILayout.Label(message);
-            bool canRestart = lastUpdate is { } update &&
-                              (update.Snapshot.Status == ResourceUpdateStatus.UpdateAvailable || update.ApplicationUpdate != null);
-            if (!checking && canRestart && restartPending)
-            {
-                GUILayout.Label(Loc.T("SettingsRestartRunWarning"));
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(Loc.T("SettingsRestart"))) ConfirmUpdateRestart();
-                if (GUILayout.Button(Loc.T("CommonCancel"))) restartPending = false;
-                GUILayout.EndHorizontal();
-            }
-            else if (!checking && canRestart && GUILayout.Button(Loc.T("SettingsRestart"))) RequestUpdateRestart();
-        }
-
         /// <summary>有未保存战局时先显示确认，开始页仍可直接更新。</summary>
         private void RequestUpdateRestart()
         {
-            if (Architecture.GetSystem<PrototypeSystem>()?.HasUnsavedRun == true)
+            if (FromActiveSurvival || Architecture.GetSystem<PrototypeSystem>()?.HasUnsavedRun == true)
                 restartPending = true;
             else
                 RestartForUpdate();
+            pageDirty = true;
         }
 
         private void ConfirmUpdateRestart()
@@ -225,6 +113,7 @@ namespace OutpostLoop
             if (!restartPending) return;
             restartPending = false;
             RestartForUpdate();
+            pageDirty = true;
         }
 
         /// <summary>设置写盘成功后才交给平台重启，失败时保留当前窗口与战局。</summary>
@@ -236,17 +125,6 @@ namespace OutpostLoop
                 return;
             }
             message = Architecture.GetUtility<IApplicationRestartUtility>().TryRestart(out var error) ? "" : error;
-        }
-
-        internal void ReleaseFont()
-        {
-            if (font != null) Destroy(font);
-        }
-
-        private static float Volume(string key, float value)
-        {
-            GUILayout.Label(Loc.T(key) + "  " + Mathf.RoundToInt(value * 100) + "%");
-            return GUILayout.HorizontalSlider(value, 0, 1);
         }
 
         /// <summary>设置只展示动作名称和键帽文字，重绑与存储仍使用原始标识。</summary>
@@ -268,6 +146,7 @@ namespace OutpostLoop
         {
             int request = ++generation;
             checking = true;
+            pageDirty = true;
             restartPending = false;
             lastUpdate = null;
             message = "";
@@ -278,7 +157,14 @@ namespace OutpostLoop
                 lastUpdate = result;
             }
             catch (Exception error) { if (request == generation && this != null) message = error.Message; }
-            finally { if (request == generation && this != null) checking = false; }
+            finally
+            {
+                if (request == generation && this != null)
+                {
+                    checking = false;
+                    pageDirty = true;
+                }
+            }
         }
     }
 

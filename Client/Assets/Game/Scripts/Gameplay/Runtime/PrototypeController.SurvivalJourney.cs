@@ -101,27 +101,20 @@ namespace OutpostLoop
         private bool DrawSurvivalJourneyModal(float width, float height)
         {
             if (survivalRegionMapOpen) { DrawRiverValleyRegion(width, height); return true; }
-            if (!survivalHelpOpen && !survivalConfirmExit) return false;
+            if (!survivalConfirmExit) return scavengeRun.Outcome == ScavengeOutcome.Exploring && (scavengePaused || survivalHelpOpen);
             ScavengeFill(new Rect(0, 0, width, height), new Color(.045f, .065f, .075f, .95f));
             float x = (width - 680) / 2, y = (height - 470) / 2;
             GUI.Box(new Rect(x, y, 680, 470), "");
             var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
-            GUI.Label(new Rect(x + 24, y + 18, 632, 35), survivalConfirmExit ? "确认提前撤离" : "第一趟行动 · 操作与目标");
-            string text = survivalConfirmExit
-                ? $"当前存活 {SurvivalTime(scavengeRun.Survival.elapsed)}，尚未活满三天。\n\n现在撤离会结束本趟，并记录为目标未达成。结算会记录实际存活时间和撤离时的随身物品。\n\n也可以留在镇中继续生存，达标后再撤离。"
-                : "目标：在镇中存活 72 分钟（三个游戏日），然后在 2 分钟窗口内到撤离点按 E。最后 5 分钟会提前提醒。\n\nWASD 移动，Shift 奔跑；E 搜索、开关门、睡觉或撤离。\nTab 打开背包，点击使用或装备；搜索界面可切到「使用 / 装备」。\n鼠标瞄准，左键攻击；R 装填，F 开关已装备的手电。\n进入商铺后屋或住宅可设基地；入口旁按 V 加固、维修或安装警报。\n\n饮食、治疗和施工完成才扣道具；移动、受击或 Esc 会中断。睡眠只恢复精力，世界仍继续推进。\nEsc 暂停，可保存并返回开始页，再用「继续游戏」恢复。\n小地图：浅黄为自己，青绿为撤离点，绿为基地，灰为已搜空容器。";
+            GUI.Label(new Rect(x + 24, y + 18, 632, 35), "确认提前撤离");
+            string text = $"当前存活 {SurvivalTime(scavengeRun.Survival.elapsed)}，尚未活满三天。\n\n现在撤离会结束本趟，并记录为目标未达成。结算会记录实际存活时间和撤离时的随身物品。\n\n也可以留在镇中继续生存，达标后再撤离。";
             GUI.Label(new Rect(x + 24, y + 63, 632, 316), text, wrapped);
-            if (survivalConfirmExit)
+            if (GUI.Button(new Rect(x + 24, y + 402, 300, 42), "继续生存  Esc")) survivalConfirmExit = false;
+            if (GUI.Button(new Rect(x + 350, y + 402, 306, 42), "提前撤离 · 目标未达成"))
             {
-                if (GUI.Button(new Rect(x + 24, y + 402, 300, 42), "继续生存  Esc")) survivalConfirmExit = false;
-                if (GUI.Button(new Rect(x + 350, y + 402, 306, 42), "提前撤离 · 目标未达成"))
-                {
-                    survivalConfirmExit = false;
-                    if (scavengeRun.SurvivalExit()) CloseSurvivalSave();
-                }
+                survivalConfirmExit = false;
+                if (scavengeRun.SurvivalExit()) CloseSurvivalSave();
             }
-            else if (GUI.Button(new Rect(x + 24, y + 402, 632, 42), scavengePaused ? "返回暂停菜单  Esc" : "返回行动  Esc"))
-                survivalHelpOpen = false;
             return true;
         }
     }

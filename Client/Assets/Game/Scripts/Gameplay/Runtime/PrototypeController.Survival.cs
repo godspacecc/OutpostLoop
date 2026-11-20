@@ -554,7 +554,7 @@ namespace OutpostLoop
             if (RiverValleyPortalPlaying) return;
             var state = scavengeRun.Survival;
             if (DrawSurvivalJourneyModal(width, height)) return;
-            if (scavengePaused || scavengeRun.Outcome != ScavengeOutcome.Exploring)
+            if (scavengeRun.Outcome != ScavengeOutcome.Exploring)
             {
                 DrawSurvivalModal(width, height);
                 return;
@@ -677,37 +677,24 @@ namespace OutpostLoop
             ScavengeFill(new Rect(0, 0, width, height), new Color(.045f, .065f, .075f, .88f));
             float x = (width - 560) / 2, y = (height - 410) / 2;
             GUI.Box(new Rect(x, y, 560, 410), "");
-            if (scavengePaused)
+            string outcome = scavengeRun.Outcome switch
             {
-                GUI.Label(new Rect(x + 20, y + 25, 425, 35), "行动暂停");
-                if (GUI.Button(new Rect(x + 20, y + 75, 420, 42), "继续行动")) scavengePaused = false;
-                if (GUI.Button(new Rect(x + 20, y + 130, 420, 42), "保存并返回开始页")) SaveAndLeaveSurvival();
-                if (GUI.Button(new Rect(x + 20, y + 185, 420, 42), "操作与目标")) survivalHelpOpen = true;
-                GUI.Label(new Rect(x + 20, y + 246, 520, 64),
-                    "暂停期间时间停止。保存后可从开始页继续本趟。\n搜索和背包界面不会暂停世界，请先找安全位置。",
-                    new GUIStyle(GUI.skin.label) { wordWrap = true });
-            }
-            else
-            {
-                string outcome = scavengeRun.Outcome switch
-                {
-                    ScavengeOutcome.Died => "阵亡",
-                    ScavengeOutcome.WindowClosed => "撤离窗口已关闭",
-                    _ => state.Ready ? "达成生存目标 · 已回归" : "已撤离 · 生存目标未达成"
-                };
-                GUI.Label(new Rect(x + 20, y + 18, 420, 38), outcome);
-                GUI.Label(new Rect(x + 20, y + 57, 420, 28), $"存活 {SurvivalTime(state.elapsed)}  ·  {(state.Ready ? "已活满三天" : "未活满三天")}");
-                GUI.Label(new Rect(x + 20, y + 94, 520, 86), SurvivalResultDetails(),
-                    new GUIStyle(GUI.skin.label) { wordWrap = true });
-                if (GUI.Button(new Rect(x + 20, y + 190, 520, 39), survivalLayoutVersion == 0 ?
-                    "用相同种子重试 · 旧版街区" : "用相同种子重试 · 空手") && CloseSurvivalSave())
-                    BeginScavenge(scavengeRun.Seed);
-                if (GUI.Button(new Rect(x + 20, y + 239, 520, 39), "换种子开始 · 河谷镇整图"))
-                    StartFreshSurvivalFromResult();
-                if (GUI.Button(new Rect(x + 20, y + 288, 520, 39),
-                    scavengeRun.Outcome == ScavengeOutcome.Extracted ? "回到空间 · 查看行动记录" : "返回开始页 · 保留结果"))
-                    ReturnFromSurvival();
-            }
+                ScavengeOutcome.Died => "阵亡",
+                ScavengeOutcome.WindowClosed => "撤离窗口已关闭",
+                _ => state.Ready ? "达成生存目标 · 已回归" : "已撤离 · 生存目标未达成"
+            };
+            GUI.Label(new Rect(x + 20, y + 18, 420, 38), outcome);
+            GUI.Label(new Rect(x + 20, y + 57, 420, 28), $"存活 {SurvivalTime(state.elapsed)}  ·  {(state.Ready ? "已活满三天" : "未活满三天")}");
+            GUI.Label(new Rect(x + 20, y + 94, 520, 86), SurvivalResultDetails(),
+                new GUIStyle(GUI.skin.label) { wordWrap = true });
+            if (GUI.Button(new Rect(x + 20, y + 190, 520, 39), survivalLayoutVersion == 0 ?
+                "用相同种子重试 · 旧版街区" : "用相同种子重试 · 空手") && CloseSurvivalSave())
+                BeginScavenge(scavengeRun.Seed);
+            if (GUI.Button(new Rect(x + 20, y + 239, 520, 39), "换种子开始 · 河谷镇整图"))
+                StartFreshSurvivalFromResult();
+            if (GUI.Button(new Rect(x + 20, y + 288, 520, 39),
+                scavengeRun.Outcome == ScavengeOutcome.Extracted ? "回到空间 · 查看行动记录" : "返回开始页 · 保留结果"))
+                ReturnFromSurvival();
             if (!string.IsNullOrEmpty(survivalSaveError))
                 GUI.Label(new Rect(x + 20, y + 354, 520, 42), survivalSaveError);
         }

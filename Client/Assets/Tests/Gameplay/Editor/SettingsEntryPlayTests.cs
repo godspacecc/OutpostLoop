@@ -31,7 +31,8 @@ namespace OutpostLoop.Tests
                 LanguageCode = architecture.GetModel<LocalizationModel>().CurrentLanguageCode.Value,
                 Display = architecture.GetModel<DisplaySettingsModel>().ToData(),
                 Audio = architecture.GetModel<AudioSettingsModel>().ToData(),
-                HotKeys = architecture.GetModel<HotKeyModel>().ToData()
+                HotKeys = architecture.GetModel<HotKeyModel>().ToData(),
+                TestCommands = architecture.GetSystem<DebugCommandSystem>().CopyPreferences()
             };
             var store = architecture.GetUtility<ISettingsFileStore>();
             var display = architecture.GetUtility<IDisplayResolutionApplier>();
@@ -62,7 +63,8 @@ namespace OutpostLoop.Tests
                 ctrl.Hide();
                 Assert.IsFalse(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 var hotkeys = architecture.GetSystem<HotKeySystem>();
-                Assert.IsTrue(hotkeys.ExecuteBinding(HotKeyDefaults.F1));
+                Assert.IsTrue(architecture.GetModel<HotKeyModel>().TryGet(HotKeyActionIds.ToggleRuntimeLog, out var binding));
+                Assert.IsTrue(hotkeys.ExecuteBinding(binding.BindingPath));
                 Assert.IsTrue(UIHelper.GetUICtrl<PrototypeLogCtrl>().IsShow());
                 Assert.IsTrue(architecture.GetModel<PrototypeModel>().World.Run.Paused);
                 Assert.IsFalse(hotkeys.ExecuteBinding(HotKeyDefaults.Escape));
