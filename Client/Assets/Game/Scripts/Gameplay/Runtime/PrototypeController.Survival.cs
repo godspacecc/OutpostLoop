@@ -523,7 +523,7 @@ namespace OutpostLoop
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
             return SurvivalInfo.Contains(point) || (ShowSurvivalContext && SurvivalContext(width, height).Contains(point)) ||
                 SurvivalJourneyContains(point, width, height) ||
-                ScavengeMapRect(width).Contains(point) || (SurvivalPanelOpen && SurvivalInventory(width, height).Contains(point)) ||
+                ScavengeMapRect(width).Contains(point) || InventoryContains(cursor, point, width, height) ||
                 (scavengeRun.InsideSurvivalRoom >= 0 && new Rect(width - 205, height - 61, 184, 40).Contains(point)) ||
                 (scavengeRun.NearbySurvivalDoor >= 0 && new Rect(width - 205, height - 108, 184, 38).Contains(point));
         }

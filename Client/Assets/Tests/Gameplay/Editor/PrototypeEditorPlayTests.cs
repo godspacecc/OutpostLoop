@@ -1367,7 +1367,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyInventoryUsesLocalizedTmpAndTransfersItems()
         {
-            const string batch = "RiverValleyInventoryTMP-20261120";
+            const string batch = "InventoryPrefab-20261120";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -1408,7 +1408,14 @@ namespace OutpostLoop.Tests
 
                 var canvas = GameObject.Find("RiverValleyInventoryCanvas");
                 Assert.NotNull(canvas.GetComponent<GraphicRaycaster>());
-                var title = canvas.transform.Find("InventoryPanel/InventoryTitle").GetComponent<TMPro.TextMeshProUGUI>();
+                var view = canvas.GetComponent<SurvivalInventoryView>();
+                Assert.NotNull(view);
+                Assert.NotNull(view.SourceRow);
+                Assert.NotNull(view.PackRow);
+                var packHeading = view.Panel.Find("PackHeading").GetComponent<TMPro.TextMeshProUGUI>();
+                Assert.NotNull(packHeading.GetComponent<Game.LocalizedTmpText>());
+                Assert.AreEqual(Game.Loc.T("InventoryPack"), packHeading.text);
+                var title = view.Title;
                 Assert.AreEqual(run.CacheNames[hospital], title.text);
                 Assert.IsTrue(title.font.HasCharacters(title.text, out uint[] missing, true, true),
                     missing == null ? "" : string.Join(",", missing));
@@ -1422,7 +1429,9 @@ namespace OutpostLoop.Tests
                 language.SetLanguageCode("en");
                 yield return null;
                 yield return null;
-                title = canvas.transform.Find("InventoryPanel/InventoryTitle").GetComponent<TMPro.TextMeshProUGUI>();
+                Assert.AreSame(title, view.Title);
+                Assert.AreSame(packHeading, view.Panel.Find("PackHeading").GetComponent<TMPro.TextMeshProUGUI>());
+                Assert.AreEqual(Game.Loc.T("InventoryPack"), packHeading.text);
                 Assert.AreEqual("Hospital entrance supply cabinet", title.text);
                 title.ForceMeshUpdate();
                 Assert.IsFalse(title.isTextTruncated);
@@ -1458,8 +1467,8 @@ namespace OutpostLoop.Tests
                 var panel = canvas.transform.Find("InventoryPanel");
                 var sourceScroll = panel.Find("InventorySource").GetComponent<ScrollRect>();
                 var packScroll = panel.Find("InventoryPack").GetComponent<ScrollRect>();
-                Assert.NotNull(sourceScroll.verticalScrollbar);
-                Assert.IsNull(packScroll.verticalScrollbar);
+                Assert.IsTrue(sourceScroll.verticalScrollbar.gameObject.activeSelf);
+                Assert.IsFalse(packScroll.verticalScrollbar.gameObject.activeSelf);
                 Assert.IsFalse(sourceScroll.content.Find("Torch/Take").GetComponent<Button>().interactable);
                 Assert.IsTrue(sourceScroll.content.Find("Water/Take").GetComponent<Button>().interactable);
                 var packOrigin = packScroll.content.anchoredPosition;
