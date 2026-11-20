@@ -37,11 +37,6 @@ namespace OutpostLoop
             return true;
         }
 
-        /// <summary>常驻按钮和目标卡吞掉攻击输入，避免点击界面时挥击或开枪。</summary>
-        private bool SurvivalJourneyContains(Vector2 point, float width, float height) =>
-            new Rect(18, height - 61, 437, 40).Contains(point) ||
-            SurvivalObjectiveRect(width).Contains(point);
-
         /// <summary>物品面板打开时缩小目标卡，绘制与输入拦截使用相同范围。</summary>
         private Rect SurvivalObjectiveRect(float width)
         {
@@ -68,8 +63,8 @@ namespace OutpostLoop
             return "活过三天：按需补水、进食和睡眠，留意夜间巡逻与基地入口。";
         }
 
-        /// <summary>不阻断落地操作的目标说明、快捷入口及按权威剩余时间绘制的动作进度。</summary>
-        private void DrawSurvivalJourney(float width, float height)
+        /// <summary>在行动中显示当前目标，物品面板打开时只保留标题。</summary>
+        private void DrawSurvivalObjective(float width)
         {
             var card = SurvivalObjectiveRect(width);
             GUI.Box(card, "");
@@ -79,12 +74,6 @@ namespace OutpostLoop
                 var wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
                 GUI.Label(new Rect(422, 52, card.width - 24, 70), SurvivalObjective(), wrapped);
             }
-            string pauseKey = Game.HotKeyDefaults.DisplayKey(RiverValleyPauseKey);
-            if (GUI.Button(new Rect(18, height - 61, 135, 40), Game.Loc.T("HudPause") + "  " + pauseKey))
-                scavengePaused = true;
-            if (GUI.Button(new Rect(161, height - 61, 143, 40), "操作与目标")) survivalHelpOpen = true;
-            if (GUI.Button(new Rect(312, height - 61, 143, 40), "区域地图 M")) OpenRiverValleyRegion();
-
         }
 
         /// <summary>结算只展示本趟状态，不把物品登记成空间库存。</summary>

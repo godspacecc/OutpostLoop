@@ -551,8 +551,8 @@ namespace OutpostLoop
             float width = Screen.width / scale, height = Screen.height / scale;
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
             return SurvivalStatusContains(cursor, point) || SurvivalContextContains(point, width, height) ||
-                SurvivalJourneyContains(point, width, height) ||
-                ScavengeMapRect(width).Contains(point) || InventoryContains(cursor, point, width, height) ||
+                SurvivalObjectiveRect(width).Contains(point) ||
+                ScavengeMapRect(width, opensRegion: true).Contains(point) || InventoryContains(cursor, point, width, height) ||
                 (ShowSurvivalClaim && SurvivalClaimRect(width, height).Contains(point)) ||
                 (ShowSurvivalBuild && SurvivalBuildRect(width, height).Contains(point));
         }
@@ -593,9 +593,9 @@ namespace OutpostLoop
                 GUI.Box(panel, "");
                 DrawSurvivalBuild(panel);
             }
-            DrawSurvivalJourney(width, height);
+            DrawSurvivalObjective(width);
             DrawScavengeExitLabel();
-            DrawScavengeMap(width);
+            DrawScavengeMap(width, opensRegion: true);
             DrawFullRiverValleyEntrances();
         }
 

@@ -468,7 +468,9 @@ namespace OutpostLoop
         }
 
         private static Rect ScavengeInfoRect => new Rect(20, 18, 338, 128);
-        private static Rect ScavengeMapRect(float width) => new Rect(width - 172, 18, 152, 136);
+        /// <summary>河谷镇小地图底部预留键位提示，点击与战场拦截共用面板范围。</summary>
+        private static Rect ScavengeMapRect(float width, bool opensRegion = false) =>
+            new Rect(width - 172, 18, 152, opensRegion ? 154 : 136);
         private static Rect ScavengeActionRect(float width, float height) => new Rect(width / 2 - 208, height - 65, 416, 38);
         private static Rect ScavengeBuildRect(float width) => new Rect(width / 2 - 196, 18, 392, 45);
         private static Rect ScavengeStorageButton(float width) => new Rect(width - 207, 164, 187, 37);
@@ -582,10 +584,15 @@ namespace OutpostLoop
         }
 
         /// <summary>以地标和已发现出口提供方向，敌人的位置由玩家现场观察。</summary>
-        private void DrawScavengeMap(float width)
+        private void DrawScavengeMap(float width, bool opensRegion = false)
         {
-            var panel = ScavengeMapRect(width);
-            GUI.Box(panel, "");
+            var panel = ScavengeMapRect(width, opensRegion);
+            if (opensRegion)
+            {
+                if (GUI.Button(panel, GUIContent.none)) OpenRiverValleyRegion();
+                GUI.Label(new Rect(panel.xMax - 29, panel.yMax - 26, 20, 20), "M");
+            }
+            else GUI.Box(panel, "");
             var map = new Rect(panel.x + 9, panel.y + 8, 134, 118);
             var bounds = scavengeRun.MapBounds;
             foreach (var wall in scavengeRun.RunWalls)

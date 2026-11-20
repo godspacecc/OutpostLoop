@@ -1410,6 +1410,14 @@ namespace OutpostLoop.Tests
                 var cursor = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
                 Assert.AreEqual("E  搜索", label.text);
                 Assert.IsTrue((bool)hudContains.Invoke(controller, new object[] { cursor }));
+                // 小地图图面和键位提示都拦截攻击，旧按钮区域交回场景输入。
+                float hudScale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
+                Assert.IsTrue((bool)hudContains.Invoke(controller, new object[]
+                    { new Vector2(Screen.width - 95 * hudScale, Screen.height - 75 * hudScale) }));
+                Assert.IsTrue((bool)hudContains.Invoke(controller, new object[]
+                    { new Vector2(Screen.width - 40 * hudScale, Screen.height - 156 * hudScale) }));
+                Assert.IsFalse((bool)hudContains.Invoke(controller, new object[]
+                    { new Vector2(215 * hudScale, 40 * hudScale) }));
                 yield return CaptureSurvivalEvidence("search-ready-zh", 1280, 720, batch);
 
                 PressInventoryButton(button);
