@@ -3,8 +3,6 @@
   "CommonCancel": "Cancel",
   "CommonContinue": "Continue",
   "CommonBack": "Back",
-  "RuntimeLogDebugCommands": "Debug commands",
-  "RuntimeLogExecuteCommand": "Run",
   "CommonRetry": "Retry",
   "SettingsTitle": "Settings",
   "SettingsMaster": "Master volume",

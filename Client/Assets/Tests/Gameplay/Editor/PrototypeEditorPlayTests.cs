@@ -970,8 +970,13 @@ namespace OutpostLoop.Tests
             yield return WaitForMain();
 
             var controller = Object.FindObjectOfType<PrototypeController>();
-            var commands = Game.Game.Interface.GetSystem<Game.DebugCommandSystem>();
-            var logs = Game.Game.Interface.GetModel<Game.RuntimeLogModel>();
+            var architecture = Game.Game.Interface;
+            var commands = architecture.GetSystem<Game.DebugCommandSystem>();
+            var logs = architecture.GetModel<Game.RuntimeLogModel>();
+            var directory = System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/TestCommandWindow-20261120",
+                System.Guid.NewGuid().ToString("N"));
+            architecture.RegisterUtility<Game.ISettingsFileStore>(new Game.SettingsFileStore(directory));
+            commands.ApplyPreferences(new Game.TestCommandPreferences());
             Game.RuntimeLogEntry Execute(string input)
             {
                 commands.ExecuteAsync(input).GetAwaiter().GetResult();
@@ -982,8 +987,6 @@ namespace OutpostLoop.Tests
             Assert.That(Execute("#weapon.give crowbar").Type, Is.EqualTo(LogType.Warning));
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var controllerType = typeof(PrototypeController);
-            var directory = System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/WeaponDebugCommand-20261120",
-                System.Guid.NewGuid().ToString("N"));
             controllerType.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
             controllerType.GetField("survivalSaveChecked", flags).SetValue(controller, false);
             controllerType.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
@@ -992,6 +995,41 @@ namespace OutpostLoop.Tests
 
             var run = (ScavengeRun)controllerType.GetField("scavengeRun", flags).GetValue(controller);
             var state = run.Survival;
+            var launcher = GameObject.Find("TestCommandLauncher").GetComponent<PrototypeTestCommandButtonView>();
+            yield return null;
+            var position = commands.LauncherPosition;
+            var rect = (RectTransform)launcher.transform;
+            var start = RectTransformUtility.WorldToScreenPoint(null, rect.position);
+            var end = new Vector2(Screen.width / 2f, Screen.height / 2f);
+            launcher.TrackPointer(start, pressedThisFrame: true, held: true);
+            launcher.TrackPointer(end, pressedThisFrame: false, held: true);
+            launcher.TrackPointer(end, pressedThisFrame: false, held: false);
+            Assert.That(commands.LauncherPosition, Is.Not.EqualTo(position));
+            position = commands.LauncherPosition;
+            yield return null;
+            var moved = RectTransformUtility.WorldToScreenPoint(null, rect.position);
+            launcher.TrackPointer(moved, pressedThisFrame: true, held: true);
+            launcher.TrackPointer(moved, pressedThisFrame: false, held: false);
+            var testWindow = Game.UIHelper.GetUICtrl<PrototypeTestCommandCtrl>();
+            Assert.That(testWindow?.IsShow(), Is.True);
+            double time = state.elapsed;
+            yield return null;
+            Assert.That(state.elapsed, Is.EqualTo(time), "测试窗口应暂停行动");
+            Assert.That(commands.ExecuteCommand("#item.list").message, Does.Contain("pistol · 手枪"));
+            Assert.That(commands.ExecuteCommand("#clone 急救包 0").success, Is.False);
+            Assert.That(commands.ExecuteCommand("#clone 急救包 2").success, Is.True);
+            Assert.That(state.pack.FindAll(item => item.item == SurvivalItem.Aid).Count, Is.EqualTo(2));
+            Assert.That(commands.RecentCommands[0], Is.EqualTo("#clone 急救包 2"));
+            var serialized = Newtonsoft.Json.JsonConvert.SerializeObject(new Game.SettingsData
+            {
+                TestCommands = commands.CopyPreferences()
+            });
+            commands.ApplyPreferences(Newtonsoft.Json.JsonConvert.DeserializeObject<Game.SettingsData>(serialized).TestCommands);
+            Assert.That(commands.RecentCommands[0], Is.EqualTo("#clone 急救包 2"));
+            Assert.That(commands.LauncherPosition, Is.EqualTo(position));
+            testWindow.Hide();
+            Assert.That(testWindow.IsShow(), Is.False);
+            state.pack.Clear();
             Assert.That(Execute("#help").Message, Does.Contain("#weapon.give"));
             Assert.That(Execute("#weapon.give unknown").Type, Is.EqualTo(LogType.Warning));
             Assert.That(state.pack, Is.Empty);
@@ -1010,6 +1048,10 @@ namespace OutpostLoop.Tests
             Assert.That(state.Used, Is.EqualTo(ScavengeSurvival.Capacity));
             Assert.That(state.Equip(1), Is.True);
             Assert.That(state.weapon.item, Is.EqualTo(SurvivalItem.Pistol));
+            var partial = commands.ExecuteCommand("#clone ammo 8");
+            Assert.That(partial.success, Is.True);
+            Assert.That(partial.message, Does.Contain("剩余 2 件"));
+            Assert.That(state.pack[state.Find(SurvivalItem.Ammo)].count, Is.EqualTo(6));
             yield return new ExitPlayMode();
         }
 

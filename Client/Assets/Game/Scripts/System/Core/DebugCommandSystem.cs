@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Boot;
 using Cysharp.Threading.Tasks;
 using OutpostLoop;
@@ -10,26 +11,56 @@ namespace Game
     /// <summary>执行白名单调试指令，操作交给本地基础服务和当前行动。</summary>
     public sealed class DebugCommandSystem : AbstractSystem
     {
+        // 保存纯数据，窗口关闭和切图不清除历史。
+        private TestCommandPreferences preferences = new TestCommandPreferences();
+        internal IReadOnlyList<string> RecentCommands => preferences.Recent;
+        internal Vector2 LauncherPosition => new Vector2(preferences.X, preferences.Y);
+
         protected override void OnInit() { }
+
+        internal void ApplyPreferences(TestCommandPreferences source) => preferences = source.Clone();
+        internal TestCommandPreferences CopyPreferences() => preferences.Clone();
+
+        /// <summary>拖动结束后通过现有设置保存机制写入入口位置。</summary>
+        internal void SetLauncherPosition(Vector2 position)
+        {
+            preferences.X = position.x;
+            preferences.Y = position.y;
+            this.GetSystem<SettingsSystem>().MarkDirty();
+        }
 
         /// <summary>执行单条白名单指令，将结果写入运行时日志。</summary>
         public UniTask ExecuteAsync(string input)
         {
+            ExecuteCommand(input);
+            return UniTask.CompletedTask;
+        }
+
+        /// <summary>执行并返回本次结果，测试窗口据此展示即时反馈。</summary>
+        internal (bool success, string message) ExecuteCommand(string input)
+        {
             if (!DebugCommandCatalog.TryParse(input, out var request, out var error))
             {
                 Report(false, error);
-                return UniTask.CompletedTask;
+                return (false, error);
             }
+            var command = input.Trim();
+            preferences.Recent.Remove(command);
+            preferences.Recent.Insert(0, command);
+            if (preferences.Recent.Count > TestCommandPreferences.HistoryLimit)
+                preferences.Recent.RemoveAt(TestCommandPreferences.HistoryLimit);
+            this.GetSystem<SettingsSystem>().MarkDirty();
             try
             {
                 var result = Execute(request);
                 Report(result.success, "#" + request.Definition.Name + "\n" + result.message);
+                return result;
             }
             catch (Exception exception)
             {
                 Report(false, "指令执行异常：" + exception);
+                return (false, "指令执行异常，详见运行日志。");
             }
-            return UniTask.CompletedTask;
         }
 
         /// <summary>将诊断或测试操作转交给对应模块。</summary>
@@ -58,6 +89,15 @@ namespace Game
                     var controller = UnityEngine.Object.FindObjectOfType<PrototypeController>();
                     return controller != null
                         ? controller.GiveSurvivalTestWeapon(request.Arguments[0])
+                        : (false, "请先进入河谷镇行动。");
+                case "item.list":
+                    return (true, PrototypeController.ListSurvivalTestItems());
+                case "clone":
+                    int amount = 1;
+                    if (request.Arguments.Count == 2 && (!int.TryParse(request.Arguments[1], out amount) || amount < 1))
+                        return (false, "数量必须是正整数。");
+                    var active = UnityEngine.Object.FindObjectOfType<PrototypeController>();
+                    return active != null ? active.GiveSurvivalTestItems(request.Arguments[0], amount)
                         : (false, "请先进入河谷镇行动。");
                 default: return (false, "指令目录与执行入口不一致。");
             }

@@ -75,6 +75,7 @@ namespace Game
             this.GetModel<DisplaySettingsModel>().Apply(data.Display);
             this.GetModel<AudioSettingsModel>().Apply(data.Audio);
             this.GetModel<HotKeyModel>().Apply(data.HotKeys);
+            this.GetSystem<DebugCommandSystem>().ApplyPreferences(data.TestCommands);
             this.GetSystem<HotKeySystem>().RebuildActions();
         }
 
@@ -129,7 +130,8 @@ namespace Game
                 LanguageCode = this.GetModel<LocalizationModel>().CurrentLanguageCode.Value,
                 Display = this.GetModel<DisplaySettingsModel>().ToData(),
                 Audio = this.GetModel<AudioSettingsModel>().ToData(),
-                HotKeys = this.GetModel<HotKeyModel>().ToData()
+                HotKeys = this.GetModel<HotKeyModel>().ToData(),
+                TestCommands = this.GetSystem<DebugCommandSystem>().CopyPreferences()
             }.Sanitize();
 
             if (!this.GetUtility<ISettingsFileStore>().Save(data, out var error))

@@ -140,6 +140,7 @@ namespace OutpostLoop
                 }
                 if (!storageOpen && (Input.GetKeyDown(KeyCode.E) || keyboard?.eKey.wasPressedThisFrame == true)) InteractScavenge();
                 if (!storageOpen && mouse?.leftButton.wasPressedThisFrame == true &&
+                !TestCommandLauncherContains(mouse.position.ReadValue()) &&
                 !ScavengeHudContains(mouse.position.ReadValue()) &&
                 TryProjectBattleGround(mouse.position.ReadValue(), out var aim))
                 {
@@ -173,7 +174,7 @@ namespace OutpostLoop
             if (keyboard?.digit1Key.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Alpha1)) placingDefense = false;
             if (keyboard?.digit2Key.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Alpha2)) placingDefense = true;
             var cursor = mouse?.position.ReadValue() ?? (Vector2)Input.mousePosition;
-            if (!gameCamera.pixelRect.Contains(cursor) || ScavengeHudContains(cursor) ||
+            if (!gameCamera.pixelRect.Contains(cursor) || ScavengeHudContains(cursor) || TestCommandLauncherContains(cursor) ||
                 !TryProjectBattleGround(cursor, out var point))
             {
                 shelterPreview.SetPositionAndRotation(At(scavengeRun.Player, -.5f), Quaternion.identity);

@@ -36,6 +36,9 @@ namespace Game
         [JsonProperty("hotKeys", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<HotKeyBinding> HotKeys { get; set; } = HotKeyDefaults.Create();
 
+        [JsonProperty("testCommands")]
+        public TestCommandPreferences TestCommands { get; set; } = new TestCommandPreferences();
+
         public static SettingsData CreateDefault()
         {
             return new SettingsData().Sanitize();
@@ -49,7 +52,8 @@ namespace Game
                 LanguageCode = LanguageCode,
                 Display = Display?.Clone(),
                 Audio = Audio?.Clone(),
-                HotKeys = HotKeys?.Select(item => item?.Clone()).ToList()
+                HotKeys = HotKeys?.Select(item => item?.Clone()).ToList(),
+                TestCommands = TestCommands?.Clone()
             }.Sanitize();
         }
 
@@ -60,6 +64,7 @@ namespace Game
             Display = (Display ?? DisplaySettingsData.CreateDefault()).Sanitize();
             Audio = (Audio ?? AudioSettingsData.CreateDefault()).Sanitize();
             HotKeys = SanitizeHotKeys(HotKeys);
+            TestCommands = (TestCommands ?? new TestCommandPreferences()).Clone();
             return this;
         }
 
@@ -101,6 +106,25 @@ namespace Game
 
             return result;
         }
+    }
+
+    /// <summary>保存测试窗口的最近指令和浮动入口在可移动区域内的位置。</summary>
+    public sealed class TestCommandPreferences
+    {
+        internal const int HistoryLimit = 32;
+        public float X { get; set; } = .98f;
+        public float Y { get; set; } = .65f;
+
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> Recent { get; set; } = new List<string>();
+
+        internal TestCommandPreferences Clone() => new TestCommandPreferences
+        {
+            X = float.IsNaN(X) ? .98f : Mathf.Clamp01(X),
+            Y = float.IsNaN(Y) ? .65f : Mathf.Clamp01(Y),
+            Recent = (Recent ?? new List<string>()).Where(command => DebugCommandCatalog.TryParse(command, out _, out _))
+                .Distinct(StringComparer.Ordinal).Take(HistoryLimit).ToList()
+        };
     }
 
     /// <summary>

@@ -170,7 +170,9 @@ namespace OutpostLoop
                 ActionId = Game.HotKeyActionIds.ToggleRuntimeLog,
                 Context = Game.HotKeyContext.Global,
                 Priority = 1,
-                CanExecute = () => this != null && isActiveAndEnabled && initialized && !crossing && Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() != true,
+                CanExecute = () => this != null && isActiveAndEnabled && initialized && !crossing &&
+                    Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() != true &&
+                    Game.UIHelper.GetUICtrl<PrototypeTestCommandCtrl>()?.IsShow() != true,
                 Execute = () =>
                 {
                     var log = Game.UIHelper.GetUICtrl<PrototypeLogCtrl>();
@@ -194,6 +196,7 @@ namespace OutpostLoop
             try
             {
                 Restart(false);
+                Game.UIHelper.ShowUI<PrototypeTestCommandButtonCtrl>().Configure(this, font);
                 if(isActiveAndEnabled)Game.LifeCycle.RegisterUpdate(PollInputAndPresent);
             }
             catch(System.Exception e)
@@ -652,7 +655,15 @@ namespace OutpostLoop
             World.Run.Outcome == 0 && !UtilityWindowOpen;
 
         private bool UtilityWindowOpen => Game.UIHelper.GetUICtrl<PrototypeSettingsCtrl>()?.IsShow() == true ||
-            Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true;
+            Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true ||
+            Game.UIHelper.GetUICtrl<PrototypeTestCommandCtrl>()?.IsShow() == true;
+
+        /// <summary>只在当前游戏界面可交互时显示独立测试入口。</summary>
+        internal bool CanOpenTestCommands => initialized && !crossing && !UtilityWindowOpen;
+
+        /// <summary>阻止点击测试入口时同时执行指向场景的操作。</summary>
+        private bool TestCommandLauncherContains(Vector2 cursor) =>
+            Game.UIHelper.GetUICtrl<PrototypeTestCommandButtonCtrl>()?.Contains(cursor) == true;
 
         /// <summary>局内按钮只负责进入暂停，继续操作由暂停菜单处理。</summary>
         internal void PauseFromHud()
@@ -1042,7 +1053,9 @@ namespace OutpostLoop
             if (crossing) return;
             if(!initialized){GUI.Label(new Rect(20,20,1000,120),"启动失败，请先运行配置生成并查看Console："+startupError);return;}
             // 日志窗口显示时让出 IMGUI 绘制和输入，避免行动 HUD 覆盖指令面板。
-            if (Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true) return;
+            if (Game.UIHelper.GetUICtrl<PrototypeLogCtrl>()?.IsShow() == true ||
+                Game.UIHelper.GetUICtrl<PrototypeTestCommandCtrl>()?.IsShow() == true) return;
+            if (Event.current.isMouse && TestCommandLauncherContains(Input.mousePosition)) Event.current.Use();
             if (scavengeRoot != null && scavengeRoot.gameObject.activeSelf)
             {
                 DrawScavenge();

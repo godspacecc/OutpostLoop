@@ -38,9 +38,6 @@ namespace OutpostLoop
     internal sealed class PrototypeLogView : BaseUI
     {
         private Vector2 scroll;
-        // 指令输入只在当前日志窗口打开期间保留。
-        private bool commandInputVisible;
-        private string commandInput = "#help";
 
         private void OnGUI()
         {
@@ -55,11 +52,7 @@ namespace OutpostLoop
             GUI.DrawTexture(panel, Texture2D.whiteTexture, ScaleMode.StretchToFill, false, 0,
                 new Color(.08f, .09f, .11f), 0, 0);
             GUILayout.BeginArea(panel, GUI.skin.box);
-            GUILayout.BeginHorizontal();
             if (GUILayout.Button(Loc.T("CommonBack"))) UIHelper.HideUI<PrototypeLogCtrl>();
-            if (GUILayout.Button(Loc.T("RuntimeLogDebugCommands"))) commandInputVisible = true;
-            GUILayout.EndHorizontal();
-            if (commandInputVisible) DrawCommandInput();
 
             scroll = GUILayout.BeginScrollView(scroll);
             foreach (var entry in Game.Game.Interface.GetModel<RuntimeLogModel>().Snapshot())
@@ -70,27 +63,5 @@ namespace OutpostLoop
             GUI.matrix = previousMatrix;
         }
 
-        /// <summary>通过同一白名单执行入口提交单条指令，结果随运行日志显示。</summary>
-        private void DrawCommandInput()
-        {
-            GUILayout.BeginHorizontal();
-            commandInput = GUILayout.TextField(commandInput);
-            if (GUILayout.Button(Loc.T("RuntimeLogExecuteCommand"), GUILayout.ExpandWidth(false)))
-            {
-                Game.Game.Interface.GetSystem<DebugCommandSystem>().ExecuteAsync(commandInput).GetAwaiter().GetResult();
-                scroll.y = float.MaxValue;
-            }
-            if (GUILayout.Button(Loc.T("CommonCancel"), GUILayout.ExpandWidth(false))) ResetCommandInput();
-            GUILayout.EndHorizontal();
-        }
-
-        /// <summary>关闭窗口或取消输入时清除上一条指令。</summary>
-        private void ResetCommandInput()
-        {
-            commandInputVisible = false;
-            commandInput = "#help";
-        }
-
-        private void OnDisable() => ResetCommandInput();
     }
 }

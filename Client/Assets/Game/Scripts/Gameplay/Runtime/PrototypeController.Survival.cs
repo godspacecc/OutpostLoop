@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Game;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -36,8 +37,7 @@ namespace OutpostLoop
         /// <summary>在进行中的行动发放一件测试武器，沿用普通背包的容量和装备规则。</summary>
         internal (bool success, string message) GiveSurvivalTestWeapon(string weaponId)
         {
-            if (!survivalMode || crossing || scavengeRun?.Survival == null ||
-                scavengeRun.Outcome != ScavengeOutcome.Exploring)
+            if (!CanGrantTestItems)
                 return (false, "请先进入进行中的河谷镇行动。");
 
             var weapon = weaponId.ToLowerInvariant() switch
@@ -53,6 +53,45 @@ namespace OutpostLoop
                 return (false, "背包已满，腾出一格后再试。");
 
             return (true, $"已将{DescribeSurvivalItem(weapon)}放入背包。打开背包后可装备。");
+        }
+
+        // 暂停中也能发放，过场和结算期间拒绝修改背包。
+        private bool CanGrantTestItems => survivalMode && !crossing && scavengeRun?.Survival != null &&
+            scavengeRun.Outcome == ScavengeOutcome.Exploring;
+
+        /// <summary>列出河谷镇现有物品的指令 ID 和背包名称。</summary>
+        internal static string ListSurvivalTestItems() => string.Join("\n",
+            Enum.GetValues(typeof(SurvivalItem)).Cast<SurvivalItem>().Select(item => $"{item.ToString().ToLowerInvariant()} · {SurvivalItemName(item)}"));
+
+        /// <summary>按 ID 或名称发放，沿用普通拾取的堆叠、容量和存档规则。</summary>
+        internal (bool success, string message) GiveSurvivalTestItems(string query, int amount)
+        {
+            if (!CanGrantTestItems) return (false, "请先进入进行中的河谷镇行动。");
+            if (amount < 1) return (false, "数量必须是正整数。");
+
+            var items = Enum.GetValues(typeof(SurvivalItem)).Cast<SurvivalItem>();
+            var matches = items.Where(item => string.Equals(item.ToString(), query, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(SurvivalItemName(item), query, StringComparison.Ordinal)).ToArray();
+            if (matches.Length == 0)
+                matches = items.Where(item => SurvivalItemName(item).Contains(query) ||
+                    item.ToString().IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToArray();
+            if (matches.Length == 0) return (false, "未找到物品，可用 #item.list 查看目录。");
+            if (matches.Length > 1) return (false, "匹配到多个物品，请输入完整 ID：" +
+                string.Join("、", matches.Select(item => item.ToString().ToLowerInvariant())));
+
+            var match = matches[0];
+            var pack = scavengeRun.Survival.pack;
+            var source = new List<SurvivalStack>(1);
+            int accepted = 0;
+            while (accepted < amount)
+            {
+                source.Add(new SurvivalStack(match));
+                if (!ScavengeSurvival.Transfer(source, 0, pack, ScavengeSurvival.Capacity)) break;
+                accepted++;
+            }
+            if (accepted == 0) return (false, "背包容量不足。");
+            return (true, $"已放入背包：{SurvivalItemName(match)} ×{accepted}。" +
+                (accepted == amount ? "" : $" 容量不足，剩余 {amount - accepted} 件未发放。"));
         }
 
         internal bool HasSurvivalSave
@@ -349,6 +388,7 @@ namespace OutpostLoop
             if (keyboard?.fKey.wasPressedThisFrame == true) scavengeRun.ToggleSurvivalTorch();
             if (keyboard?.rKey.wasPressedThisFrame == true) StartSurvivalAction(SurvivalAction.Reload);
             if (mouse != null && TryProjectBattleGround(mouse.position.ReadValue(), out var aim) &&
+                !TestCommandLauncherContains(mouse.position.ReadValue()) &&
                 !SurvivalHudContains(mouse.position.ReadValue()))
             {
                 if ((aim - scavengeRun.Player).sqrMagnitude > .01f)
@@ -740,17 +780,20 @@ namespace OutpostLoop
 
         private static string DescribeSurvivalItem(SurvivalStack stack)
         {
-            string name = stack.item switch
-            {
-                SurvivalItem.Water => "密封饮水", SurvivalItem.Food => "包装食品", SurvivalItem.Bandage => "绷带",
-                SurvivalItem.Aid => "急救包", SurvivalItem.Crowbar => "撬棍", SurvivalItem.Pistol => "手枪",
-                SurvivalItem.Ammo => "子弹", SurvivalItem.Torch => "手电", SurvivalItem.Battery => "电池",
-                SurvivalItem.Boards => "建材", SurvivalItem.Parts => "维修零件", _ => "警报器"
-            };
+            string name = SurvivalItemName(stack.item);
             if (stack.item == SurvivalItem.Pistol) return $"{name} {stack.rounds}/{ScavengeSurvival.PistolMagazineCapacity}";
             if (stack.item == SurvivalItem.Torch) return $"{name} {stack.charge / 3.6f:0}%";
             return stack.count > 1 ? $"{name} ×{stack.count}" : name;
         }
+
+        /// <summary>背包与测试指令使用同一套物品名称。</summary>
+        private static string SurvivalItemName(SurvivalItem item) => item switch
+        {
+            SurvivalItem.Water => "密封饮水", SurvivalItem.Food => "包装食品", SurvivalItem.Bandage => "绷带",
+            SurvivalItem.Aid => "急救包", SurvivalItem.Crowbar => "撬棍", SurvivalItem.Pistol => "手枪",
+            SurvivalItem.Ammo => "子弹", SurvivalItem.Torch => "手电", SurvivalItem.Battery => "电池",
+            SurvivalItem.Boards => "建材", SurvivalItem.Parts => "维修零件", _ => "警报器"
+        };
 
         private static string SurvivalActionName(SurvivalAction action) => action switch
         {
