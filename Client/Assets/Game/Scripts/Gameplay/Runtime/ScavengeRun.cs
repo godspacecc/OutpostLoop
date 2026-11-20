@@ -112,6 +112,8 @@ namespace OutpostLoop
         public int OpenCache { get; private set; } = -1;
         public float SearchRemaining { get; private set; }
         public bool ExitKnown { get; private set; }
+        // 发现撤离点和现场标签使用同一近距离，交互另有更小的范围。
+        internal const float ExitDiscoveryDistance = 4;
         public bool AtExit => !Driving && ExitKnown && Vector2.Distance(Player, ExitPoint) <= 1.65f;
         public ScavengeOutcome Outcome { get; private set; }
         // 工地和休整机会仅属于当前行动。
@@ -217,7 +219,7 @@ namespace OutpostLoop
                     if (Survival == null) discovered[i] = true;
                     else Survival.caches[i].known = true;
                 }
-            if (Vector2.Distance(Player, ExitPoint) < 4 &&
+            if (Vector2.Distance(Player, ExitPoint) < ExitDiscoveryDistance &&
                 ClearRunLine(Player, ExitPoint)) ExitKnown = true;
 
             if (OpenCache >= 0)

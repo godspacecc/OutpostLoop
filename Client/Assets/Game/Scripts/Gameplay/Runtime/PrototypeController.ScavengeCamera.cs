@@ -45,8 +45,10 @@ namespace OutpostLoop
             var torso = new OcclusionRay(origin, ground + Vector3.up * .95f);
             var feet = new OcclusionRay(origin, ground + Vector3.up * .22f);
             int cache = scavengeRun.OpenCache >= 0 ? scavengeRun.OpenCache : scavengeRun.NearbyCache;
+            if (cache >= 0 && !CanSeeSurvivalInteriorAt(scavengeRun.CachePoints[cache])) cache = -1;
             // 搜点高度可能遍历整张地图的道路；每帧只查询一次。
             var cacheRay = cache >= 0 ? new OcclusionRay(origin, SurvivalPosition(scavengeRun.CachePoints[cache], .36f)) : default;
+            UpdateSurvivalShells(torso, feet, cacheRay, cache >= 0);
             foreach (var segment in scavengeOccluders)
             {
                 bool hidden = false;
@@ -77,6 +79,16 @@ namespace OutpostLoop
             }
 
             internal bool BlockedBy(Bounds bounds) => bounds.IntersectRay(ray, out float hit) && hit < maxDistance;
+
+            /// <summary>先查世界包围盒，再用渲染器本地范围排除旋转建筑的空角。</summary>
+            internal bool BlockedBy(Renderer part)
+            {
+                if (!BlockedBy(part.bounds)) return false;
+                var inverse = part.worldToLocalMatrix;
+                var direction = inverse.MultiplyVector(ray.direction);
+                var local = new Ray(inverse.MultiplyPoint3x4(ray.origin), direction);
+                return part.localBounds.IntersectRay(local, out float hit) && hit < maxDistance * direction.magnitude;
+            }
         }
     }
 }

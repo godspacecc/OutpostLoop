@@ -43,7 +43,7 @@ namespace OutpostLoop
             if (content?.layout == null || content.surface == null) throw new System.InvalidOperationException("河谷镇整图引用缺失。");
             survivalCityArt = RiverValleyCityArtCatalog.Load();
             var town = RiverValleyTownPreview.CreateWorld(scavengeRoot, content.layout, content.surface,
-                catalog: survivalCityArt, deferBuild: true);
+                catalog: survivalCityArt, deferBuild: true, registerBuildingShell: parts => RegisterSurvivalShell(-1, parts));
             foreach (var step in town.BuildStages()) yield return step;
             yield return (.86f, "正在布置可进入的建筑");
             survivalWorldGeometry = town.WorldGeometry;
@@ -57,37 +57,39 @@ namespace OutpostLoop
             for (int i = 2; i < 6; i++)
             {
                 var area = allRooms.Footprint(i);
-                ScavengeBox("重点建筑室内地面", SurvivalPosition(area.center,.035f), new Vector3(area.width,.065f,area.height),floor);
+                var interior = RegisterSurvivalInterior(i, area);
+                ScavengeBox("重点建筑室内地面", SurvivalPosition(area.center,.035f), new Vector3(area.width,.065f,area.height),floor,interior);
                 if (i == 4 && survivalCityArt != null)
                 {
                     var sign = ScavengeBox("医院标志",SurvivalPosition(new Vector2(area.xMin-.25f,area.center.y),2.45f),new Vector3(3.34f,.66f,.14f),walls);
                     sign.rotation=Quaternion.Euler(0,90,0);
-                    RegisterScavengeOccluder(sign.GetComponent<Renderer>());
+                    RegisterSurvivalShell(i, sign.GetComponentsInChildren<Renderer>());
                 }
-                var parts = new System.Collections.Generic.List<Renderer>();
                 foreach (var wall in allRooms.Walls(i))
                 {
-                    parts.Add(ScavengeBox("重点建筑入口墙", SurvivalPosition(wall.center,1.42f), new Vector3(wall.width,2.84f,wall.height),walls).GetComponent<Renderer>());
+                    var section = ScavengeBox("重点建筑入口墙", SurvivalPosition(wall.center,1.42f),
+                        new Vector3(wall.width,2.84f,wall.height),walls);
+                    RegisterSurvivalShell(i, section.GetComponentsInChildren<Renderer>());
                     survivalWorldGeometry.Solids.Add(new RiverValleyWorldGeometry.Solid(wall.center,wall.size,0));
                 }
-                parts.Add(ScavengeBox("重点建筑屋顶",SurvivalPosition(area.center,2.92f),new Vector3(area.width,.16f,area.height),roof).GetComponent<Renderer>());
-                foreach (var part in parts) RegisterScavengeOccluder(part);
+                var cover = ScavengeBox("重点建筑屋顶",SurvivalPosition(area.center,2.92f),new Vector3(area.width,.16f,area.height),roof);
+                RegisterSurvivalShell(i, cover.GetComponentsInChildren<Renderer>(), roof: true);
                 // 保留入口至中央搜点的通道，少量设施让大房间有可辨认的尺度。
                 for (int side = -1; side <= 1; side += 2)
                 {
                     var point = new Vector2(area.xMin + 6, area.center.y + side * Mathf.Min(5,area.height / 3));
                     var size = i == 3 ? new Vector3(3,1.5f,2) : new Vector3(2.1f,.75f,1.1f);
-                    var prop = ScavengeBox(i == 3 ? "仓库货架" : "室内服务设施",SurvivalPosition(point,size.y/2),size,i==3?wood:floor);
+                    var prop = ScavengeBox(i == 3 ? "仓库货架" : "室内服务设施",SurvivalPosition(point,size.y/2),size,i==3?wood:floor,interior);
                     // 货架正面朝向探索镜头一侧，避免只看见背板。
                     prop.rotation=Quaternion.Euler(0,180,0);
                     if (survivalCityArt != null) RiverValleyShelfDressing.Fill(prop,survivalCityArt,i==3);
                     survivalWorldGeometry.Solids.Add(new RiverValleyWorldGeometry.Solid(point,new Vector2(size.x,size.z),0));
-                    RegisterScavengeOccluder(prop.GetComponent<Renderer>());
+                    RegisterScavengeOccluder(prop.GetComponentsInChildren<Renderer>());
                 }
             }
             survivalWorldGeometry.Finish();
             // 暂用项目现有人形和待机动作表现诊所幸存者。
-            var survivor = Instantiate(LoadScavengeHuman(), scavengeRoot, false);
+            var survivor = Instantiate(LoadScavengeHuman(), survivalInteriors[2].Root, false);
             survivor.name = "诊所幸存者";
             survivor.transform.SetPositionAndRotation(SurvivalPosition(survivalWorldGeometry.ClinicSurvivor, 0),
                 Quaternion.LookRotation(Vector3.left));
@@ -97,7 +99,6 @@ namespace OutpostLoop
             survivorTint.SetColor("_Color", new Color(.27f, .67f, .76f));
             foreach (var renderer in survivor.GetComponentsInChildren<SkinnedMeshRenderer>())
                 renderer.SetPropertyBlock(survivorTint);
-            // 封闭建筑是跨建筑合批的外景；只有可进入房间的墙、屋顶和陈设参与遮挡切除。
         }
 
         /// <summary>重点入口有现场名称；无入口标记的其余建筑保持封闭。</summary>

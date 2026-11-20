@@ -15,14 +15,14 @@ namespace OutpostLoop
                 palette[i]=new Material(Shader.Find("Standard")){color=colors[i]};
                 scavengeMaterials.Add(palette[i]);
             }
-            RiverValleyShopVisuals.Create(scavengeRoot,survivalWorldGeometry.Shop,survivalCityArt,
+            RiverValleyShopVisuals.Create(survivalInteriors[0].Root,survivalWorldGeometry.Shop,survivalCityArt,
                 point=>survivalWorldGeometry.Height(point),RegisterScavengeOccluder,palette);
         }
         /// <summary>只在店内给出区域名称，不新增任务、可搜索容器或操作。</summary>
         private void DrawMainStreetShopZones()
         {
             var shop=survivalWorldGeometry?.Shop;
-            if(shop==null || !shop.Room.Contains(scavengeRun.Player))return;
+            if(shop==null || visibleSurvivalRoom != 0)return;
             var points=new[]{shop.CheckoutTarget,shop.Room.position+new Vector2(15,6),shop.StockTarget};
             var names=new[]{"收银区","货架区","后仓 · 休息与储物"};
             for(int i=0;i<points.Length;i++)

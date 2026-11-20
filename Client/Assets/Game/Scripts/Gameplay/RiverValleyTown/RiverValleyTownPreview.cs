@@ -20,6 +20,8 @@ namespace OutpostLoop.RiverValley
         private bool deferBuild;
         private bool useCityArt = true;
         private Building[] openBuildings;
+        // 整图行动按独立建筑部件登记，独立地图预览无需遮挡处理。
+        private Action<Renderer[]> registerBuildingShell;
         internal RiverValleyWorldGeometry WorldGeometry { get; private set; }
 
         private const float HalfExtent = 1000;
@@ -350,7 +352,7 @@ namespace OutpostLoop.RiverValley
 
         /// <summary>整图行动复用原布局；六处重点建筑改由可进入室内模块表达。</summary>
         internal static RiverValleyTownPreview CreateWorld(Transform parent, TextAsset data, Shader shader, bool useCityArt = true,
-            RiverValleyCityArtCatalog catalog = null, bool deferBuild = false)
+            RiverValleyCityArtCatalog catalog = null, bool deferBuild = false, Action<Renderer[]> registerBuildingShell = null)
         {
             var root = new GameObject("河谷镇整图");
             root.SetActive(false);
@@ -359,6 +361,7 @@ namespace OutpostLoop.RiverValley
             preview.deferBuild = deferBuild;
             preview.useCityArt = useCityArt;
             preview.previewCityArt = catalog;
+            preview.registerBuildingShell = registerBuildingShell;
             preview.layoutAsset = data; preview.surfaceShader = shader;
             root.SetActive(true);
             root.transform.SetParent(parent, false);

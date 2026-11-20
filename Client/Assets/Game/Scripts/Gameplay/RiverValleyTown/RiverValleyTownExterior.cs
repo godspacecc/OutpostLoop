@@ -23,8 +23,14 @@ namespace OutpostLoop.RiverValley
         {
             if (!fullSurvivalWorld || cityArt != null) { BuildBuildingParts(building); return; }
             var shared = scenery;
-            scenery = new RiverValleyMesh(Section("封闭建筑"), surface);
-            try { BuildBuildingParts(building); scenery.Finish(); }
+            var root = Section("封闭建筑");
+            scenery = new RiverValleyMesh(root, surface);
+            try
+            {
+                BuildBuildingParts(building);
+                scenery.Finish();
+                registerBuildingShell?.Invoke(root.GetComponentsInChildren<Renderer>());
+            }
             finally { scenery = shared; }
         }
 

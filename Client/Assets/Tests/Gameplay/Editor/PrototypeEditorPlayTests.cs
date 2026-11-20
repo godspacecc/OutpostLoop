@@ -547,6 +547,160 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyShowsExitAndInteriorsOnlyInContext()
+        {
+            const string batch = "RiverValleyVisibility-20261120";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var evidence = System.Environment.GetEnvironmentVariable("OUTPOSTLOOP_VISIBILITY_EVIDENCE") ??
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/" + batch));
+            var directory = System.IO.Path.Combine(evidence, "Save-" + System.Guid.NewGuid().ToString("N"));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var root = (Transform)type.GetField("scavengeRoot", flags).GetValue(controller);
+            var camera = (Camera)type.GetField("gameCamera", flags).GetValue(controller);
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var sync = type.GetMethod("SyncScavenge", flags);
+            var occlusion = type.GetMethod("UpdateScavengeOccluders", flags);
+            var label = type.GetMethod("ShouldDrawScavengeExitLabel", flags);
+            var map = type.GetProperty("ShouldDrawScavengeMapExit", flags);
+            var screen = new Vector2(1280, 720);
+            bool ShowsLabel(Vector3 point) => (bool)label.Invoke(controller, new object[] { point, screen });
+            void Place(Vector2 point)
+            {
+                player.SetValue(run, point);
+                sync.Invoke(controller, new object[] { true });
+            }
+
+            Assert.IsFalse(ShowsLabel(new Vector3(640, 360, 15)));
+            Place(run.ExitPoint + Vector2.left * 3.5f);
+            run.Tick(.01f, Vector2.zero);
+            Assert.IsTrue(run.ExitKnown);
+            Assert.IsFalse(run.AtExit, "现场标签可比实际交互范围更早出现");
+            Assert.IsTrue(ShowsLabel(new Vector3(640, 360, 15)));
+            Assert.IsFalse(ShowsLabel(new Vector3(1280, 360, 15)));
+            Assert.IsFalse(ShowsLabel(new Vector3(640, 360, -15)));
+            Place(run.ExitPoint + Vector2.left * 4.01f);
+            Assert.IsFalse(ShowsLabel(new Vector3(640, 360, 15)));
+            Assert.IsTrue((bool)map.GetValue(controller));
+            run.Survival.elapsed = ScavengeSurvival.Goal;
+            Assert.IsFalse(ShowsLabel(new Vector3(640, 360, 15)), "撤离窗口不能把现场标签钉在远处");
+            Place(run.ExitPoint + Vector2.left * 1.4f);
+            Assert.IsTrue(run.AtExit);
+            Assert.IsTrue(ShowsLabel(new Vector3(640, 360, 15)));
+            run.Survival.elapsed = 0;
+
+            foreach (var patrol in run.Patrols) patrol.Health = 0;
+            var rooms = new SurvivalRoomSet(run.FullTown.Interiors);
+            var crates = (Transform[])type.GetField("scavengeCrates", flags).GetValue(controller);
+            var clinic = root.Find("房间内部 2").Find("诊所幸存者").gameObject;
+            for (int i = 0; i < run.FullTown.Interiors.Length; i++)
+            {
+                var roomRoot = root.Find("房间内部 " + i);
+                var door = rooms.Door(i).center;
+                Place(door - Vector2.right);
+                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"门外看见室内 {i}");
+                if (i == 2) Assert.IsFalse(clinic.activeInHierarchy);
+                if (i < 2 && !run.Survival.rooms[i].open) Assert.IsTrue(run.ToggleSurvivalDoor());
+                Place(door + Vector2.right * .1f);
+                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"门槛上提前显示 {i}");
+                for (int step = 0; step < 8; step++) run.Tick(.05f, Vector2.right);
+                sync.Invoke(controller, new object[] { true });
+                Assert.IsTrue(roomRoot.gameObject.activeSelf, $"进门后室内仍隐藏 {i}");
+                if (i == 2)
+                {
+                    Assert.IsTrue(clinic.activeInHierarchy);
+                    CaptureVisibilityCamera(camera, evidence, "clinic-inside", 1280, 720);
+                }
+                for (int k = 0; k < crates.Length; k++)
+                    if (run.Survival.caches[k].active && rooms.Footprint(i).Contains(run.CachePoints[k]))
+                        Assert.IsTrue(crates[k].gameObject.activeSelf, $"入内未显示搜点 {i}/{k}");
+                for (int step = 0; step < 14; step++) run.Tick(.05f, Vector2.left);
+                sync.Invoke(controller, new object[] { true });
+                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"出门后室内仍可见 {i}");
+                for (int k = 0; k < crates.Length; k++)
+                    if (rooms.Footprint(i).Contains(run.CachePoints[k]))
+                        Assert.IsFalse(crates[k].gameObject.activeSelf, $"室外看到室内搜点 {i}/{k}");
+            }
+
+            Rect shop = rooms.Footprint(0);
+            Place(new Vector2(shop.xMax + .8f, shop.center.y));
+            Renderer shopWall = null;
+            foreach (Transform part in root)
+                if (part.name == "现有外墙" && Mathf.Abs(part.position.x - (shop.xMax - .14f)) < .05f)
+                    shopWall = part.GetComponent<Renderer>();
+            Assert.NotNull(shopWall);
+            camera.transform.position = shopWall.bounds.center + Vector3.right * 5;
+            occlusion.Invoke(controller, null);
+            var original = shopWall.sharedMaterial;
+            camera.transform.position = shopWall.bounds.center + Vector3.left * 4 + Vector3.up * 3;
+            camera.transform.LookAt(new Vector3(run.Player.x, shopWall.bounds.center.y, run.Player.y));
+            occlusion.Invoke(controller, null);
+            Assert.AreNotSame(original, shopWall.sharedMaterial);
+            Assert.IsFalse(shopWall.forceRenderingOff, "室外使用半透明墙体");
+            Assert.AreEqual(3000, shopWall.sharedMaterial.renderQueue);
+            Assert.IsFalse(root.Find("房间内部 0").gameObject.activeSelf);
+            CaptureVisibilityCamera(camera, evidence, "outside-wall-faded", 1920, 1080);
+            camera.transform.position = shopWall.bounds.center + Vector3.right * 5;
+            occlusion.Invoke(controller, null);
+            Assert.AreSame(original, shopWall.sharedMaterial, "离开遮挡后还原原材质");
+
+            var town = root.Find("河谷镇整图");
+            var closedRoof = town.Find("封闭建筑屋顶").GetComponentInChildren<Renderer>();
+            var closedBounds = closedRoof.bounds;
+            var nearRoof = new Vector2(closedBounds.max.x + .4f, closedBounds.center.z);
+            Place(nearRoof);
+            var torso = (Vector3)type.GetMethod("SurvivalPosition", flags)
+                .Invoke(controller, new object[] { nearRoof, .95f });
+            var roofPoint = new Vector3(closedBounds.max.x - .3f, closedBounds.center.y, closedBounds.center.z);
+            camera.transform.position = torso + Vector3.right * 5 + Vector3.up;
+            occlusion.Invoke(controller, null);
+            var solidRoof = closedRoof.sharedMaterial;
+            camera.transform.position = torso + (roofPoint - torso) * 2;
+            occlusion.Invoke(controller, null);
+            Assert.AreNotSame(solidRoof, closedRoof.sharedMaterial, "封闭建筑屋顶遮挡角色时也要淡化");
+            camera.transform.position = torso + Vector3.right * 5 + Vector3.up;
+            occlusion.Invoke(controller, null);
+            Assert.AreSame(solidRoof, closedRoof.sharedMaterial);
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>从本局摄像机保留受控位置的渲染画面，IMGUI 由对应可见性断言检查。</summary>
+        private static void CaptureVisibilityCamera(Camera camera, string directory, string name, int width, int height)
+        {
+            if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null) return;
+            System.IO.Directory.CreateDirectory(directory);
+            var target = RenderTexture.GetTemporary(width, height, 24);
+            var previousTarget = camera.targetTexture;
+            var previousActive = RenderTexture.active;
+            var image = new Texture2D(width, height, TextureFormat.RGB24, false);
+            try
+            {
+                camera.targetTexture = target;
+                camera.Render();
+                RenderTexture.active = target;
+                image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                System.IO.File.WriteAllBytes(System.IO.Path.Combine(directory, name + ".png"), image.EncodeToPNG());
+            }
+            finally
+            {
+                camera.targetTexture = previousTarget;
+                RenderTexture.active = previousActive;
+                RenderTexture.ReleaseTemporary(target);
+                Object.Destroy(image);
+            }
+        }
+
+        [UnityTest]
         public IEnumerator BootRiverValleyFullTownHasSixInteriorsAndKeepsLegacySaves()
         {
             const string batch = "ShopInterior-20261119";
@@ -596,7 +750,7 @@ namespace OutpostLoop.Tests
             Assert.NotNull(GameObject.Find("河谷镇整图"));
             var city=Object.FindObjectOfType<OutpostLoop.RiverValley.RiverValleyTownPreview>();
             Assert.Greater(city.CityBuildingCount,200);
-            // 封闭建筑跨建筑合批，整组若进入遮挡扫描会导致远近多处同时消失。
+            // 封闭外景只用半透明遮挡，不能进入旧探索的整组切除列表。
             var closed = city.transform.Find("封闭建筑").GetComponentsInChildren<Renderer>();
             Assert.IsNotEmpty(closed);
             var cutaway = (List<Renderer[]>)type.GetField("scavengeOccluders", flags).GetValue(controller);
@@ -663,6 +817,7 @@ namespace OutpostLoop.Tests
                     if(i==0)
                     {
                         var shop=run.FullTown.Shop;
+                        type.GetMethod("SyncScavenge",flags).Invoke(controller,new object[]{true});
                         Assert.NotNull(GameObject.Find("主街杂货店完整室内"));
                         yield return WalkShopPath(controller,run,batch,"shop-checkout",shop.Room.position+new Vector2(5.5f,12.5f),shop.CheckoutTarget);
                         run.Interact();

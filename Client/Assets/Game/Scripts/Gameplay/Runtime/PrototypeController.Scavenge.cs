@@ -94,6 +94,7 @@ namespace OutpostLoop
             infectedVisuals = null;
             scavengeRun = null;
             scavengeOccluders.Clear();
+            ClearSurvivalVisibility();
             ReleaseScavengeMaterials();
             ReleaseTownAudio();
             gameCamera.orthographic = false;
@@ -208,6 +209,7 @@ namespace OutpostLoop
         /// <summary>画面只读取角色、敌情、探索物和撤离状态。</summary>
         private void SyncScavenge(bool snapCamera = false)
         {
+            SyncSurvivalRoomsVisibility();
             scavengePlayer.position = SurvivalPosition(scavengeRun.Player, 0);
             scavengePlayer.gameObject.SetActive(!scavengeRun.Driving);
             SyncSurvivalVehicle();
@@ -215,12 +217,14 @@ namespace OutpostLoop
             {
                 var patrol = scavengeRun.Patrols[i];
                 var model = scavengeEnemies[i];
-                model.gameObject.SetActive(patrol.Alive);
+                bool visible = patrol.Alive && CanSeeSurvivalInteriorAt(patrol.Position);
+                bool wasVisible = model.gameObject.activeSelf;
+                model.gameObject.SetActive(visible);
                 if (infectedVisuals != null)
                 {
-                    if (patrol.Alive)
+                    if (visible)
                         infectedVisuals[i].Present(SurvivalPosition(patrol.Position, 0), patrol.Facing, patrol.Engaged,
-                            snapCamera, snapCamera ? 0 : Mathf.Min(Time.unscaledDeltaTime, .05f));
+                            snapCamera || !wasVisible, snapCamera ? 0 : Mathf.Min(Time.unscaledDeltaTime, .05f));
                     continue;
                 }
                 model.position = SurvivalPosition(patrol.Position, .7f);
@@ -234,7 +238,7 @@ namespace OutpostLoop
                     scavengeCrates[i].position = SurvivalPosition(scavengeRun.CachePoints[i], .33f);
                     if(i==1 && survivalWorldGeometry?.Shop!=null)
                         scavengeCrates[i].position=SurvivalPosition(survivalWorldGeometry.Shop.CounterCrate,1.03f);
-                    scavengeCrates[i].gameObject.SetActive(cache.active);
+                    scavengeCrates[i].gameObject.SetActive(cache.active && CanSeeSurvivalInteriorAt(scavengeRun.CachePoints[i]));
                     scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
                     continue;
                 }
@@ -252,9 +256,9 @@ namespace OutpostLoop
             }
             SyncDefenseModels();
             if (survivalWorldGeometry != null) scavengeExit.position = SurvivalPosition(scavengeRun.ExitPoint, .05f);
+            if (survivalMode) SyncSurvivalPresentation();
             UpdateScavengeCamera(snapCamera);
             UpdateTownWeather();
-            if (survivalMode) SyncSurvivalPresentation();
         }
 
         /// <summary>用临时几何体表达开阔路、仓门、矮墙和侧门。</summary>
@@ -443,9 +447,9 @@ namespace OutpostLoop
                         new Vector3(.08f, 1.36f, .08f), steel);
         }
 
-        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material)
+        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material, Transform parent = null)
         {
-            var target = Shape(name, scavengeRoot, PrimitiveType.Cube, point, size, material);
+            var target = Shape(name, parent ?? scavengeRoot, PrimitiveType.Cube, point, size, material);
             ApplyRiverValleyCityVisual(target,name,size);
             return target;
         }
@@ -573,7 +577,7 @@ namespace OutpostLoop
                     run.ConstructionInvestigated ? "感染者听到声音，正在查看" : "";
                 if (notice.Length > 0) GUI.Box(new Rect(width / 2 - 150, 23, 300, 32), notice);
             }
-            if (run.ExitKnown) DrawScavengeExitLabel();
+            DrawScavengeExitLabel();
             DrawScavengeMap(width);
         }
 
@@ -604,7 +608,7 @@ namespace OutpostLoop
             if (scavengeTown && scavengeRun.MedicineCache >= 0 && !scavengeRun.MedicineFound)
                 ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.CachePoints[scavengeRun.MedicineCache]) -
                     Vector2.one * 3, Vector2.one * 6), new Color(.9f, .65f, 1f));
-            if (scavengeRun.ExitKnown || (survivalMode && scavengeRun.Survival.Warning))
+            if (ShouldDrawScavengeMapExit)
                 ScavengeFill(new Rect(ScavengeMapPoint(map, scavengeRun.ExitPoint) - Vector2.one * 4, Vector2.one * 8),
                     new Color(.29f, .80f, .74f));
             if (scavengeRun.Shelter is Vector2 shelter)
@@ -726,14 +730,26 @@ namespace OutpostLoop
             if (items == ScavengeItem.None) GUI.Label(new Rect(x, y, 233, 28), "空");
         }
 
+        /// <summary>现场标签跟随可见撤离点，小地图继续使用已发现状态与撤离预告。</summary>
+        private bool ShouldDrawScavengeMapExit => scavengeRun.ExitKnown || (survivalMode && scavengeRun.Survival.Warning);
+
         private void DrawScavengeExitLabel()
         {
             var point = gameCamera.WorldToScreenPoint(scavengeExit.position + Vector3.up * 1.8f);
+            if (!ShouldDrawScavengeExitLabel(point, new Vector2(Screen.width, Screen.height))) return;
             float scale = HudScale;
-            float x = Mathf.Clamp(point.x / scale - 34, 366, Screen.width / scale - 80);
-            float y = Mathf.Clamp((Screen.height - point.y) / scale - 16, 14, Screen.height / scale - 104);
+            float x = point.x / scale - 36;
+            float y = (Screen.height - point.y) / scale - 13;
             GUI.Box(new Rect(x, y, 72, 27), "撤离点");
         }
+
+        /// <summary>同时检查发现状态、玩家距离和投影是否在镜头前的画面内。</summary>
+        private bool ShouldDrawScavengeExitLabel(Vector3 point, Vector2 screenSize) =>
+            scavengeRun.ExitKnown &&
+            (scavengeRun.Player - scavengeRun.ExitPoint).sqrMagnitude <=
+                ScavengeRun.ExitDiscoveryDistance * ScavengeRun.ExitDiscoveryDistance &&
+            point.z >= gameCamera.nearClipPlane && point.z <= gameCamera.farClipPlane &&
+            point.x >= 0 && point.x < screenSize.x && point.y >= 0 && point.y < screenSize.y;
 
         private void DrawScavengeSpace(float width, float height)
         {

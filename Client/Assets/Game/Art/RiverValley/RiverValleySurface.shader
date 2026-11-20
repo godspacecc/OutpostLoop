@@ -1,11 +1,22 @@
 Shader "OutpostLoop/River Valley Surface"
 {
+    Properties
+    {
+        [HideInInspector] _OcclusionAlpha ("Occlusion Alpha", Float) = 1
+        [HideInInspector] _SrcBlend ("Source Blend", Float) = 1
+        [HideInInspector] _DstBlend ("Destination Blend", Float) = 0
+        [HideInInspector] _ZWrite ("Z Write", Float) = 1
+    }
     SubShader
     {
         Tags { "RenderType"="Opaque" }
+        Blend [_SrcBlend] [_DstBlend]
+        ZWrite [_ZWrite]
         CGPROGRAM
-        #pragma surface surf Lambert vertex:vert addshadow
+        #pragma surface surf Lambert vertex:vert addshadow keepalpha
         #pragma target 3.0
+
+        half _OcclusionAlpha;
 
         struct Input
         {
@@ -32,7 +43,7 @@ Shader "OutpostLoop/River Valley Surface"
             float pattern = 0.97 + 0.08 * (grain(data.worldPos) - 0.5) * detail + variation * 0.018;
             output.Albedo = data.tint.rgb * pattern;
             output.Emission = data.tint.rgb * 0.14;
-            output.Alpha = 1;
+            output.Alpha = _OcclusionAlpha;
         }
         ENDCG
     }

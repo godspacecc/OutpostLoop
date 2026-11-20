@@ -199,22 +199,24 @@ namespace OutpostLoop
         private void CreateSurvivalRoom(int room, Material walls, Material floor, Material wood, Material roof)
         {
             var rect = CurrentSurvivalRooms.Footprint(room);
-            ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor);
+            var interior = RegisterSurvivalInterior(room, rect);
+            ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor, interior);
             foreach (var wall in CurrentSurvivalRooms.Walls(room))
             {
                 var section = ScavengeBox("现有外墙", SurvivalPosition(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls);
-                RegisterScavengeOccluder(section.GetComponent<Renderer>());
+                RegisterSurvivalShell(room, section.GetComponentsInChildren<Renderer>());
             }
             var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, 2.92f), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
-            RegisterScavengeOccluder(cover.GetComponent<Renderer>());
+            RegisterSurvivalShell(room, cover.GetComponentsInChildren<Renderer>(), roof: true);
             var door = CurrentSurvivalRooms.Door(room);
             survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
                 new Vector3(.5f, .13f, 0), new Vector3(.35f, .13f, 1.08f), floor);
+            RegisterSurvivalShell(room, survivalDoors[room].GetComponentsInChildren<Renderer>());
             var bed = CurrentSurvivalRooms.Bed(room);
-            ScavengeBox("床架", SurvivalPosition(bed, .20f), new Vector3(1.2f, .4f, 2), wood);
-            ScavengeBox("床垫", SurvivalPosition(bed, .48f), new Vector3(1.1f, .22f, 1.9f), floor);
-            var cabinet = ScavengeBox("储物柜", SurvivalPosition(CurrentSurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood);
+            ScavengeBox("床架", SurvivalPosition(bed, .20f), new Vector3(1.2f, .4f, 2), wood, interior);
+            ScavengeBox("床垫", SurvivalPosition(bed, .48f), new Vector3(1.1f, .22f, 1.9f), floor, interior);
+            var cabinet = ScavengeBox("储物柜", SurvivalPosition(CurrentSurvivalRooms.Cabinet(room), .52f), new Vector3(1.1f, 1.04f, .55f), wood, interior);
             if (survivalLayoutVersion >= 1 && survivalCityArt != null)
             {
                 cabinet.rotation=Quaternion.Euler(0,180,0);
@@ -310,7 +312,7 @@ namespace OutpostLoop
                     survivalDropMarkers.Add(ScavengeBox("地面物品", SurvivalPosition(drop.point, .13f),
                         new Vector3(.43f, .26f, .37f), survivalDropMaterial));
                 survivalDropMarkers[i].position = SurvivalPosition(drop.point, .13f);
-                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0);
+                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0 && CanSeeSurvivalInteriorAt(drop.point));
             }
             for (int i = state.drops.Count; i < survivalDropMarkers.Count; i++)
                 survivalDropMarkers[i].gameObject.SetActive(false);
@@ -585,7 +587,7 @@ namespace OutpostLoop
 
             if (SurvivalPanelOpen) DrawSurvivalPanels(SurvivalInventory(width, height));
             DrawSurvivalJourney(width, height);
-            if (scavengeRun.ExitKnown || state.Warning) DrawScavengeExitLabel();
+            DrawScavengeExitLabel();
             DrawScavengeMap(width);
             DrawFullRiverValleyEntrances();
         }
