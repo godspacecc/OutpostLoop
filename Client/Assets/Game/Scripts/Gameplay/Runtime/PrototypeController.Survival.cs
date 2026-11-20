@@ -522,7 +522,7 @@ namespace OutpostLoop
             get
             {
 #if UNITY_EDITOR
-                return !LootPreviewActive;
+                return !LootPreviewActive || scavengeRun.Driving || scavengeRun.Survival.sleeping;
 #else
                 return true;
 #endif
@@ -567,7 +567,11 @@ namespace OutpostLoop
                 GUI.Label(new Rect(30, 114, 350, 34), $"车速 {Mathf.Abs(scavengeRun.VehicleSpeed) * 3.6f:0} km/h   WASD 驾驶");
             else
             {
-                if (GUI.Button(new Rect(30, 114, 148, 34), $"背包 {state.Used}/6  Tab")) OpenSurvivalPack();
+                string packLabel = $"背包 {state.Used}/6  Tab";
+#if UNITY_EDITOR
+                if (LootPreviewActive) packLabel = "背包  Tab";
+#endif
+                if (GUI.Button(new Rect(30, 114, 148, 34), packLabel)) OpenSurvivalPack();
                 GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
             }
 
@@ -686,37 +690,53 @@ namespace OutpostLoop
                     continue;
                 }
 
-                var action = item.item switch
-                {
-                    SurvivalItem.Water => SurvivalAction.Drink,
-                    SurvivalItem.Food => SurvivalAction.Eat,
-                    SurvivalItem.Bandage => SurvivalAction.Bandage,
-                    SurvivalItem.Aid => SurvivalAction.Aid,
-                    _ => SurvivalAction.None
-                };
-                bool equip = item.item is SurvivalItem.Pistol or SurvivalItem.Crowbar or SurvivalItem.Torch;
+                var action = ActionForSurvivalItem(item.item);
+                bool equip = IsSurvivalEquipment(item.item);
                 if ((equip || action != SurvivalAction.None) &&
                     GUI.Button(new Rect(width - 115, y, 55, 37), equip ? "装备" : "使用"))
                 {
-                    if (equip)
-                    {
-                        if (!state.Equip(i)) scavengeRun.ReportSurvival("换下装备需要背包空格");
-                    }
-                    else StartSurvivalAction(action, i);
+                    UseSurvivalPackItem(i, equip, action);
                     return;
                 }
                 if (GUI.Button(new Rect(width - 58, y, 56, 37), "放下"))
                 {
-                    var drop = NearbySurvivalDrop();
-                    if (drop == null)
-                    {
-                        drop = new SurvivalContainer { point = scavengeRun.Player };
-                        state.drops.Add(drop);
-                    }
-                    ScavengeSurvival.Transfer(state.pack, i, drop.items, int.MaxValue);
+                    DropSurvivalPackItem(i);
                     return;
                 }
             }
+        }
+
+        /// <summary>返回随身物品已有的使用动作。</summary>
+        private static SurvivalAction ActionForSurvivalItem(SurvivalItem item) => item switch
+        {
+            SurvivalItem.Water => SurvivalAction.Drink,
+            SurvivalItem.Food => SurvivalAction.Eat,
+            SurvivalItem.Bandage => SurvivalAction.Bandage,
+            SurvivalItem.Aid => SurvivalAction.Aid,
+            _ => SurvivalAction.None
+        };
+
+        private static bool IsSurvivalEquipment(SurvivalItem item) =>
+            item is SurvivalItem.Pistol or SurvivalItem.Crowbar or SurvivalItem.Torch;
+
+        /// <summary>在背包中执行装备或使用，沿用行动与容量校验。</summary>
+        private void UseSurvivalPackItem(int index, bool equip, SurvivalAction action)
+        {
+            if (!equip) StartSurvivalAction(action, index);
+            else if (!scavengeRun.Survival.Equip(index)) scavengeRun.ReportSurvival("换下装备需要背包空格");
+        }
+
+        /// <summary>放下物品时合用附近掉落，或在当前脚下创建容器。</summary>
+        private void DropSurvivalPackItem(int index)
+        {
+            var state = scavengeRun.Survival;
+            var drop = NearbySurvivalDrop();
+            if (drop == null)
+            {
+                drop = new SurvivalContainer { point = scavengeRun.Player };
+                state.drops.Add(drop);
+            }
+            ScavengeSurvival.Transfer(state.pack, index, drop.items, int.MaxValue);
         }
 
         private void DrawSurvivalContainerRows(float x, float width, SurvivalContainer container)
