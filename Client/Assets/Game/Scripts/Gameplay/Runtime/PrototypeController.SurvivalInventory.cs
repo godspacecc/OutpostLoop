@@ -43,8 +43,8 @@ namespace OutpostLoop
 
         private float InventorySourceHeight(SurvivalContainer source)
         {
-            int rows = source == null ? (scavengeRun.Survival.torch == null ? 2 : 3) : Mathf.Max(1, source.items.Count);
-            return (scavengeRun.SearchRemaining > 0 ? 1 : rows) * 39 + (scavengeRun.CanReadWarehouseTransferNote ? 46 : 0);
+            int rows = source == null || scavengeRun.SearchRemaining > 0 ? 1 : Mathf.Max(1, source.items.Count);
+            return rows * InventoryRowPitch + (scavengeRun.CanReadWarehouseTransferNote ? 46 : 0);
         }
 
         private bool CanShowInventoryCanvas() => CanShowSurvivalHud() && SurvivalInventoryOpen;
@@ -69,6 +69,15 @@ namespace OutpostLoop
             if (!inventoryRoot && !LoadInventoryView()) return;
 
             inventoryRoot.SetActive(true);
+            inventoryView.Panel.gameObject.SetActive(!survivalPackOpen);
+            if (survivalPackOpen)
+            {
+                UpdateInventoryManagement();
+                inventoryRevision = null;
+                return;
+            }
+            if (managementRoot) managementRoot.gameObject.SetActive(false);
+
             float height = SurvivalInventory(Screen.width / HudScale, Screen.height / HudScale).height;
             var source = CurrentInventorySource;
             string revision = InventoryRevision(source);
@@ -107,13 +116,18 @@ namespace OutpostLoop
             inventoryView.Frame.enabled = inventoryView.Frame.texture != null;
             ApplyInventoryButtonTexture(inventoryView.Equipment);
             ApplyInventoryButtonTexture(inventoryView.Close);
-            ApplyInventoryButtonTexture(inventoryView.ReplaceBattery);
+            inventoryView.Equipment.gameObject.SetActive(true);
+            var packShortcut = (RectTransform)inventoryView.Equipment.transform;
+            packShortcut.anchoredPosition = new Vector2(462, packShortcut.anchoredPosition.y);
+            packShortcut.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 56);
+            var shortcutLabel = inventoryView.Equipment.GetComponentInChildren<TMP_Text>(true).rectTransform;
+            shortcutLabel.anchorMin = Vector2.zero;
+            shortcutLabel.anchorMax = Vector2.one;
+            shortcutLabel.offsetMin = shortcutLabel.offsetMax = Vector2.zero;
+            var titleRect = inventoryView.Title.rectTransform;
+            titleRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 433);
             inventoryView.Equipment.onClick.AddListener(() => { if (CanShowInventoryCanvas()) OpenSurvivalPack(); });
             inventoryView.Close.onClick.AddListener(() => { if (CanShowInventoryCanvas()) CloseSurvivalPanels(); });
-            inventoryView.ReplaceBattery.onClick.AddListener(() =>
-            {
-                if (InventoryCanMove(null)) StartSurvivalAction(SurvivalAction.Battery);
-            });
             return true;
         }
 
@@ -121,6 +135,7 @@ namespace OutpostLoop
         private bool InventoryContains(Vector2 cursor, Vector2 hudPoint, float width, float height)
         {
             if (!SurvivalPanelOpen) return false;
+            if (survivalPackOpen) return true;
             if (SurvivalInventoryOpen && inventoryView && inventoryView.isActiveAndEnabled)
                 return RectTransformUtility.RectangleContainsScreenPoint(inventoryView.Panel, cursor);
             return SurvivalInventory(width, height).Contains(hudPoint);
@@ -152,7 +167,7 @@ namespace OutpostLoop
             return inventorySnapshot.ToString();
         }
 
-        /// <summary>左列绑定来源或装备，右列始终使用同一背包控件。</summary>
+        /// <summary>紧凑页的左列绑定当前来源，右列始终显示随身背包。</summary>
         private void RefreshInventory(float height, SurvivalContainer source)
         {
             var state = scavengeRun.Survival;
@@ -169,7 +184,7 @@ namespace OutpostLoop
             inventoryRows.Clear();
 
             view.Panel.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
-            string title = Loc.T(source == null ? "InventoryEquipment" : state.drops.Contains(source) ? "InventoryGround" : "InventoryStorage");
+            string title = Loc.T(state.drops.Contains(source) ? "InventoryGround" : "InventoryStorage");
             if (scavengeRun.OpenCache >= 0)
             {
                 string name = scavengeRun.CacheNames[scavengeRun.OpenCache];
@@ -178,39 +193,28 @@ namespace OutpostLoop
                 if (title == key) title = name;
             }
             view.Title.text = title;
-            view.SourceHeading.text = Loc.T(source == null ? "InventoryEquipped" : "InventoryLoot");
-            view.Equipment.gameObject.SetActive(source != null);
-            SetInventoryButtonState(view.Equipment, !searching);
+            view.SourceHeading.text = Loc.T("InventoryLoot");
+            view.Equipment.GetComponentInChildren<TMP_Text>(true).text = "Tab";
             UpdateInventoryCapacity(state.Used);
 
             ResizeInventoryColumn(view.Source, InventorySourceHeight(source));
             ResizeInventoryColumn(view.Pack, state.pack.Count * InventoryRowPitch);
             view.Note.gameObject.SetActive(showNote);
-            view.EmptyWeapon.SetActive(source == null && state.weapon == null);
-            view.EmptyTorch.SetActive(source == null && state.torch == null);
-            view.ReplaceBattery.gameObject.SetActive(source == null && state.torch != null);
-            SetInventoryButtonState(view.ReplaceBattery, enabled);
+            view.EmptyWeapon.SetActive(false);
+            view.EmptyTorch.SetActive(false);
+            view.ReplaceBattery.gameObject.SetActive(false);
             view.EmptyPack.SetActive(state.pack.Count == 0);
 
-            bool showStatus = source != null && !searching && source.items.Count == 0;
+            bool showStatus = !searching && source.items.Count == 0;
             view.SourceStatus.gameObject.SetActive(showStatus);
             float offset = showNote ? view.Note.rect.height : 0;
             var status = view.SourceStatus.rectTransform;
             status.anchoredPosition = new Vector2(status.anchoredPosition.x, -offset);
             if (showStatus) view.SourceStatus.text = Loc.T("InventoryEmpty");
 
-            if (source == null)
-            {
-                DrawInventoryEquipment(state.weapon, false, view.EmptyWeapon, enabled);
-                DrawInventoryEquipment(state.torch, true, view.EmptyTorch, enabled);
-                DrawInventoryPackActions(enabled);
-            }
-            else
-            {
-                if (!showStatus)
-                    DrawInventoryTransfers(source.items, state.pack, source, offset, ScavengeSurvival.Capacity, true, enabled);
-                DrawInventoryTransfers(state.pack, source.items, source, 0, 12, false, enabled);
-            }
+            if (!searching && !showStatus)
+                DrawInventoryTransfers(source.items, state.pack, source, offset, ScavengeSurvival.Capacity, true, enabled);
+            DrawInventoryTransfers(state.pack, source.items, source, 0, 12, false, enabled);
         }
 
         // 行间距沿用物品页的 35 像素行和 4 像素留白。
@@ -242,44 +246,6 @@ namespace OutpostLoop
                         ScavengeSurvival.Transfer(from, from.IndexOf(item), to, capacity);
                 });
             }
-        }
-
-        private void DrawInventoryPackActions(bool enabled)
-        {
-            var pack = scavengeRun.Survival.pack;
-            for (int i = 0; i < pack.Count; i++)
-            {
-                var item = pack[i];
-                var row = InventoryItemRow(item, i * InventoryRowPitch, true);
-                var action = ActionForSurvivalItem(item.item);
-                bool equip = IsSurvivalEquipment(item.item);
-                row.Transfer.gameObject.SetActive(false);
-                if (equip || action != SurvivalAction.None)
-                    BindInventoryButton(row.Use, equip ? "InventoryEquip" : "InventoryUse", enabled, () =>
-                    {
-                        int index = pack.IndexOf(item);
-                        if (index >= 0 && InventoryCanMove(null)) UseSurvivalPackItem(index, equip, action);
-                    });
-                BindInventoryButton(row.Drop, null, enabled, () =>
-                {
-                    int index = pack.IndexOf(item);
-                    if (index >= 0 && InventoryCanMove(null)) DropSurvivalPackItem(index);
-                });
-            }
-        }
-
-        private void DrawInventoryEquipment(SurvivalStack item, bool torch, GameObject emptyLabel, bool enabled)
-        {
-            if (item == null) return;
-            var state = scavengeRun.Survival;
-            float y = -((RectTransform)emptyLabel.transform).anchoredPosition.y;
-            var row = InventoryItemRow(item, y, false);
-            row.Transfer.name = "Stow";
-            BindInventoryButton(row.Transfer, "InventoryStow",
-                enabled && state.Used + item.Slots <= ScavengeSurvival.Capacity, () =>
-                {
-                    if (InventoryCanMove(null)) state.Stow(torch);
-                });
         }
 
         private SurvivalInventoryRowView InventoryItemRow(SurvivalStack item, float y, bool inPack)

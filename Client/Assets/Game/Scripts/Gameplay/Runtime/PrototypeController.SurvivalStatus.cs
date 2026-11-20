@@ -13,7 +13,7 @@ namespace OutpostLoop
         /// <summary>更新状态层，保持世界内背包入口可用。</summary>
         private void UpdateSurvivalStatus()
         {
-            if (!CanShowSurvivalHud())
+            if (!CanShowSurvivalHud() || survivalPackOpen && inventoryRoot)
             {
                 if (survivalStatusView) survivalStatusView.gameObject.SetActive(false);
                 return;

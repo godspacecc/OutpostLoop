@@ -1525,7 +1525,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyStatusShowsNeedsBesideInventoryAndYieldsToMap()
         {
-            const string batch = "RiverValleyStatus-20261120";
+            const string batch = "RiverValleyPackManagement-20261120";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -1582,28 +1582,29 @@ namespace OutpostLoop.Tests
                 PressInventoryButton(view.Pack);
                 yield return null;
                 yield return null;
-                Assert.IsTrue(view.gameObject.activeSelf);
                 var inventory = GameObject.Find("RiverValleyInventoryCanvas").GetComponent<SurvivalInventoryView>();
                 Assert.IsTrue(inventory.gameObject.activeSelf);
-                Assert.AreEqual("饮水 17", view.WaterDetail.text);
-                Assert.AreEqual("饱腹 51", view.FoodDetail.text);
-                Assert.AreEqual("精力 22", view.EnergyDetail.text);
-                yield return CaptureSurvivalEvidence("backpack-zh", 1280, 720, batch);
+                Assert.IsFalse(view.gameObject.activeSelf);
+                var sheet = inventory.transform.Find("Management/Sheet");
+                PressInventoryButton(sheet.Find("TabStatus").GetComponent<Button>());
+                yield return null;
+                Assert.IsNotNull(sheet.Find("PageStatus"));
+                StringAssert.Contains("生命 68", string.Join("|", System.Array.ConvertAll(
+                    sheet.Find("PageStatus").GetComponentsInChildren<TMPro.TMP_Text>(), label => label.text)));
+                yield return CaptureSurvivalEvidence("status-zh", 1280, 720, batch);
 
                 language.SetLanguageCode("en");
                 yield return null;
                 yield return null;
-                Assert.AreEqual("Water 17", view.WaterDetail.text);
-                Assert.AreEqual("Food 51", view.FoodDetail.text);
-                Assert.AreEqual("Energy 22", view.EnergyDetail.text);
-                Assert.AreEqual("Bleeding", view.HealthWarning.text);
-                foreach (var label in new[] { view.Clock, view.Objective, view.PackLabel, view.WaterDetail, view.FoodDetail, view.EnergyDetail })
+                var labels = sheet.Find("PageStatus").GetComponentsInChildren<TMPro.TMP_Text>();
+                StringAssert.Contains("Water 17", string.Join("|", System.Array.ConvertAll(labels, label => label.text)));
+                foreach (var label in labels)
                 {
                     label.ForceMeshUpdate();
                     Assert.IsFalse(label.isTextOverflowing, label.text);
                     Assert.IsFalse(label.isTextTruncated, label.text);
                 }
-                yield return CaptureSurvivalEvidence("backpack-en", 1920, 1080, batch);
+                yield return CaptureSurvivalEvidence("status-en", 1920, 1080, batch);
 
                 var poll = type.GetMethod("PollSurvival", flags);
                 DriveScavengeKey(controller, poll, keyboard, Key.M);
@@ -1611,6 +1612,11 @@ namespace OutpostLoop.Tests
                 yield return null;
                 Assert.IsFalse(view.gameObject.activeSelf);
                 Assert.IsFalse(inventory.gameObject.activeSelf);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                yield return null;
+                yield return null;
+                Assert.IsTrue(inventory.gameObject.activeSelf);
+                Assert.IsTrue(sheet.Find("PageStatus").gameObject.activeSelf);
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 yield return null;
                 yield return null;
@@ -1628,7 +1634,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyInventoryUsesLocalizedTmpAndTransfersItems()
         {
-            const string batch = "InventoryPrefab-20261120";
+            const string batch = "RiverValleyPackManagement-20261120";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -1655,6 +1661,13 @@ namespace OutpostLoop.Tests
                 var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
                 player.SetValue(run, run.CachePoints[hospital] + Vector2.left);
                 var poll = type.GetMethod("PollSurvival", flags);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(hospital, run.OpenCache);
+                Assert.Greater(run.SearchRemaining, 0);
+                DriveScavengeKey(controller, poll, keyboard, Key.Tab);
+                Assert.AreEqual(-1, run.OpenCache);
+                Assert.AreEqual(0, run.SearchRemaining);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.AreEqual(hospital, run.OpenCache);
                 while (run.SearchRemaining > 0) run.Tick(.05f, Vector2.zero);
@@ -1703,14 +1716,92 @@ namespace OutpostLoop.Tests
                 yield return null;
                 yield return null;
                 Assert.AreEqual(-1, run.OpenCache);
-                var equip = canvas.transform.Find("InventoryPanel/InventoryPack/Rows/Crowbar/UseItem").GetComponent<Button>();
-                PressInventoryButton(equip);
+                Assert.AreEqual(0, run.SearchRemaining);
+                Assert.IsFalse(view.Panel.gameObject.activeSelf);
+                var sheet = canvas.transform.Find("Management/Sheet");
+                var portrait = sheet.Find("PagePack/Surface/CharacterPreview").GetComponent<RawImage>();
+                Assert.IsNotNull(portrait.texture);
+                var statusCanvas = (SurvivalStatusView)type.GetField("survivalStatusView", flags).GetValue(controller);
+                Assert.IsFalse(statusCanvas.gameObject.activeSelf);
+
+                Button Menu(string name)
+                {
+                    foreach (var button in sheet.GetComponentsInChildren<Button>())
+                        if (button.name == name) return button;
+                    Assert.Fail("管理页缺少按钮 " + name);
+                    return null;
+                }
+
+                PressInventoryButton(Menu("Slot0"));
+                yield return null;
+                yield return CaptureSurvivalEvidence("backpack-en", 1920, 1080, batch);
+                PressInventoryButton(Menu("UseSelected"));
                 Assert.AreEqual(SurvivalItem.Crowbar, run.Survival.weapon.item);
+                run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Pistol) { rounds = 2 });
+                PressInventoryButton(Menu("TabGear"));
+                yield return null;
+                PressInventoryButton(Menu("Slot0"));
+                yield return null;
+                PressInventoryButton(Menu("UseSelected"));
+                Assert.AreEqual(SurvivalItem.Pistol, run.Survival.weapon.item);
+                Assert.IsTrue(run.Survival.pack.Exists(item => item.item == SurvivalItem.Crowbar));
                 yield return null;
                 yield return CaptureSurvivalEvidence("equipment-en", 1920, 1080, batch);
-
+                PressInventoryButton(Menu("TabMap"));
+                yield return null;
+                Assert.IsFalse(canvas.activeSelf);
+                Assert.IsTrue((bool)type.GetField("survivalRegionMapOpen", flags).GetValue(controller));
+                yield return CaptureSurvivalEvidence("map-en", 1280, 720, batch);
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 yield return null;
+                Assert.IsTrue(sheet.Find("PageGear").gameObject.activeSelf);
+                PressInventoryButton(Menu("Stow"));
+                Assert.IsNull(run.Survival.weapon);
+                language.SetLanguageCode("zh-CN");
+                PressInventoryButton(Menu("TabTasks"));
+                yield return null;
+                yield return CaptureSurvivalEvidence("tasks-zh", 1280, 720, batch);
+                PressInventoryButton(Menu("TabJournal"));
+                yield return null;
+                var journal = sheet.Find("PageJournal").GetComponentsInChildren<TMPro.TMP_Text>();
+                Assert.IsTrue(System.Array.Exists(journal, label => label.text == "暂无行动记录"));
+                Assert.IsFalse(System.Array.Exists(journal, label => label.text.Contains("空间")));
+                yield return CaptureSurvivalEvidence("journal-zh", 1280, 720, batch);
+
+                PressInventoryButton(Menu("TabPack"));
+                yield return null;
+                int crowbarSlot = run.Survival.pack.FindIndex(item => item.item == SurvivalItem.Crowbar);
+                PressInventoryButton(Menu("Slot" + crowbarSlot));
+                yield return null;
+                yield return CaptureSurvivalEvidence("backpack-zh", 1280, 720, batch);
+                PressInventoryButton(Menu("DropSelected"));
+                yield return null;
+                Assert.AreEqual(1, run.Survival.drops.Count);
+                var ground = run.Survival.drops[0];
+                Assert.AreEqual(SurvivalItem.Crowbar, ground.items[0].item);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                yield return null;
+                Assert.IsFalse(canvas.activeSelf);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                yield return null;
+                Assert.IsTrue(view.Panel.gameObject.activeSelf);
+                Assert.IsTrue(statusCanvas.gameObject.activeSelf);
+                Assert.AreEqual(Game.Loc.T("InventoryGround"), view.Title.text);
+                yield return CaptureSurvivalEvidence("ground-zh", 1280, 720, batch);
+                PressInventoryButton(view.Source.content.Find("Crowbar/Take").GetComponent<Button>());
+                Assert.IsEmpty(ground.items);
+                DriveScavengeKey(controller, poll, keyboard, Key.Tab);
+                yield return null;
+                Assert.IsTrue(sheet.Find("PagePack").gameObject.activeSelf);
+                run.Survival.water = 50;
+                int waterSlot = run.Survival.pack.FindIndex(item => item.item == SurvivalItem.Water);
+                PressInventoryButton(Menu("Slot" + waterSlot));
+                yield return null;
+                PressInventoryButton(Menu("UseSelected"));
+                Assert.AreEqual(SurvivalAction.Drink, run.Survival.action);
+                run.Tick(2.1f, Vector2.zero);
+                Assert.That(run.Survival.water, Is.GreaterThan(80f));
+                language.SetLanguageCode("en");
                 yield return null;
                 Assert.IsFalse(canvas.activeSelf);
 
@@ -1719,6 +1810,7 @@ namespace OutpostLoop.Tests
                 storage.items.Add(new SurvivalStack(SurvivalItem.Water));
                 storage.items.Add(new SurvivalStack(SurvivalItem.Torch));
                 while (storage.items.Count < 12) storage.items.Add(new SurvivalStack(SurvivalItem.Battery));
+                run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Water));
                 while (run.Survival.Used < ScavengeSurvival.Capacity)
                     run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Food));
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
@@ -1732,6 +1824,14 @@ namespace OutpostLoop.Tests
                 Assert.IsFalse(packScroll.verticalScrollbar.gameObject.activeSelf);
                 Assert.IsFalse(sourceScroll.content.Find("Torch/Take").GetComponent<Button>().interactable);
                 Assert.IsTrue(sourceScroll.content.Find("Water/Take").GetComponent<Button>().interactable);
+                PressInventoryButton(sourceScroll.content.Find("Water/Take").GetComponent<Button>());
+                Assert.AreEqual(2, run.Survival.pack.Find(item => item.item == SurvivalItem.Water).count);
+                Assert.AreEqual(ScavengeSurvival.Capacity, run.Survival.Used);
+                yield return null;
+                PressInventoryButton(packScroll.content.Find("Water/Store").GetComponent<Button>());
+                Assert.AreEqual(1, run.Survival.pack.Find(item => item.item == SurvivalItem.Water).count);
+                Assert.AreEqual(1, storage.items.Find(item => item.item == SurvivalItem.Water).count);
+                yield return null;
                 var packOrigin = packScroll.content.anchoredPosition;
                 sourceScroll.OnScroll(new PointerEventData(EventSystem.current) { scrollDelta = Vector2.down * 4 });
                 yield return null;

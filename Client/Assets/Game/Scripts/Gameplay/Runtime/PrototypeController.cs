@@ -1258,6 +1258,7 @@ namespace OutpostLoop
 
         private void OnDestroy()
         {
+            if (managementPortrait) Destroy(managementPortrait);
             ReleaseRegionRoutes();
             ReleaseScavengeMaterials();
             ReleaseFog();

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Game;
 
 namespace OutpostLoop
 {
@@ -74,9 +75,9 @@ namespace OutpostLoop
             var title = new GUIStyle(GUI.skin.label) { fontSize = 28, fontStyle = FontStyle.Bold };
             var caption = new GUIStyle(GUI.skin.label) { fontSize = 15 };
 
-            GUI.Label(new Rect(map.x, 15, 410, 44), "河谷镇区域地图", title);
-            GUI.Label(new Rect(map.x + 264, 28, 270, 28), "2 × 2 公里  ·  行动暂停", caption);
-            if (GUI.Button(new Rect(sidebar.x, 19, sidebar.width, 42), "返回行动  M / Esc"))
+            GUI.Label(new Rect(map.x, 15, 410, 44), Loc.T("RegionMapTitle"), title);
+            GUI.Label(new Rect(map.x + 320, 28, 270, 28), Loc.T("RegionMapScale"), caption);
+            if (GUI.Button(new Rect(sidebar.x, 19, sidebar.width, 42), Loc.T(survivalPackOpen ? "RegionMapBackPack" : "RegionMapBack")))
             {
                 survivalRegionMapOpen = false;
                 return;
@@ -84,19 +85,19 @@ namespace OutpostLoop
 
             float baseScale = Mathf.Min(map.width, map.height) / RegionExtent;
             HandleRegionPointer(map, baseScale);
-            if (GUI.Button(new Rect(map.x, map.yMax + 14, 160, 34), "回到当前位置"))
+            if (GUI.Button(new Rect(map.x, map.yMax + 14, 160, 34), Loc.T("RegionMapCenter")))
             {
                 regionZoom = Mathf.Max(regionZoom, 5f);
                 regionCenter = player;
             }
-            if (GUI.Button(new Rect(map.x + 170, map.yMax + 14, 125, 34), "全镇总览"))
+            if (GUI.Button(new Rect(map.x + 170, map.yMax + 14, 146, 34), Loc.T("RegionMapOverview")))
             {
                 regionZoom = 1f;
                 regionCenter = RegionMiddle;
             }
             DrawRiverValleyLandmarks(sidebar);
-            GUI.Label(new Rect(map.x + 321, map.yMax + 16, 390, 30),
-                $"滚轮缩放  ·  左键拖动     {regionZoom:0.0}×", caption);
+            GUI.Label(new Rect(map.x + 333, map.yMax + 16, 390, 30),
+                Loc.T("RegionMapControls", regionZoom), caption);
             float scale = baseScale * regionZoom;
             regionCenter.x = ClampRegionAxis(regionCenter.x, map.width / (2f * scale));
             regionCenter.y = ClampRegionAxis(regionCenter.y, map.height / (2f * scale));
@@ -202,14 +203,14 @@ namespace OutpostLoop
                 if (riverValleySelectedLandmark >= 0 && riverValleySelectedLandmark < landmarks.Length)
                 {
                     var selected = landmarks[riverValleySelectedLandmark];
-                    DrawRegionLandmark(viewport, Project(new Vector2(selected.x, selected.y)), selected.name,
+                    DrawRegionLandmark(viewport, Project(new Vector2(selected.x, selected.y)), RegionLandmarkName(selected),
                         occupied, labelStyle, true);
                 }
                 for (int i = 0; i < landmarks.Length; i++)
                 {
                     if (i == riverValleySelectedLandmark) continue;
                     var place = landmarks[i];
-                    DrawRegionLandmark(viewport, Project(new Vector2(place.x, place.y)), place.name,
+                    DrawRegionLandmark(viewport, Project(new Vector2(place.x, place.y)), RegionLandmarkName(place),
                         occupied, labelStyle, false);
                 }
             }
@@ -217,13 +218,13 @@ namespace OutpostLoop
             ScavengeFill(new Rect(playerPin - Vector2.one * 7, Vector2.one * 14), new Color(.09f, .13f, .13f));
             ScavengeFill(new Rect(playerPin - Vector2.one * 4, Vector2.one * 8), RegionPlayerColor);
             ScavengeFill(new Rect(12, 12, 60, 28), new Color(.06f, .10f, .11f, .94f));
-            GUI.Label(new Rect(12, 12, 60, 28), "北 ↑", labelStyle);
+            GUI.Label(new Rect(12, 12, 60, 28), Loc.T("RegionMapNorth") + " ↑", labelStyle);
             int scaleMeters = regionZoom < 2.5f ? 200 : regionZoom < 7f ? 100 : 25;
             float scaleWidth = scaleMeters * scale;
             var scaleBox = new Rect(viewport.xMax - Mathf.Max(82f, scaleWidth + 24f) - 12f, viewport.yMax - 52,
                 Mathf.Max(82f, scaleWidth + 24f), 40);
             ScavengeFill(scaleBox, new Color(.06f, .10f, .11f, .94f));
-            GUI.Label(scaleBox, $"{scaleMeters} 米", labelStyle);
+            GUI.Label(scaleBox, Loc.T("RegionMapMeters", scaleMeters), labelStyle);
             ScavengeFill(new Rect(scaleBox.center.x - scaleWidth / 2f, scaleBox.yMax - 7f, scaleWidth, 2), Color.white);
         }
 
@@ -262,13 +263,13 @@ namespace OutpostLoop
             float x = panel.x + 14;
             float width = panel.width - 28;
             var places = riverValleyRegion?.landmarks;
-            GUI.Label(new Rect(x, panel.y + 10, width, 30), "全镇地标", heading);
+            GUI.Label(new Rect(x, panel.y + 10, width, 30), Loc.T("RegionMapLandmarks"), heading);
             if (places != null)
             {
                 var list = new Rect(x, panel.y + 49, width, panel.height - 247);
                 var rowStyle = new GUIStyle(GUI.skin.label)
                 {
-                    fontSize = 16,
+                    fontSize = 15,
                     hover = { textColor = RegionEntranceColor },
                     active = { textColor = RegionEntranceColor }
                 };
@@ -281,7 +282,9 @@ namespace OutpostLoop
                         var row = new Rect(0, i * 33, width - 22, 30);
                         bool selected = riverValleySelectedLandmark == i;
                         if (selected) ScavengeFill(row, new Color(.20f, .30f, .28f));
-                        if (GUI.Button(row, (selected ? "●  " : "     ") + places[i].name, rowStyle))
+                        if (selected) ScavengeFill(new Rect(row.x, row.y + 11, 5, 5), RegionEntranceColor);
+                        var button = new Rect(row.x + 10, row.y, row.width - 10, row.height);
+                        if (GUI.Button(button, RegionLandmarkName(places[i]), rowStyle))
                         {
                             riverValleySelectedLandmark = i;
                             regionZoom = Mathf.Max(3f, regionZoom);
@@ -292,26 +295,34 @@ namespace OutpostLoop
                 finally { GUI.EndScrollView(); }
             }
 
-            string details = "点击地标查看位置和距离。";
+            string details = Loc.T("RegionMapSelect");
             if (places != null && riverValleySelectedLandmark >= 0 && riverValleySelectedLandmark < places.Length)
             {
                 var place = places[riverValleySelectedLandmark];
                 var delta = new Vector2(place.x - RegionWorldOrigin.x, RegionWorldOrigin.y - place.y) - scavengeRun.Player;
-                string direction = delta.magnitude < 20 ? "就在附近" :
-                    (Mathf.Abs(delta.x) > Mathf.Abs(delta.y) * .4f ? delta.x > 0 ? "东" : "西" : "") +
-                    (Mathf.Abs(delta.y) > Mathf.Abs(delta.x) * .4f ? delta.y > 0 ? "北" : "南" : "");
-                details = $"{place.name}\n{direction} · 直线约 {delta.magnitude:0} 米";
+                string direction = delta.magnitude < 20 ? Loc.T("RegionMapNear") :
+                    (Mathf.Abs(delta.x) > Mathf.Abs(delta.y) * .4f ? delta.x > 0 ? Loc.T("RegionMapEast") : Loc.T("RegionMapWest") : "") +
+                    (Mathf.Abs(delta.y) > Mathf.Abs(delta.x) * .4f ? delta.y > 0 ? Loc.T("RegionMapNorth") : Loc.T("RegionMapSouth") : "");
+                details = RegionLandmarkName(place) + "\n" + Loc.T("RegionMapDistance", direction, delta.magnitude);
             }
             float footer = panel.yMax - 187;
             ScavengeFill(new Rect(x, footer, width, 1), new Color(.24f, .34f, .35f));
             GUI.Label(new Rect(x, footer + 8, width, 48), details, caption);
-            DrawRegionLegend(x, footer + 65, RegionPlayerColor, "当前位置", caption);
-            DrawRegionLegend(x, footer + 88, RegionBoundaryColor, "可玩范围", caption);
+            DrawRegionLegend(x, footer + 65, RegionPlayerColor, Loc.T("RegionMapPlayer"), caption);
+            DrawRegionLegend(x, footer + 88, RegionBoundaryColor, Loc.T("RegionMapBounds"), caption);
             if (survivalWorldGeometry != null)
                 DrawRegionLegend(x, footer + 111, RegionEntranceColor,
-                    regionZoom >= 2.5f ? "重点入口" : "放大查看重点入口", caption);
-            DrawRegionLegend(x, footer + 134, RegionMainRoadColor, "主干道", caption);
-            DrawRegionLegend(x, footer + 157, RegionWaterColor, "河流 · 过河请走桥", caption);
+                    regionZoom >= 2.5f ? Loc.T("RegionMapEntrances") : Loc.T("RegionMapZoomEntrances"), caption);
+            DrawRegionLegend(x, footer + 134, RegionMainRoadColor, Loc.T("RegionMapRoad"), caption);
+            DrawRegionLegend(x, footer + 157, RegionWaterColor, Loc.T("RegionMapRiver"), caption);
+        }
+
+        /// <summary>区域图上的地标使用图纸名称作为语言表键。</summary>
+        private static string RegionLandmarkName(RegionLandmark place)
+        {
+            string key = "RegionMapLandmark." + place.name;
+            string translated = Loc.T(key);
+            return translated == key ? place.name : translated;
         }
 
         /// <summary>用图上的标记色绘制图例。</summary>

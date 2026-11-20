@@ -342,6 +342,11 @@ namespace OutpostLoop
             if (PollSurvivalJourney(keyboard)) return;
             if (keyboard?.escapeKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Escape))
             {
+                if (survivalPackOpen)
+                {
+                    CloseSurvivalPanels();
+                    return;
+                }
                 if (scavengeRun.Survival.action != SurvivalAction.None && !scavengePaused)
                     scavengeRun.CancelSurvivalAction();
                 else if (survivalPackOpen || survivalBuildOpen || survivalContainer != null || scavengeRun.OpenCache >= 0)
@@ -352,7 +357,7 @@ namespace OutpostLoop
 
             bool driving = scavengeRun.Driving;
             bool interactPressed = keyboard?.eKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.E);
-            Vector2 movement = driving ? ReadDrivingInput(keyboard) : keyboard == null ? Vector2.zero : new Vector2(
+            Vector2 movement = driving ? ReadDrivingInput(keyboard) : survivalPackOpen || keyboard == null ? Vector2.zero : new Vector2(
                 (keyboard.dKey.isPressed ? 1 : 0) - (keyboard.aKey.isPressed ? 1 : 0),
                 (keyboard.wKey.isPressed ? 1 : 0) - (keyboard.sKey.isPressed ? 1 : 0));
             scavengeRun.SurvivalSprint = movement.sqrMagnitude > 0 &&
@@ -382,7 +387,13 @@ namespace OutpostLoop
                 return;
             }
             if (driving) { SyncScavenge(); return; }
-            if (keyboard?.tabKey.wasPressedThisFrame == true) OpenSurvivalPack();
+            if (keyboard?.tabKey.wasPressedThisFrame == true || Input.GetKeyDown(KeyCode.Tab))
+            {
+                OpenSurvivalPack();
+                SyncScavenge();
+                return;
+            }
+            if (survivalPackOpen) { SyncScavenge(); return; }
             if (keyboard?.vKey.wasPressedThisFrame == true) OpenSurvivalBuild();
             if (interactPressed) InteractSurvival();
             if (keyboard?.fKey.wasPressedThisFrame == true) scavengeRun.ToggleSurvivalTorch();
@@ -422,12 +433,16 @@ namespace OutpostLoop
         private void CloseSurvivalPanels()
         {
             survivalPackOpen = survivalBuildOpen = false;
+            managementPage = ManagementPage.Pack;
+            managementSelection = null;
+            managementRevision = null;
             survivalContainer = null;
             scavengeRun.CloseSearch();
         }
 
         private void OpenSurvivalPack()
         {
+            if (scavengeRun.Driving || scavengeRun.Survival.sleeping) return;
             bool open = !survivalPackOpen || survivalContainer != null || scavengeRun.OpenCache >= 0;
             CloseSurvivalPanels();
             survivalPackOpen = open;
@@ -545,6 +560,7 @@ namespace OutpostLoop
                 return;
             }
 
+            if (survivalPackOpen && inventoryRoot) return;
             if (!survivalStatusView) DrawSurvivalStatusFallback(state);
 
             if (survivalFeedbackVersion != scavengeRun.SurvivalFeedbackVersion)
