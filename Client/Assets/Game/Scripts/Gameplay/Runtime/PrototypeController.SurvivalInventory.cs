@@ -1,248 +1,386 @@
+using System;
 using System.Collections.Generic;
+using System.Text;
+using Game;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace OutpostLoop
 {
     public sealed partial class PrototypeController
     {
-        // 搜取、储物和装备共用同一列背包。外观素材可从已拥有的包还原。
+        // 物品页只读领域状态，按钮经原有规则执行。
         private const string InventoryTexturePath = "RiverValleyInventory/";
         private readonly Dictionary<string, Texture2D> lootTextures = new();
-        private Vector2 lootPackScroll;
+        private readonly StringBuilder inventorySnapshot = new();
+        private GameObject inventoryRoot;
+        private RectTransform inventoryPanel;
+        private ScrollRect inventorySourceScroll, inventoryPackScroll;
+        private TMP_FontAsset inventoryFont;
+        private TMP_Text inventorySearchText;
+        private string inventoryRevision;
+        private SurvivalContainer inventoryDisplayedSource;
+        private Rect inventoryDisplayedBounds;
         private static readonly Color LootBackground = new(.052f, .078f, .078f, .97f);
         private static readonly Color LootLine = new(.25f, .36f, .34f);
         private static readonly Color LootText = new(.91f, .94f, .91f);
         private static readonly Color LootMuted = new(.65f, .75f, .71f);
         private static readonly Color LootWarning = new(1f, .77f, .44f);
+
         private bool SurvivalInventoryOpen => !survivalBuildOpen &&
             (survivalPackOpen || survivalContainer != null || scavengeRun.OpenCache >= 0);
 
         private SurvivalContainer CurrentInventorySource => scavengeRun.OpenCache >= 0
             ? scavengeRun.Survival.caches[scavengeRun.OpenCache] : survivalContainer;
 
-        /// <summary>线索只占来源列的空间，装备列预留武器、手电和电池操作。</summary>
-        private float LootLeftContentHeight(SurvivalContainer container, bool searching)
-        {
-            int rows = container == null ? 3 : Mathf.Max(1, container.items.Count);
-            return (searching ? 1 : rows) * 39 + (scavengeRun.CanReadWarehouseTransferNote ? 46 : 0);
-        }
-
-        /// <summary>限制面板最大高度，短列表只占所需空间，输入区域跟随同一个矩形。</summary>
+        /// <summary>面板与已有世界点击拦截使用同一套 1280×720 坐标。</summary>
         private float SurvivalInventoryHeight()
         {
             var state = scavengeRun.Survival;
-            float leftHeight = LootLeftContentHeight(CurrentInventorySource, scavengeRun.SearchRemaining > 0);
-            return Mathf.Min(395, 92 + Mathf.Max(leftHeight, Mathf.Max(2, state.pack.Count) * 39));
+            return Mathf.Min(395, 92 + Mathf.Max(InventorySourceHeight(CurrentInventorySource), Mathf.Max(2, state.pack.Count) * 39));
         }
 
-        /// <summary>只读取当前搜点与背包，由原有领域方法执行物品转移。</summary>
-        private void DrawSurvivalInventory(Rect panel)
+        private float InventorySourceHeight(SurvivalContainer source)
         {
-            int opened = scavengeRun.OpenCache;
-            var state = scavengeRun.Survival;
-            var container = CurrentInventorySource;
-            bool searching = scavengeRun.SearchRemaining > 0;
-            bool canMoveItems = !searching && state.action == SurvivalAction.None && !state.sleeping;
-            float x = panel.x + 16;
-            float innerWidth = panel.width - 32;
-            float columnWidth = (innerWidth - 14) / 2;
-            float right = x + columnWidth + 14;
-            float top = panel.y + 77;
+            int rows = source == null ? (scavengeRun.Survival.torch == null ? 2 : 3) : Mathf.Max(1, source.items.Count);
+            return (scavengeRun.SearchRemaining > 0 ? 1 : rows) * 39 + (scavengeRun.CanReadWarehouseTransferNote ? 46 : 0);
+        }
 
-            ScavengeFill(panel, LootBackground);
-            if (Event.current.type == EventType.Repaint && LootTexture("frame") is Texture2D frame)
-                GUI.DrawTexture(panel, frame, ScaleMode.StretchToFill, true, 0, LootLine, new Vector4(7, 7, 7, 7), Vector4.zero);
-            ScavengeFill(new Rect(x, panel.y + 49, innerWidth, 1), LootLine);
-            string title = opened >= 0 ? scavengeRun.CacheNames[opened] :
-                container == null ? "物品与装备" : state.drops.Contains(container) ? "地面物品" : "储物柜";
-            LootLabel(new Rect(x, panel.y + 9, innerWidth - 210, 33), title, 21, LootText, true);
-            if (container != null && LootButton(new Rect(panel.xMax - 214, panel.y + 11, 130, 29), "使用 / 装备", !searching))
+        private bool CanShowInventoryCanvas() => initialized && !crossing && survivalMode && scavengeRoot != null &&
+            scavengeRoot.gameObject.activeSelf && scavengeRun != null && SurvivalInventoryOpen &&
+            scavengeRun.Outcome == ScavengeOutcome.Exploring && !scavengePaused && !survivalHelpOpen &&
+            !survivalConfirmExit && !survivalRegionMapOpen && !RiverValleyPortalPlaying && !UtilityWindowOpen;
+
+        /// <summary>局内面板跟随实际开关和模态窗口，只在内容或语言有变化时重排。</summary>
+        private void LateUpdate()
+        {
+            if (!CanShowInventoryCanvas())
             {
-                OpenSurvivalPack();
+                if (inventoryRoot && inventoryRoot.activeSelf) inventoryRoot.SetActive(false);
+                inventoryRevision = null;
                 return;
             }
-            if (LootButton(new Rect(panel.xMax - 76, panel.y + 11, 60, 29), "关闭 E", true))
+            if (!inventoryRoot)
             {
-                CloseSurvivalPanels();
-                return;
+                inventoryFont = UnityEngine.Resources.Load<TMP_FontAsset>("RiverValleyInventoryFont");
+                inventoryRoot = new GameObject("RiverValleyInventoryCanvas", typeof(RectTransform), typeof(Canvas),
+                    typeof(CanvasScaler), typeof(GraphicRaycaster));
+                inventoryRoot.transform.SetParent(transform, false);
+                var canvas = inventoryRoot.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 30;
+                var scaler = inventoryRoot.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1280, 720);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             }
-            LootLabel(new Rect(x, panel.y + 51, columnWidth, 25), container == null ? "已装备" : "来源物资", 13, LootMuted, true);
-            LootLabel(new Rect(right, panel.y + 51, 85, 25), "随身背包", 13, LootMuted, true);
-            DrawLootCapacity(right + 94, panel.y + 51, state.Used);
-            float viewportHeight = panel.yMax - top - 12;
-            ScavengeFill(new Rect(right - 8, top, 1, viewportHeight), LootLine);
-            float cellWidth = columnWidth - 9;
-            var leftViewport = new Rect(x, top, columnWidth + 6, viewportHeight);
-            survivalScroll = GUI.BeginScrollView(leftViewport, survivalScroll,
-                new Rect(0, 0, cellWidth, Mathf.Max(LootLeftContentHeight(container, searching), viewportHeight - 1)));
-            try
+            inventoryRoot.SetActive(true);
+            var bounds = SurvivalInventory(Screen.width / HudScale, Screen.height / HudScale);
+            var source = CurrentInventorySource;
+            string revision = InventoryRevision(source);
+            if (revision != inventoryRevision || inventoryDisplayedSource != source || inventoryDisplayedBounds != bounds)
             {
-                if (container == null) DrawLootEquipment(cellWidth, canMoveItems);
-                else
+                bool preserveScroll = inventoryRevision != null && inventoryDisplayedSource == source;
+                float left = preserveScroll ? inventorySourceScroll.verticalNormalizedPosition : 1;
+                float right = preserveScroll ? inventoryPackScroll.verticalNormalizedPosition : 1;
+                if (inventoryPanel)
                 {
-                    float leftY = 0;
-                    if (scavengeRun.CanReadWarehouseTransferNote)
-                    {
-                        LootLabel(new Rect(8, 0, cellWidth - 8, 20), "药品转运记录", 13, LootWarning);
-                        LootLabel(new Rect(8, 20, cellWidth - 8, 20), "急救用品已转运至区域医院一楼。", 13, LootText);
-                        leftY = 46;
-                    }
-                    if (searching || container.items.Count == 0)
-                        LootLabel(new Rect(8, leftY, cellWidth - 8, 38),
-                            searching ? $"搜索中 · {scavengeRun.SearchRemaining:0.0} 秒" : "空", 14, LootMuted);
-                    if (!searching)
-                        DrawLootRows(container.items, state.pack, 0, leftY, cellWidth, ScavengeSurvival.Capacity, true, canMoveItems);
+                    inventoryPanel.gameObject.SetActive(false);
+                    Destroy(inventoryPanel.gameObject);
                 }
+                BuildInventory(bounds, source);
+                Canvas.ForceUpdateCanvases();
+                inventorySourceScroll.verticalNormalizedPosition = left;
+                inventoryPackScroll.verticalNormalizedPosition = right;
+                inventoryRevision = revision;
+                inventoryDisplayedSource = source;
+                inventoryDisplayedBounds = bounds;
             }
-            finally { GUI.EndScrollView(); }
-
-            var packViewport = new Rect(right - 8, top, columnWidth + 6, viewportHeight);
-            lootPackScroll = GUI.BeginScrollView(packViewport, lootPackScroll,
-                new Rect(0, 0, cellWidth, Mathf.Max(state.pack.Count * 39, viewportHeight - 1)));
-            try
-            {
-                if (container == null) DrawLootPackActions(0, cellWidth, canMoveItems);
-                else DrawLootRows(state.pack, container.items, 0, 0, cellWidth, 12, false, canMoveItems);
-                if (state.pack.Count == 0)
-                    LootLabel(new Rect(8, 0, cellWidth - 8, 38), "背包为空", 14, LootMuted);
-            }
-            finally { GUI.EndScrollView(); }
+            if (inventorySearchText)
+                inventorySearchText.text = Loc.T("InventorySearching", scavengeRun.SearchRemaining);
         }
 
-        /// <summary>用逐格填充表示真实占用，颜色和数字同时提示满包。</summary>
-        private static void DrawLootCapacity(float x, float y, int used)
+        /// <summary>签名只含影响 UI 的字段；搜索计时独立刷新，避免重建滚动列表。</summary>
+        private string InventoryRevision(SurvivalContainer source)
         {
-            const int capacity = ScavengeSurvival.Capacity;
-            Color fill = used >= capacity ? LootWarning : new Color(.52f, .76f, .64f);
-            for (int slot = 0; slot < capacity; slot++)
+            var state = scavengeRun.Survival;
+            inventorySnapshot.Clear();
+            inventorySnapshot.Append(Game.Game.Interface.GetModel<LocalizationModel>().CurrentLanguageCode.Value)
+                .Append('|').Append(scavengeRun.OpenCache).Append('|').Append(scavengeRun.SearchRemaining > 0)
+                .Append('|').Append(scavengeRun.CanReadWarehouseTransferNote).Append('|').Append((int)state.action)
+                .Append('|').Append(state.sleeping);
+            void Stack(SurvivalStack item)
             {
-                var cell = new Rect(x + slot * 16, y + 7, 13, 11);
-                ScavengeFill(cell, LootLine);
-                ScavengeFill(new Rect(cell.x + 1, cell.y + 1, 11, 9), slot < used ? fill : LootBackground);
+                inventorySnapshot.Append('|');
+                if (item != null)
+                    inventorySnapshot.Append(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(item)).Append(',')
+                        .Append((int)item.item).Append(',').Append(item.count).Append(',')
+                        .Append(item.rounds).Append(',').Append(Mathf.RoundToInt(item.charge / 3.6f));
             }
-            LootLabel(new Rect(x + capacity * 16 + 6, y, 52, 25), $"{used}/{capacity}", 13, fill, true);
+            Stack(state.weapon);
+            Stack(state.torch);
+            foreach (var item in state.pack) Stack(item);
+            inventorySnapshot.Append('/');
+            if (source != null)
+                foreach (var item in source.items) Stack(item);
+            return inventorySnapshot.ToString();
         }
 
-        /// <summary>以图标和原物品名称展示每一组物品，沿用单次拾取与放入规则。</summary>
-        private void DrawLootRows(List<SurvivalStack> source, List<SurvivalStack> target, float x, float y,
-            float width, int capacity, bool take, bool enabled)
+        /// <summary>左列显示当前来源或装备，右列保留背包位置与容量。</summary>
+        private void BuildInventory(Rect bounds, SurvivalContainer source)
         {
-            for (int i = 0; i < source.Count; i++)
+            var state = scavengeRun.Survival;
+            bool searching = scavengeRun.SearchRemaining > 0;
+            bool enabled = InventoryCanMove(source);
+            int opened = scavengeRun.OpenCache;
+            float innerWidth = bounds.width - 32;
+            float columnWidth = (innerWidth - 14) / 2;
+            float right = 30 + columnWidth;
+            float height = bounds.height - 89;
+            float width = columnWidth - 9;
+            inventoryPanel = InventoryRect(inventoryRoot.transform, "InventoryPanel", bounds);
+            InventoryGraphic(inventoryPanel, "Surface", new Rect(0, 0, bounds.width, bounds.height), LootBackground, hit: true);
+            var frame = LootTexture("frame");
+            if (frame) InventoryGraphic(inventoryPanel, "Frame", new Rect(0, 0, bounds.width, bounds.height), LootLine, frame);
+            InventoryGraphic(inventoryPanel, "HeaderRule", new Rect(16, 49, innerWidth, 1), LootLine);
+            string title = Loc.T(source == null ? "InventoryEquipment" : state.drops.Contains(source) ? "InventoryGround" : "InventoryStorage");
+            if (opened >= 0)
             {
-                var item = source[i];
-                var row = new Rect(x, y + i * 39, width, 35);
-                bool available = enabled && ScavengeSurvival.CanReceive(item, target, capacity, out _);
-                DrawLootItem(row, item, !take, available);
-                float buttonX = take ? row.xMax - 68 : row.x + 4;
-                if (!LootButton(new Rect(buttonX, row.y + 4, 64, 27), take ? "拾取 →" : "← 放入", available))
-                    continue;
-                if (!ScavengeSurvival.Transfer(source, i, target, capacity))
-                    scavengeRun.ReportSurvival(take ? "背包已满" : "容器已满");
-                return;
+                string name = scavengeRun.CacheNames[opened];
+                string key = "InventorySource." + name;
+                title = Loc.T(key);
+                if (title == key) title = name;
+            }
+            InventoryLabel(inventoryPanel, "InventoryTitle", new Rect(16, 8, innerWidth - 210, 35), title, 21, LootText, bold: true);
+            if (source != null)
+                InventoryButton(inventoryPanel, "UseEquipment", new Rect(bounds.width - 214, 11, 130, 29),
+                    Loc.T("InventoryUseEquipment"), !searching, () => { if (CanShowInventoryCanvas()) OpenSurvivalPack(); });
+            InventoryButton(inventoryPanel, "CloseInventory", new Rect(bounds.width - 76, 11, 60, 29),
+                Loc.T("InventoryClose"), true, CloseSurvivalPanels);
+            InventoryLabel(inventoryPanel, "SourceHeading", new Rect(16, 51, columnWidth, 25),
+                Loc.T(source == null ? "InventoryEquipped" : "InventoryLoot"), 13, LootMuted, bold: true);
+            InventoryLabel(inventoryPanel, "PackHeading", new Rect(right, 51, 90, 25),
+                Loc.T("InventoryPack"), 13, LootMuted, bold: true);
+            DrawInventoryCapacity(right + 94, state.Used);
+            InventoryGraphic(inventoryPanel, "ColumnRule", new Rect(right - 8, 77, 1, height), LootLine);
+            inventorySourceScroll = InventoryColumn(inventoryPanel, "InventorySource", new Rect(16, 77, columnWidth + 6, height), InventorySourceHeight(source));
+            inventoryPackScroll = InventoryColumn(inventoryPanel, "InventoryPack", new Rect(right - 8, 77, columnWidth + 6, height), state.pack.Count * 39);
+            var left = inventorySourceScroll.content;
+            var pack = inventoryPackScroll.content;
+            inventorySearchText = null;
+            float leftY = 0;
+            if (scavengeRun.CanReadWarehouseTransferNote)
+            {
+                InventoryLabel(left, "NoteTitle", new Rect(8, 0, width - 8, 20), Loc.T("InventoryNoteTitle"), 13, LootWarning);
+                InventoryLabel(left, "NoteText", new Rect(8, 20, width - 8, 24), Loc.T("InventoryNoteText"), 13, LootText, wrap: true);
+                leftY = 46;
+            }
+            if (source == null) DrawInventoryEquipment(left, width, enabled);
+            else if (searching || source.items.Count == 0)
+            {
+                var label = InventoryLabel(left, "SourceStatus", new Rect(8, leftY, width - 8, 38),
+                    searching ? "" : Loc.T("InventoryEmpty"), 14, LootMuted);
+                if (searching) inventorySearchText = label;
+            }
+            else DrawInventoryTransfers(left, source.items, state.pack, source, leftY, width, ScavengeSurvival.Capacity, true, enabled);
+            if (state.pack.Count == 0)
+                InventoryLabel(pack, "EmptyPack", new Rect(8, 0, width - 8, 38), Loc.T("InventoryPackEmpty"), 14, LootMuted);
+            else if (source == null) DrawInventoryPackActions(pack, width, enabled);
+            else DrawInventoryTransfers(pack, state.pack, source.items, source, 0, width, 12, false, enabled);
+        }
+
+        private bool InventoryCanMove(SurvivalContainer source) => CanShowInventoryCanvas() &&
+            CurrentInventorySource == source && scavengeRun.SearchRemaining <= 0 &&
+            scavengeRun.Survival.action == SurvivalAction.None && !scavengeRun.Survival.sleeping;
+
+        /// <summary>满包时仍允许合并可堆叠物品，点击时再次验证当前来源。</summary>
+        private void DrawInventoryTransfers(RectTransform parent, List<SurvivalStack> from, List<SurvivalStack> to,
+            SurvivalContainer source, float y, float width, int capacity, bool take, bool enabled)
+        {
+            for (int i = 0; i < from.Count; i++)
+            {
+                var item = from[i];
+                var row = InventoryItemRow(parent, item, y + i * 39, width, !take);
+                var at = new Rect(take ? width - 68 : 4, 4, 64, 27);
+                bool allowed = enabled && ScavengeSurvival.CanReceive(item, to, capacity, out _);
+                InventoryButton(row, take ? "Take" : "Store", at, Loc.T(take ? "InventoryTake" : "InventoryStore"), allowed, () =>
+                {
+                    if (InventoryCanMove(source))
+                        ScavengeSurvival.Transfer(from, from.IndexOf(item), to, capacity);
+                });
             }
         }
 
-        /// <summary>右列物品图标不随动作切换移动。</summary>
-        private void DrawLootItem(Rect row, SurvivalStack item, bool inPack, bool enabled)
-        {
-            bool hover = enabled && row.Contains(Event.current.mousePosition);
-            ScavengeFill(row, hover ? new Color(.16f, .24f, .22f) : new Color(.092f, .137f, .132f));
-            float iconX = row.x + (inPack ? 72 : 0);
-            ScavengeFill(new Rect(iconX, row.y, 34, 35), new Color(.14f, .20f, .19f));
-            if (Event.current.type == EventType.Repaint && LootTexture(item.item.ToString()) is Texture2D icon)
-                GUI.DrawTexture(new Rect(iconX + 3, row.y + 3, 28, 28), icon, ScaleMode.ScaleToFit);
-            if (item.item is SurvivalItem.Crowbar or SurvivalItem.Pistol)
-                LootLabel(new Rect(iconX + 4, row.y, 29, 35), item.item == SurvivalItem.Crowbar ? "工具" : "武器", 11, LootMuted);
-            LootLabel(new Rect(iconX + 41, row.y, row.width - 117, 35), DescribeSurvivalItem(item), 14, LootText);
-        }
-
-        /// <summary>在固定的右列操作使用、装备和放下。</summary>
-        private void DrawLootPackActions(float x, float width, bool enabled)
+        private void DrawInventoryPackActions(RectTransform parent, float width, bool enabled)
         {
             var pack = scavengeRun.Survival.pack;
-            for (int index = 0; index < pack.Count; index++)
+            for (int i = 0; i < pack.Count; i++)
             {
-                var item = pack[index];
-                var row = new Rect(x, index * 39, width, 35);
-                DrawLootItem(row, item, true, enabled);
+                var item = pack[i];
+                var row = InventoryItemRow(parent, item, i * 39, width, true);
                 var action = ActionForSurvivalItem(item.item);
                 bool equip = IsSurvivalEquipment(item.item);
-                if ((equip || action != SurvivalAction.None) &&
-                    LootButton(new Rect(x + 3, row.y + 4, 32, 27), equip ? "装备" : "使用", enabled))
+                if (equip || action != SurvivalAction.None)
+                    InventoryButton(row, "UseItem", new Rect(3, 4, 32, 27), Loc.T(equip ? "InventoryEquip" : "InventoryUse"), enabled, () =>
+                    {
+                        int index = pack.IndexOf(item);
+                        if (index >= 0 && InventoryCanMove(null)) UseSurvivalPackItem(index, equip, action);
+                    });
+                InventoryButton(row, "DropItem", new Rect(37, 4, 32, 27), Loc.T("InventoryDrop"), enabled, () =>
                 {
-                    UseSurvivalPackItem(index, equip, action);
-                    return;
-                }
-                if (LootButton(new Rect(x + 37, row.y + 4, 32, 27), "放下", enabled))
-                {
-                    DropSurvivalPackItem(index);
-                    return;
-                }
+                    int index = pack.IndexOf(item);
+                    if (index >= 0 && InventoryCanMove(null)) DropSurvivalPackItem(index);
+                });
             }
         }
 
-        /// <summary>左列显示当前装备与对应操作。</summary>
-        private void DrawLootEquipment(float width, bool enabled)
+        private void DrawInventoryEquipment(RectTransform parent, float width, bool enabled)
         {
             var state = scavengeRun.Survival;
-            DrawLootEquipmentSlot(state.weapon, false, 0, width, enabled);
-            DrawLootEquipmentSlot(state.torch, true, 39, width, enabled);
-            if (state.torch != null && LootButton(new Rect(3, 82, 112, 27), "更换手电电池", enabled))
-                StartSurvivalAction(SurvivalAction.Battery);
-        }
-
-        private void DrawLootEquipmentSlot(SurvivalStack item, bool torch, float y, float width, bool enabled)
-        {
-            if (item == null)
+            void Slot(SurvivalStack item, bool torch, float y)
             {
-                LootLabel(new Rect(8, y, width - 8, 35), torch ? "手电 · 空" : "武器 · 空", 14, LootMuted);
-                return;
+                if (item == null)
+                {
+                    InventoryLabel(parent, "EmptyEquipment", new Rect(8, y, width - 8, 35),
+                        Loc.T(torch ? "InventoryEmptyTorch" : "InventoryEmptyWeapon"), 14, LootMuted);
+                    return;
+                }
+                var row = InventoryItemRow(parent, item, y, width, false);
+                InventoryButton(row, "Stow", new Rect(width - 68, 4, 64, 27), Loc.T("InventoryStow"),
+                    enabled && state.Used + item.Slots <= ScavengeSurvival.Capacity, () =>
+                    {
+                        if (InventoryCanMove(null)) state.Stow(torch);
+                    });
             }
-            DrawLootItem(new Rect(0, y, width, 35), item, false, enabled);
-            bool hasSpace = scavengeRun.Survival.Used + item.Slots <= ScavengeSurvival.Capacity;
-            if (LootButton(new Rect(width - 68, y + 4, 64, 27), "卸下 →", enabled && hasSpace) &&
-                !scavengeRun.Survival.Stow(torch))
-                scavengeRun.ReportSurvival("背包没有空格");
+            Slot(state.weapon, false, 0);
+            Slot(state.torch, true, 39);
+            if (state.torch != null)
+                InventoryButton(parent, "ReplaceBattery", new Rect(3, 82, 128, 27), Loc.T("InventoryReplaceBattery"), enabled,
+                    () => { if (InventoryCanMove(null)) StartSurvivalAction(SurvivalAction.Battery); });
         }
 
-        /// <summary>背包文字复用局内字体，颜色和字号仅作用于当前控件。</summary>
-        private static void LootLabel(Rect rect, string label, int size, Color color, bool bold = false)
+        private RectTransform InventoryItemRow(Transform parent, SurvivalStack item, float y, float width, bool inPack)
         {
-            var style = new GUIStyle(GUI.skin.label) { fontSize = size, alignment = TextAnchor.MiddleLeft };
-            style.normal.textColor = color;
-            if (bold) style.fontStyle = FontStyle.Bold;
-            GUI.Label(rect, label, style);
+            var row = InventoryRect(parent, item.item.ToString(), new Rect(0, y, width, 35));
+            InventoryGraphic(row, "Row", new Rect(0, 0, width, 35), new Color(.092f, .137f, .132f));
+            float iconX = inPack ? 72 : 0;
+            InventoryGraphic(row, "IconWell", new Rect(iconX, 0, 34, 35), new Color(.14f, .20f, .19f));
+            var icon = LootTexture(item.item.ToString());
+            if (icon) InventoryGraphic(row, "ItemIcon", new Rect(iconX + 3, 3, 28, 28), Color.white, icon);
+            if (item.item is SurvivalItem.Crowbar or SurvivalItem.Pistol)
+                InventoryLabel(row, "ItemType", new Rect(iconX + 3, 0, 28, 35),
+                    Loc.T(item.item == SurvivalItem.Crowbar ? "InventoryTool" : "InventoryWeapon"), 11, LootMuted);
+            string name = Loc.T("InventoryItem." + item.item);
+            string label = item.item switch
+            {
+                SurvivalItem.Pistol => $"{name} {item.rounds}/{ScavengeSurvival.PistolMagazineCapacity}",
+                SurvivalItem.Torch => $"{name} {item.charge / 3.6f:0}%",
+                _ => item.count > 1 ? $"{name} ×{item.count}" : name
+            };
+            InventoryLabel(row, "ItemName", new Rect(iconX + 41, 0, width - 117, 35), label, 14, LootText, wrap: true);
+            return row;
         }
 
-        /// <summary>使用素材包按钮底图和 Unity 原生点击状态，保留禁用保护。</summary>
-        private bool LootButton(Rect rect, string label, bool enabled)
+        private void DrawInventoryCapacity(float x, int used)
         {
-            var style = new GUIStyle(GUI.skin.button) { fontSize = 13, padding = new RectOffset(2, 2, 1, 1) };
-            if (LootTexture("button") is Texture2D background)
+            const int capacity = ScavengeSurvival.Capacity;
+            Color filled = used >= capacity ? LootWarning : new Color(.52f, .76f, .64f);
+            for (int i = 0; i < capacity; i++)
             {
-                style.normal.background = background;
-                style.hover.background = background;
-                style.active.background = background;
-                style.border = new RectOffset(8, 8, 8, 8);
+                var cell = new Rect(x + i * 16, 58, 13, 11);
+                InventoryGraphic(inventoryPanel, "CapacityCell", cell, LootLine);
+                InventoryGraphic(inventoryPanel, "CapacityFill", new Rect(cell.x + 1, cell.y + 1, 11, 9), i < used ? filled : LootBackground);
             }
-            style.normal.textColor = LootText;
-            style.hover.textColor = Color.white;
-            style.active.textColor = LootWarning;
-            bool previous = GUI.enabled;
-            Color previousColor = GUI.backgroundColor;
-            GUI.enabled = previous && enabled;
-            GUI.backgroundColor = !GUI.enabled ? new Color(.16f, .18f, .17f) :
-                rect.Contains(Event.current.mousePosition)
-                ? new Color(.42f, .58f, .48f) : new Color(.27f, .38f, .34f);
-            try { return GUI.Button(rect, label, style); }
-            finally
-            {
-                GUI.enabled = previous;
-                GUI.backgroundColor = previousColor;
-            }
+            InventoryLabel(inventoryPanel, "Capacity", new Rect(x + capacity * 16 + 6, 51, 52, 25),
+                $"{used}/{capacity}", 13, filled, bold: true);
         }
 
-        /// <summary>读取已导入的贴图。资源缺席时，面板仍使用基础控件和物品名称。</summary>
+        private static RectTransform InventoryRect(Transform parent, string name, Rect rect)
+        {
+            var node = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            node.SetParent(parent, false);
+            node.anchorMin = node.anchorMax = node.pivot = new Vector2(0, 1);
+            node.anchoredPosition = new Vector2(rect.x, -rect.y);
+            node.sizeDelta = rect.size;
+            return node;
+        }
+
+        private static RawImage InventoryGraphic(Transform parent, string name, Rect bounds, Color color, Texture texture = null, bool hit = false)
+        {
+            var graphic = InventoryRect(parent, name, bounds).gameObject.AddComponent<RawImage>();
+            graphic.texture = texture;
+            graphic.color = color;
+            graphic.raycastTarget = hit;
+            return graphic;
+        }
+
+        private TMP_Text InventoryLabel(Transform parent, string name, Rect bounds, string value, int size, Color color,
+            bool bold = false, bool wrap = false, bool centered = false)
+        {
+            var text = InventoryRect(parent, name, bounds).gameObject.AddComponent<TextMeshProUGUI>();
+            text.font = inventoryFont;
+            text.text = value;
+            text.color = color;
+            text.fontSize = size;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = Mathf.Min(11, size);
+            text.fontSizeMax = size;
+            text.fontStyle = bold ? FontStyles.Bold : FontStyles.Normal;
+            text.alignment = centered ? TextAlignmentOptions.Center : TextAlignmentOptions.MidlineLeft;
+            text.enableWordWrapping = wrap;
+            text.overflowMode = TextOverflowModes.Ellipsis;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private void InventoryButton(Transform parent, string name, Rect bounds, string value, bool enabled, Action clicked)
+        {
+            var graphic = InventoryGraphic(parent, name, bounds, Color.white, LootTexture("button"), true);
+            var button = graphic.gameObject.AddComponent<Button>();
+            button.targetGraphic = graphic;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            var colors = button.colors;
+            colors.normalColor = new Color(.27f, .38f, .34f);
+            colors.highlightedColor = new Color(.42f, .58f, .48f);
+            colors.pressedColor = new Color(.20f, .32f, .28f);
+            colors.disabledColor = new Color(.16f, .18f, .17f);
+            colors.fadeDuration = 0;
+            button.colors = colors;
+            button.interactable = enabled;
+            button.onClick.AddListener(() => { if (CanShowInventoryCanvas()) clicked(); });
+            InventoryLabel(graphic.transform, "Label", new Rect(1, 0, bounds.width - 2, bounds.height), value, 13,
+                enabled ? LootText : LootMuted, centered: true);
+        }
+
+        private static ScrollRect InventoryColumn(Transform parent, string name, Rect bounds, float contentHeight)
+        {
+            var view = InventoryGraphic(parent, name, bounds, Color.clear, hit: true);
+            view.gameObject.AddComponent<RectMask2D>();
+            var scroll = view.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = view.rectTransform;
+            scroll.content = InventoryRect(view.transform, "Rows", new Rect(0, 0, bounds.width, Mathf.Max(bounds.height, contentHeight)));
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 40;
+            if (contentHeight > bounds.height)
+            {
+                var track = InventoryGraphic(parent, name + "Scrollbar",
+                    new Rect(bounds.xMax - 8, bounds.y, 6, bounds.height), new Color(.12f, .19f, .18f), hit: true);
+                var handle = InventoryGraphic(track.transform, "Thumb", Rect.zero, LootMuted, hit: true);
+                handle.rectTransform.anchorMin = Vector2.zero;
+                handle.rectTransform.anchorMax = Vector2.one;
+                handle.rectTransform.offsetMin = handle.rectTransform.offsetMax = Vector2.zero;
+                var bar = track.gameObject.AddComponent<Scrollbar>();
+                bar.direction = Scrollbar.Direction.BottomToTop;
+                bar.handleRect = handle.rectTransform;
+                bar.targetGraphic = handle;
+                bar.navigation = new Navigation { mode = Navigation.Mode.None };
+                scroll.verticalScrollbar = bar;
+            }
+            return scroll;
+        }
+
         private Texture2D LootTexture(string name)
         {
             if (lootTextures.TryGetValue(name, out var texture)) return texture;

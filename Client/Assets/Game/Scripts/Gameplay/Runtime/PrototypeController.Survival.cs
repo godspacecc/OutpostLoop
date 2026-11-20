@@ -29,7 +29,6 @@ namespace OutpostLoop
         private Light survivalSun, survivalTorch;
         private float survivalSunBefore;
         private Color survivalAmbientBefore;
-        private Vector2 survivalScroll;
         // 单次操作提示限时显示，避免离开房间后仍长时间显示开门反馈。
         private int survivalFeedbackVersion = -1;
         private float survivalFeedbackUntil;
@@ -190,7 +189,6 @@ namespace OutpostLoop
             survivalFeedbackVersion = -1;
             survivalContainer = null;
             survivalPackOpen = survivalBuildOpen = false;
-            survivalScroll = Vector2.zero;
             survivalSaveError = null;
             for (int i = 0; i < survivalDoorDurability.Length; i++)
                 survivalDoorDurability[i] = scavengeRun.Survival.rooms[i].durability;
@@ -425,7 +423,6 @@ namespace OutpostLoop
         {
             survivalPackOpen = survivalBuildOpen = false;
             survivalContainer = null;
-            survivalScroll = Vector2.zero;
             scavengeRun.CloseSearch();
         }
 
@@ -585,22 +582,16 @@ namespace OutpostLoop
                 GUI.Button(new Rect(width - 205, height - 108, 184, 38), "入口操作  V"))
                 OpenSurvivalBuild();
 
-            if (SurvivalPanelOpen) DrawSurvivalPanels(SurvivalInventory(width, height));
+            if (survivalBuildOpen)
+            {
+                Rect panel = SurvivalInventory(width, height);
+                GUI.Box(panel, "");
+                DrawSurvivalBuild(panel);
+            }
             DrawSurvivalJourney(width, height);
             DrawScavengeExitLabel();
             DrawScavengeMap(width);
             DrawFullRiverValleyEntrances();
-        }
-
-        /// <summary>当前操作只占一个面板位置，按现有状态切换基地入口或物品界面。</summary>
-        private void DrawSurvivalPanels(Rect panel)
-        {
-            if (survivalBuildOpen)
-            {
-                GUI.Box(panel, "");
-                DrawSurvivalBuild(panel);
-            }
-            else DrawSurvivalInventory(panel);
         }
 
         /// <summary>返回随身物品已有的使用动作。</summary>

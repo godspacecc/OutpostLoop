@@ -1365,6 +1365,143 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyInventoryUsesLocalizedTmpAndTransfersItems()
+        {
+            const string batch = "RiverValleyInventoryTMP-20261120";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/" + batch));
+            System.IO.Directory.CreateDirectory(folder);
+            var save = System.IO.Path.Combine(folder, "Save-" + System.Guid.NewGuid().ToString("N"));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(save));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var language = Game.Game.Interface.GetModel<Game.LocalizationModel>();
+            var originalLanguage = language.CurrentLanguageCode.Value;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                language.SetLanguageCode("zh-CN");
+                foreach (var patrol in run.Patrols) patrol.Health = 0;
+                int hospital = 12;
+                var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+                player.SetValue(run, run.CachePoints[hospital] + Vector2.left);
+                var poll = type.GetMethod("PollSurvival", flags);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(hospital, run.OpenCache);
+                while (run.SearchRemaining > 0) run.Tick(.05f, Vector2.zero);
+                type.GetMethod("SyncScavenge", flags).Invoke(controller, new object[] { true });
+                var cache = run.Survival.caches[hospital].items;
+                Assert.IsTrue(cache.Exists(item => item.item == SurvivalItem.Aid));
+                run.Survival.pack.Clear();
+                run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Crowbar));
+                run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Water));
+                yield return null;
+                yield return null;
+
+                var canvas = GameObject.Find("RiverValleyInventoryCanvas");
+                Assert.NotNull(canvas.GetComponent<GraphicRaycaster>());
+                var title = canvas.transform.Find("InventoryPanel/InventoryTitle").GetComponent<TMPro.TextMeshProUGUI>();
+                Assert.AreEqual(run.CacheNames[hospital], title.text);
+                Assert.IsTrue(title.font.HasCharacters(title.text, out uint[] missing, true, true),
+                    missing == null ? "" : string.Join(",", missing));
+                var take = canvas.transform.Find("InventoryPanel/InventorySource/Rows/Aid/Take").GetComponent<Button>();
+                PressInventoryButton(take);
+                Assert.IsTrue(run.Survival.pack.Exists(item => item.item == SurvivalItem.Aid));
+                yield return null;
+                yield return null;
+                yield return CaptureSurvivalEvidence("inventory-zh", 1920, 1080, batch);
+
+                language.SetLanguageCode("en");
+                yield return null;
+                yield return null;
+                title = canvas.transform.Find("InventoryPanel/InventoryTitle").GetComponent<TMPro.TextMeshProUGUI>();
+                Assert.AreEqual("Hospital entrance supply cabinet", title.text);
+                title.ForceMeshUpdate();
+                Assert.IsFalse(title.isTextTruncated);
+                Assert.IsFalse(title.isTextOverflowing);
+                yield return CaptureSurvivalEvidence("inventory-en", 1920, 1080, batch);
+
+                PressInventoryButton(canvas.transform.Find("InventoryPanel/UseEquipment").GetComponent<Button>());
+                yield return null;
+                yield return null;
+                Assert.AreEqual(-1, run.OpenCache);
+                var equip = canvas.transform.Find("InventoryPanel/InventoryPack/Rows/Crowbar/UseItem").GetComponent<Button>();
+                PressInventoryButton(equip);
+                Assert.AreEqual(SurvivalItem.Crowbar, run.Survival.weapon.item);
+                yield return null;
+                yield return CaptureSurvivalEvidence("equipment-en", 1920, 1080, batch);
+
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                yield return null;
+                yield return null;
+                Assert.IsFalse(canvas.activeSelf);
+
+                player.SetValue(run, run.RoomSet.Cabinet(1));
+                var storage = run.Survival.rooms[1].storage;
+                storage.items.Add(new SurvivalStack(SurvivalItem.Water));
+                storage.items.Add(new SurvivalStack(SurvivalItem.Torch));
+                while (storage.items.Count < 12) storage.items.Add(new SurvivalStack(SurvivalItem.Battery));
+                while (run.Survival.Used < ScavengeSurvival.Capacity)
+                    run.Survival.pack.Add(new SurvivalStack(SurvivalItem.Food));
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                yield return null;
+                yield return null;
+                Assert.IsTrue(canvas.activeSelf);
+                var panel = canvas.transform.Find("InventoryPanel");
+                var sourceScroll = panel.Find("InventorySource").GetComponent<ScrollRect>();
+                var packScroll = panel.Find("InventoryPack").GetComponent<ScrollRect>();
+                Assert.NotNull(sourceScroll.verticalScrollbar);
+                Assert.IsNull(packScroll.verticalScrollbar);
+                Assert.IsFalse(sourceScroll.content.Find("Torch/Take").GetComponent<Button>().interactable);
+                Assert.IsTrue(sourceScroll.content.Find("Water/Take").GetComponent<Button>().interactable);
+                var packOrigin = packScroll.content.anchoredPosition;
+                sourceScroll.OnScroll(new PointerEventData(EventSystem.current) { scrollDelta = Vector2.down * 4 });
+                yield return null;
+                Assert.Greater(sourceScroll.content.anchoredPosition.y, 0);
+                Assert.AreEqual(packOrigin, packScroll.content.anchoredPosition);
+                var scrollbar = sourceScroll.verticalScrollbar;
+                var track = (RectTransform)scrollbar.transform;
+                var thumb = RectTransformUtility.CalculateRelativeRectTransformBounds(track, scrollbar.handleRect);
+                Assert.That(thumb.min.y, Is.GreaterThanOrEqualTo(track.rect.yMin - .05f));
+                Assert.That(thumb.max.y, Is.LessThanOrEqualTo(track.rect.yMax + .05f));
+                yield return CaptureSurvivalEvidence("storage-en", 1920, 1080, batch);
+                DriveScavengeKey(controller, poll, keyboard, Key.M);
+                yield return null;
+                yield return null;
+                Assert.IsFalse(canvas.activeSelf);
+            }
+            finally
+            {
+                language.SetLanguageCode(originalLanguage);
+                InputSystem.RemoveDevice(keyboard);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        /// <summary>用 Canvas Raycaster 为指定按钮派发指针点击，验证被滚动遮罩后的真实命中。</summary>
+        private static void PressInventoryButton(Button button)
+        {
+            Assert.IsTrue(button.interactable);
+            Canvas.ForceUpdateCanvases();
+            var rect = (RectTransform)button.transform;
+            var point = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
+            var pointer = new PointerEventData(EventSystem.current) { position = point, button = PointerEventData.InputButton.Left };
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(pointer, results);
+            Assert.IsNotEmpty(results);
+            Assert.AreSame(button.gameObject, ExecuteEvents.GetEventHandler<IPointerClickHandler>(results[0].gameObject));
+            ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+        }
+
+        [UnityTest]
         public IEnumerator LegacyScavengeTownStartsWithWeatherAndLetsThePlayerSpeak()
         {
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");

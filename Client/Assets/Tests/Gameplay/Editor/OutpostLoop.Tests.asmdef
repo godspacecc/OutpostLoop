@@ -5,6 +5,7 @@
     "Boot",
     "YooAsset",
     "Unity.ugui",
+    "Unity.TextMeshPro",
     "UniTask",
     "Unity.InputSystem"
   ],

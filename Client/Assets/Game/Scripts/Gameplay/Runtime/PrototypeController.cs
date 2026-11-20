@@ -135,6 +135,7 @@ namespace OutpostLoop
         }
         private void OnDisable()
         {
+            if (inventoryRoot) inventoryRoot.SetActive(false);
             CancelCrossing();
             EnhancedTouchSupport.Disable();
             ignoreTouchUntilRelease = true;
