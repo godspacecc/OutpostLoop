@@ -42,13 +42,10 @@ namespace OutpostLoop
             new Rect(18, height - 61, 437, 40).Contains(point) ||
             SurvivalObjectiveRect(width).Contains(point);
 
-        /// <summary>样片打开时缩小目标卡，绘制与输入拦截使用相同范围。</summary>
+        /// <summary>物品面板打开时缩小目标卡，绘制与输入拦截使用相同范围。</summary>
         private Rect SurvivalObjectiveRect(float width)
         {
-            float height = 112;
-#if UNITY_EDITOR
-            if (LootPreviewActive) height = 38;
-#endif
+            float height = SurvivalInventoryOpen ? 38 : 112;
             return new Rect(410, 18, Mathf.Min(430, width - 650), height);
         }
 

@@ -1,4 +1,4 @@
-"""从本机已下载的 Survival Clean 资源包提取样片使用的 PNG。"""
+"""从本机已下载的 Survival Clean 资源包恢复河谷镇背包素材。"""
 
 import json
 import os
@@ -11,7 +11,8 @@ PACKAGE = (
     Path(os.environ["APPDATA"])
     / "Unity/Asset Store-5.x/LAYERLAB/2DGUI/assetstore_package_20000443.unitypackage"
 )
-OUTPUT = ROOT / "Backup/Artifacts/LootUiPreview-20261120/Sprites"
+OUTPUT = ROOT / "Client/Assets/Game/Art/RiverValleyInventory/Resources/RiverValleyInventory"
+SOURCE_RECORD = ROOT / "Backup/Artifacts/InventoryInGame-20261120/asset-sources.json"
 ITEM_ICONS = {
     "Water": "Water", "Food": "Canfood", "Bandage": "Bandage", "Aid": "First-Aid",
     "Ammo": "Bullet_Pack", "Torch": "Flashlight",
@@ -38,11 +39,12 @@ with tarfile.open(PACKAGE) as package:
         if suffix in by_suffix:
             found[by_suffix[suffix]] = (member.name.rsplit("/", 1)[0] + "/asset", pathname)
     if found.keys() != ASSETS.keys():
-        raise ValueError(f"资源包缺少样片素材：{ASSETS.keys() - found.keys()}")
+        raise ValueError(f"资源包缺少背包素材：{ASSETS.keys() - found.keys()}")
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for name, (member_path, _) in found.items():
         (OUTPUT / f"{name}.png").write_bytes(package.extractfile(member_path).read())
-    (OUTPUT.parent / "asset-sources.json").write_text(
+    SOURCE_RECORD.parent.mkdir(parents=True, exist_ok=True)
+    SOURCE_RECORD.write_text(
         json.dumps({name: source for name, (_, source) in sorted(found.items())}, indent=2) + "\n",
         encoding="utf-8",
     )

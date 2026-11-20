@@ -1256,9 +1256,6 @@ namespace OutpostLoop
 
         private void OnDestroy()
         {
-#if UNITY_EDITOR
-            ReleaseLootPreviewTextures();
-#endif
             ReleaseRegionRoutes();
             ReleaseScavengeMaterials();
             ReleaseFog();

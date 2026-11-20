@@ -33,3 +33,5 @@
 # 本机 My Assets 授权资源，由选择性导入脚本还原。
 /Client/Assets/Game/Art/RiverValleyPortal/
 /Client/Assets/Game/Art/RiverValleyPortal.meta
+/Client/Assets/Game/Art/RiverValleyInventory/
+/Client/Assets/Game/Art/RiverValleyInventory.meta

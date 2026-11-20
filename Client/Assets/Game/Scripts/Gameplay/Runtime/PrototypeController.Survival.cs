@@ -508,26 +508,14 @@ namespace OutpostLoop
         private static Rect SurvivalInfo => new Rect(18, 18, 374, 141);
         private Rect SurvivalInventory(float width, float height)
         {
-            float panelHeight = 395;
-#if UNITY_EDITOR
-            if (LootPreviewActive) panelHeight = LootPreviewHeight();
-#endif
+            float panelHeight = SurvivalInventoryOpen ? SurvivalInventoryHeight() : 395;
             return new Rect(18, 172, Mathf.Min(600, width - 36), Mathf.Min(panelHeight, height - 248));
         }
         private static Rect SurvivalContext(float width, float height) => new Rect(width / 2 - 175, height - 61, 350, 40);
 
-        /// <summary>样片的关闭按钮位于面板内，底栏交互随之隐藏。</summary>
-        private bool ShowSurvivalContext
-        {
-            get
-            {
-#if UNITY_EDITOR
-                return !LootPreviewActive || scavengeRun.Driving || scavengeRun.Survival.sleeping;
-#else
-                return true;
-#endif
-            }
-        }
+        /// <summary>物品面板自己处理关闭，独立保留下车和起身入口。</summary>
+        private bool ShowSurvivalContext =>
+            !SurvivalInventoryOpen || scavengeRun.Driving || scavengeRun.Survival.sleeping;
 
         private bool SurvivalHudContains(Vector2 cursor)
         {
@@ -567,10 +555,7 @@ namespace OutpostLoop
                 GUI.Label(new Rect(30, 114, 350, 34), $"车速 {Mathf.Abs(scavengeRun.VehicleSpeed) * 3.6f:0} km/h   WASD 驾驶");
             else
             {
-                string packLabel = $"背包 {state.Used}/6  Tab";
-#if UNITY_EDITOR
-                if (LootPreviewActive) packLabel = "背包  Tab";
-#endif
+                string packLabel = SurvivalInventoryOpen ? "背包  Tab" : $"背包 {state.Used}/6  Tab";
                 if (GUI.Button(new Rect(30, 114, 148, 34), packLabel)) OpenSurvivalPack();
                 GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
             }
@@ -605,105 +590,15 @@ namespace OutpostLoop
             DrawFullRiverValleyEntrances();
         }
 
+        /// <summary>当前操作只占一个面板位置，按现有状态切换基地入口或物品界面。</summary>
         private void DrawSurvivalPanels(Rect panel)
         {
-#if UNITY_EDITOR
-            if (TryDrawLootPreview(panel)) return;
-#endif
-            var state = scavengeRun.Survival;
-            GUI.Box(panel, "");
             if (survivalBuildOpen)
             {
+                GUI.Box(panel, "");
                 DrawSurvivalBuild(panel);
-                return;
             }
-            int opened = scavengeRun.OpenCache;
-            if (opened >= 0 && scavengeRun.SearchRemaining > 0)
-            {
-                GUI.Label(new Rect(panel.x + 13, panel.y + 12, panel.width - 26, 30),
-                    $"搜索{scavengeRun.CacheNames[opened]} · {scavengeRun.SearchRemaining:0.0} 秒");
-                return;
-            }
-            var container = opened >= 0 ? state.caches[opened] : survivalContainer;
-            float half = panel.width / 2;
-            GUI.Label(new Rect(panel.x + 12, panel.y + 8, half - 160, 31), $"随身 {state.Used}/6");
-            if (container != null && GUI.Button(new Rect(panel.x + half - 145, panel.y + 8, 133, 30), "使用 / 装备"))
-            {
-                CloseSurvivalPanels();
-                survivalPackOpen = true;
-                return;
-            }
-            GUI.Label(new Rect(panel.x + half + 10, panel.y + 8, half - 20, 31),
-                opened >= 0 ? scavengeRun.CacheNames[opened] : container != null ? "容器" : "已装备");
-            float rowsTop = 44;
-            if (scavengeRun.CanReadWarehouseTransferNote)
-            {
-                GUI.Box(new Rect(panel.x + 9, panel.y + rowsTop, panel.width - 18, 56), "");
-                GUI.Label(new Rect(panel.x + 17, panel.y + rowsTop + 2, panel.width - 34, 26), "药品转运记录");
-                GUI.Label(new Rect(panel.x + 17, panel.y + rowsTop + 27, panel.width - 34, 26),
-                    "急救用品已转运至区域医院一楼。");
-                rowsTop += 62;
-            }
-            var scroll = new Rect(panel.x + 9, panel.y + rowsTop, panel.width - 18, panel.height - rowsTop - 8);
-            float rows = Mathf.Max(state.pack.Count, container?.items.Count ?? 3);
-            survivalScroll = GUI.BeginScrollView(scroll, survivalScroll,
-                new Rect(0, 0, scroll.width - 18, Mathf.Max(rows * 45, scroll.height - 1)));
-            try
-            {
-                bool enabled = GUI.enabled;
-                GUI.enabled = enabled && state.action == SurvivalAction.None && !state.sleeping;
-                DrawSurvivalPackRows(half - 24, container);
-                if (container != null) DrawSurvivalContainerRows(half, half - 44, container);
-                else
-                {
-                    if (state.weapon != null && GUI.Button(new Rect(half, 0, half - 44, 37),
-                        "卸下 · " + DescribeSurvivalItem(state.weapon)) && !state.Stow(false))
-                        scavengeRun.ReportSurvival("背包没有空格");
-                    if (state.torch != null)
-                    {
-                        if (GUI.Button(new Rect(half, 45, half - 44, 37), "卸下 · " + DescribeSurvivalItem(state.torch)) &&
-                            !state.Stow(true)) scavengeRun.ReportSurvival("背包没有空格");
-                        if (GUI.Button(new Rect(half, 90, half - 44, 37), "更换手电电池")) StartSurvivalAction(SurvivalAction.Battery);
-                    }
-                }
-                GUI.enabled = enabled;
-            }
-            finally { GUI.EndScrollView(); }
-        }
-
-        private void DrawSurvivalPackRows(float width, SurvivalContainer container)
-        {
-            var state = scavengeRun.Survival;
-            for (int i = 0; i < state.pack.Count; i++)
-            {
-                var item = state.pack[i];
-                float y = i * 45;
-                GUI.Label(new Rect(3, y, width - 110, 39), DescribeSurvivalItem(item));
-                if (container != null)
-                {
-                    if (GUI.Button(new Rect(width - 83, y, 81, 37), "放入"))
-                    {
-                        if (!ScavengeSurvival.Transfer(state.pack, i, container.items, 12))
-                            scavengeRun.ReportSurvival("容器已满");
-                        return;
-                    }
-                    continue;
-                }
-
-                var action = ActionForSurvivalItem(item.item);
-                bool equip = IsSurvivalEquipment(item.item);
-                if ((equip || action != SurvivalAction.None) &&
-                    GUI.Button(new Rect(width - 115, y, 55, 37), equip ? "装备" : "使用"))
-                {
-                    UseSurvivalPackItem(i, equip, action);
-                    return;
-                }
-                if (GUI.Button(new Rect(width - 58, y, 56, 37), "放下"))
-                {
-                    DropSurvivalPackItem(i);
-                    return;
-                }
-            }
+            else DrawSurvivalInventory(panel);
         }
 
         /// <summary>返回随身物品已有的使用动作。</summary>
@@ -737,18 +632,6 @@ namespace OutpostLoop
                 state.drops.Add(drop);
             }
             ScavengeSurvival.Transfer(state.pack, index, drop.items, int.MaxValue);
-        }
-
-        private void DrawSurvivalContainerRows(float x, float width, SurvivalContainer container)
-        {
-            for (int i = 0; i < container.items.Count; i++)
-                if (GUI.Button(new Rect(x, i * 45, width, 37), "拾取 · " + DescribeSurvivalItem(container.items[i])))
-                {
-                    if (!ScavengeSurvival.Transfer(container.items, i, scavengeRun.Survival.pack, ScavengeSurvival.Capacity))
-                        scavengeRun.ReportSurvival("背包已满");
-                    return;
-                }
-            if (container.items.Count == 0) GUI.Label(new Rect(x, 0, width, 34), "空");
         }
 
         private void DrawSurvivalBuild(Rect panel)

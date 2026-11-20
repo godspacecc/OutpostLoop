@@ -1,29 +1,23 @@
-#if UNITY_EDITOR
 using System.Collections.Generic;
-using System.IO;
-using UnityEditor;
 using UnityEngine;
 
 namespace OutpostLoop
 {
     public sealed partial class PrototypeController
     {
-        // 编辑器样片在搜取、储物和装备间保持同一列背包位置。
-        internal const string LootPreviewPreference = "OutpostLoop.RiverValleyLootPreview";
-        internal const string LootPreviewBatch = "LootUiPreview-20261120";
-        private const string LootPreviewMenu = "OutpostLoop/预览/切换搜取与背包样片";
-        private readonly Dictionary<string, Texture2D> lootPreviewTextures = new();
+        // 搜取、储物和装备共用同一列背包。外观素材可从已拥有的包还原。
+        private const string InventoryTexturePath = "RiverValleyInventory/";
+        private readonly Dictionary<string, Texture2D> lootTextures = new();
         private Vector2 lootPackScroll;
         private static readonly Color LootBackground = new(.052f, .078f, .078f, .97f);
         private static readonly Color LootLine = new(.25f, .36f, .34f);
         private static readonly Color LootText = new(.91f, .94f, .91f);
         private static readonly Color LootMuted = new(.65f, .75f, .71f);
         private static readonly Color LootWarning = new(1f, .77f, .44f);
-        private bool LootPreviewActive => !survivalBuildOpen &&
-            (survivalPackOpen || survivalContainer != null || scavengeRun.OpenCache >= 0) &&
-            EditorPrefs.GetBool(LootPreviewPreference);
+        private bool SurvivalInventoryOpen => !survivalBuildOpen &&
+            (survivalPackOpen || survivalContainer != null || scavengeRun.OpenCache >= 0);
 
-        private SurvivalContainer LootPreviewContainer => scavengeRun.OpenCache >= 0
+        private SurvivalContainer CurrentInventorySource => scavengeRun.OpenCache >= 0
             ? scavengeRun.Survival.caches[scavengeRun.OpenCache] : survivalContainer;
 
         /// <summary>线索只占来源列的空间，装备列预留武器、手电和电池操作。</summary>
@@ -34,33 +28,19 @@ namespace OutpostLoop
         }
 
         /// <summary>限制面板最大高度，短列表只占所需空间，输入区域跟随同一个矩形。</summary>
-        private float LootPreviewHeight()
+        private float SurvivalInventoryHeight()
         {
             var state = scavengeRun.Survival;
-            float leftHeight = LootLeftContentHeight(LootPreviewContainer, scavengeRun.SearchRemaining > 0);
+            float leftHeight = LootLeftContentHeight(CurrentInventorySource, scavengeRun.SearchRemaining > 0);
             return Mathf.Min(395, 92 + Mathf.Max(leftHeight, Mathf.Max(2, state.pack.Count) * 39));
         }
 
-        /// <summary>切换编辑器样片，记住当前机器的评审选择。</summary>
-        [MenuItem(LootPreviewMenu)]
-        private static void ToggleLootPreview() =>
-            EditorPrefs.SetBool(LootPreviewPreference, !EditorPrefs.GetBool(LootPreviewPreference));
-
-        [MenuItem(LootPreviewMenu, true)]
-        private static bool ValidateLootPreviewMenu()
-        {
-            Menu.SetChecked(LootPreviewMenu, EditorPrefs.GetBool(LootPreviewPreference));
-            return true;
-        }
-
         /// <summary>只读取当前搜点与背包，由原有领域方法执行物品转移。</summary>
-        private bool TryDrawLootPreview(Rect panel)
+        private void DrawSurvivalInventory(Rect panel)
         {
             int opened = scavengeRun.OpenCache;
-            if (!LootPreviewActive) return false;
-
             var state = scavengeRun.Survival;
-            var container = LootPreviewContainer;
+            var container = CurrentInventorySource;
             bool searching = scavengeRun.SearchRemaining > 0;
             bool canMoveItems = !searching && state.action == SurvivalAction.None && !state.sleeping;
             float x = panel.x + 16;
@@ -79,12 +59,12 @@ namespace OutpostLoop
             if (container != null && LootButton(new Rect(panel.xMax - 214, panel.y + 11, 130, 29), "使用 / 装备", !searching))
             {
                 OpenSurvivalPack();
-                return true;
+                return;
             }
             if (LootButton(new Rect(panel.xMax - 76, panel.y + 11, 60, 29), "关闭 E", true))
             {
                 CloseSurvivalPanels();
-                return true;
+                return;
             }
             LootLabel(new Rect(x, panel.y + 51, columnWidth, 25), container == null ? "已装备" : "来源物资", 13, LootMuted, true);
             LootLabel(new Rect(right, panel.y + 51, 85, 25), "随身背包", 13, LootMuted, true);
@@ -127,7 +107,6 @@ namespace OutpostLoop
                     LootLabel(new Rect(8, 0, cellWidth - 8, 38), "背包为空", 14, LootMuted);
             }
             finally { GUI.EndScrollView(); }
-            return true;
         }
 
         /// <summary>用逐格填充表示真实占用，颜色和数字同时提示满包。</summary>
@@ -226,7 +205,7 @@ namespace OutpostLoop
                 scavengeRun.ReportSurvival("背包没有空格");
         }
 
-        /// <summary>样片文字复用项目当前 IMGUI 字体，颜色和字号仅作用于当前控件。</summary>
+        /// <summary>背包文字复用局内字体，颜色和字号仅作用于当前控件。</summary>
         private static void LootLabel(Rect rect, string label, int size, Color color, bool bold = false)
         {
             var style = new GUIStyle(GUI.skin.label) { fontSize = size, alignment = TextAnchor.MiddleLeft };
@@ -263,34 +242,13 @@ namespace OutpostLoop
             }
         }
 
-        /// <summary>从本地样片目录按需读取素材，贴图不会进入游戏资源收集。</summary>
+        /// <summary>读取已导入的贴图。资源缺席时，面板仍使用基础控件和物品名称。</summary>
         private Texture2D LootTexture(string name)
         {
-            if (lootPreviewTextures.TryGetValue(name, out var texture)) return texture;
-            string folder = System.Environment.GetEnvironmentVariable("OUTPOST_LOOT_UI_ASSETS");
-            if (string.IsNullOrEmpty(folder))
-                folder = Path.Combine(Application.dataPath, "../../Backup/Artifacts", LootPreviewBatch, "Sprites");
-            var path = Path.Combine(folder, name + ".png");
-            if (File.Exists(path))
-            {
-                texture = new Texture2D(2, 2) { hideFlags = HideFlags.HideAndDontSave };
-                if (!texture.LoadImage(File.ReadAllBytes(path), true))
-                {
-                    Destroy(texture);
-                    texture = null;
-                }
-            }
-            lootPreviewTextures.Add(name, texture);
+            if (lootTextures.TryGetValue(name, out var texture)) return texture;
+            texture = UnityEngine.Resources.Load<Texture2D>(InventoryTexturePath + name);
+            lootTextures.Add(name, texture);
             return texture;
-        }
-
-        /// <summary>销毁样片独立加载的贴图。</summary>
-        private void ReleaseLootPreviewTextures()
-        {
-            foreach (var texture in lootPreviewTextures.Values)
-                Release(texture);
-            lootPreviewTextures.Clear();
         }
     }
 }
-#endif
