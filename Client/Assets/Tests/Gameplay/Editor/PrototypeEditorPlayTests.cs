@@ -1523,6 +1523,109 @@ namespace OutpostLoop.Tests
 
 
         [UnityTest]
+        public IEnumerator BootRiverValleyStatusShowsNeedsBesideInventoryAndYieldsToMap()
+        {
+            const string batch = "RiverValleyStatus-20261120";
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "../../Backup/Artifacts/" + batch));
+            var save = System.IO.Path.Combine(folder, "Save-" + System.Guid.NewGuid().ToString("N"));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(save));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var language = Game.Game.Interface.GetModel<Game.LocalizationModel>();
+            var originalLanguage = language.CurrentLanguageCode.Value;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                language.SetLanguageCode("zh-CN");
+                foreach (var patrol in run.Patrols) patrol.Health = 0;
+                yield return null;
+                yield return null;
+                var view = GameObject.Find("RiverValleyStatusCanvas").GetComponent<SurvivalStatusView>();
+                Assert.AreEqual(Image.FillMethod.Radial360, view.WaterFill.fillMethod);
+                Assert.That(view.HealthFill.rectTransform.anchorMax.x, Is.EqualTo(1f).Within(.01f));
+                Assert.That(view.WaterFill.fillAmount, Is.EqualTo(.8f).Within(.01f));
+                Assert.AreEqual("", view.WaterDetail.text);
+                Assert.AreEqual("", view.FoodDetail.text);
+                Assert.AreEqual("", view.EnergyDetail.text);
+                Assert.AreEqual("", view.HealthWarning.text);
+                yield return CaptureSurvivalEvidence("exploring-zh", 1280, 720, batch);
+
+                run.Survival.health = 68f;
+                run.Survival.water = 17f;
+                run.Survival.food = 51f;
+                run.Survival.energy = 22f;
+                run.Survival.bleeding = true;
+                yield return null;
+                yield return null;
+                Assert.That(view.HealthFill.rectTransform.anchorMax.x, Is.EqualTo(.68f).Within(.01f));
+                Assert.That(view.EnergyFill.fillAmount, Is.EqualTo(.22f).Within(.01f));
+                Assert.AreEqual("68", view.HealthValue.text);
+                view.HealthValue.ForceMeshUpdate();
+                Assert.IsFalse(view.HealthValue.isTextTruncated);
+                Assert.That(view.HealthValue.textInfo.characterCount, Is.EqualTo(2));
+                Assert.IsTrue(view.HealthValue.textInfo.characterInfo[0].isVisible);
+                Assert.AreEqual("出血", view.HealthWarning.text);
+                Assert.AreEqual("口渴", view.WaterDetail.text);
+                Assert.AreEqual("", view.FoodDetail.text);
+                Assert.AreEqual("疲劳", view.EnergyDetail.text);
+                yield return CaptureSurvivalEvidence("low-needs-zh", 1920, 1080, batch);
+
+                PressInventoryButton(view.Pack);
+                yield return null;
+                yield return null;
+                Assert.IsTrue(view.gameObject.activeSelf);
+                var inventory = GameObject.Find("RiverValleyInventoryCanvas").GetComponent<SurvivalInventoryView>();
+                Assert.IsTrue(inventory.gameObject.activeSelf);
+                Assert.AreEqual("饮水 17", view.WaterDetail.text);
+                Assert.AreEqual("饱腹 51", view.FoodDetail.text);
+                Assert.AreEqual("精力 22", view.EnergyDetail.text);
+                yield return CaptureSurvivalEvidence("backpack-zh", 1280, 720, batch);
+
+                language.SetLanguageCode("en");
+                yield return null;
+                yield return null;
+                Assert.AreEqual("Water 17", view.WaterDetail.text);
+                Assert.AreEqual("Food 51", view.FoodDetail.text);
+                Assert.AreEqual("Energy 22", view.EnergyDetail.text);
+                Assert.AreEqual("Bleeding", view.HealthWarning.text);
+                foreach (var label in new[] { view.Clock, view.Objective, view.PackLabel, view.WaterDetail, view.FoodDetail, view.EnergyDetail })
+                {
+                    label.ForceMeshUpdate();
+                    Assert.IsFalse(label.isTextOverflowing, label.text);
+                    Assert.IsFalse(label.isTextTruncated, label.text);
+                }
+                yield return CaptureSurvivalEvidence("backpack-en", 1920, 1080, batch);
+
+                var poll = type.GetMethod("PollSurvival", flags);
+                DriveScavengeKey(controller, poll, keyboard, Key.M);
+                yield return null;
+                yield return null;
+                Assert.IsFalse(view.gameObject.activeSelf);
+                Assert.IsFalse(inventory.gameObject.activeSelf);
+                DriveScavengeKey(controller, poll, keyboard, Key.Escape);
+                yield return null;
+                yield return null;
+                Assert.IsTrue(view.gameObject.activeSelf);
+                Assert.AreSame(view, GameObject.Find("RiverValleyStatusCanvas").GetComponent<SurvivalStatusView>());
+            }
+            finally
+            {
+                language.SetLanguageCode(originalLanguage);
+                InputSystem.RemoveDevice(keyboard);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootRiverValleyInventoryUsesLocalizedTmpAndTransfersItems()
         {
             const string batch = "InventoryPrefab-20261120";

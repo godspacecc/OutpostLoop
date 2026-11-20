@@ -59,6 +59,7 @@ namespace OutpostLoop
         private void LateUpdate()
         {
             UpdateSurvivalContext();
+            UpdateSurvivalStatus();
             if (!CanShowInventoryCanvas())
             {
                 if (inventoryRoot && inventoryRoot.activeSelf) inventoryRoot.SetActive(false);

@@ -136,6 +136,7 @@ namespace OutpostLoop
         private void OnDisable()
         {
             if (inventoryRoot) inventoryRoot.SetActive(false);
+            if (survivalStatusView) survivalStatusView.gameObject.SetActive(false);
             CancelCrossing();
             EnhancedTouchSupport.Disable();
             ignoreTouchUntilRelease = true;

@@ -527,7 +527,7 @@ namespace OutpostLoop
             float scale = HudScale;
             float width = Screen.width / scale, height = Screen.height / scale;
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
-            return SurvivalInfo.Contains(point) || SurvivalContextContains(point, width, height) ||
+            return SurvivalStatusContains(cursor, point) || SurvivalContextContains(point, width, height) ||
                 SurvivalJourneyContains(point, width, height) ||
                 ScavengeMapRect(width).Contains(point) || InventoryContains(cursor, point, width, height) ||
                 (ShowSurvivalClaim && SurvivalClaimRect(width, height).Contains(point)) ||
@@ -545,25 +545,7 @@ namespace OutpostLoop
                 return;
             }
 
-            GUI.Box(SurvivalInfo, "");
-            int day = (int)(state.elapsed / ScavengeSurvival.Day) + 1;
-            int minutes = Mathf.FloorToInt(state.Hour * 60);
-            string timer = state.Ready ? $"撤离窗口 {SurvivalTime(ScavengeSurvival.Deadline - state.elapsed)}" :
-                $"生存还需 {SurvivalTime(ScavengeSurvival.Goal - state.elapsed)}";
-            GUI.Label(new Rect(30, 27, 350, 27), $"第 {day} 天  {minutes / 60:00}:{minutes % 60:00}   {timer}");
-            GUI.Label(new Rect(30, 56, 350, 28), $"生命 {Mathf.CeilToInt(Mathf.Max(0, state.health))}   饮水 {state.water:0}   饱腹 {state.food:0}   精力 {state.energy:0}");
-            string warning = state.bleeding ? "正在出血" : state.water < 25 ? "需要饮水" :
-                state.energy < 25 ? "需要休息" : state.food < 25 ? "需要进食" : "";
-            GUI.Label(new Rect(30, 85, 350, 27), warning.Length > 0 ? warning :
-                state.weapon == null ? "未装备武器" : DescribeSurvivalItem(state.weapon));
-            if (scavengeRun.Driving)
-                GUI.Label(new Rect(30, 114, 350, 34), $"车速 {Mathf.Abs(scavengeRun.VehicleSpeed) * 3.6f:0} km/h   WASD 驾驶");
-            else
-            {
-                string packLabel = SurvivalInventoryOpen ? "背包  Tab" : $"背包 {state.Used}/6  Tab";
-                if (GUI.Button(new Rect(30, 114, 148, 34), packLabel)) OpenSurvivalPack();
-                GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
-            }
+            if (!survivalStatusView) DrawSurvivalStatusFallback(state);
 
             if (survivalFeedbackVersion != scavengeRun.SurvivalFeedbackVersion)
             {
@@ -591,6 +573,30 @@ namespace OutpostLoop
             DrawScavengeExitLabel();
             DrawScavengeMap(width);
             DrawFullRiverValleyEntrances();
+        }
+
+        /// <summary>资源加载失败时保留旧状态读数和背包入口。</summary>
+        private void DrawSurvivalStatusFallback(ScavengeSurvival state)
+        {
+            GUI.Box(SurvivalInfo, "");
+            int day = (int)(state.elapsed / ScavengeSurvival.Day) + 1;
+            int minutes = Mathf.FloorToInt(state.Hour * 60);
+            string timer = state.Ready ? $"撤离窗口 {SurvivalTime(ScavengeSurvival.Deadline - state.elapsed)}" :
+                $"生存还需 {SurvivalTime(ScavengeSurvival.Goal - state.elapsed)}";
+            GUI.Label(new Rect(30, 27, 350, 27), $"第 {day} 天  {minutes / 60:00}:{minutes % 60:00}   {timer}");
+            GUI.Label(new Rect(30, 56, 350, 28), $"生命 {Mathf.CeilToInt(Mathf.Max(0, state.health))}   饮水 {state.water:0}   饱腹 {state.food:0}   精力 {state.energy:0}");
+            string warning = state.bleeding ? "正在出血" : state.water < 25 ? "需要饮水" :
+                state.energy < 25 ? "需要休息" : state.food < 25 ? "需要进食" : "";
+            GUI.Label(new Rect(30, 85, 350, 27), warning.Length > 0 ? warning :
+                state.weapon == null ? "未装备武器" : DescribeSurvivalItem(state.weapon));
+            if (scavengeRun.Driving)
+                GUI.Label(new Rect(30, 114, 350, 34), $"车速 {Mathf.Abs(scavengeRun.VehicleSpeed) * 3.6f:0} km/h   WASD 驾驶");
+            else
+            {
+                string packLabel = SurvivalInventoryOpen ? "背包  Tab" : $"背包 {state.Used}/6  Tab";
+                if (GUI.Button(new Rect(30, 114, 148, 34), packLabel)) OpenSurvivalPack();
+                GUI.Label(new Rect(194, 114, 188, 32), state.torch == null ? "无手电" : $"手电 {state.torch.charge / 3.6f:0}%  F");
+            }
         }
 
         /// <summary>返回随身物品已有的使用动作。</summary>
