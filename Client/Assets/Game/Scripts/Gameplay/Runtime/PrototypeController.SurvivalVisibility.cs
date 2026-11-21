@@ -15,17 +15,16 @@ namespace OutpostLoop
         private readonly List<SurvivalShell> survivalShells = new List<SurvivalShell>();
         private readonly Dictionary<Material, Material> fadedSurvivalMaterials = new Dictionary<Material, Material>();
 
-        /// <summary>建立对应室内的表现节点。启动时在第一帧同步前保持隐藏。</summary>
+        /// <summary>建立室内的底图节点，屋盖和迷雾各自控制画面的遮挡。</summary>
         private Transform RegisterSurvivalInterior(int room, Rect area)
         {
             var root = new GameObject("房间内部 " + room).transform;
             root.SetParent(scavengeRoot, false);
-            root.gameObject.SetActive(false);
             survivalInteriors.Add((area, root));
             return root;
         }
 
-        /// <summary>更新角色视野，并把屋顶、室内物件和地面明暗绑定到同一帧结果。</summary>
+        /// <summary>更新人物所在房间和视线，分别供镜头与迷雾使用。</summary>
         private void SyncSurvivalRoomsVisibility()
         {
             if (survivalSight == null) return;
@@ -33,18 +32,17 @@ namespace OutpostLoop
             if (room >= 0 && scavengeRun.Player.x < survivalInteriors[room].Area.xMin + .28f)
                 room = -1;
             visibleSurvivalRoom = room;
-            float daylight = SetSurvivalSightView();
+            SetSurvivalSightView();
             survivalSight.TraceContour();
-            SyncSurvivalSightPresentation(daylight);
+            SyncSurvivalSightPresentation();
         }
 
         /// <summary>瞄准和场景表现都从角色当前的位置和朝向取视线。</summary>
-        private float SetSurvivalSightView()
+        private void SetSurvivalSightView()
         {
             var state = scavengeRun.Survival;
             float daylight = Mathf.Clamp01(Mathf.Min(state.Hour - 5.5f, 19.5f - state.Hour) / 1.5f);
             survivalSight.SetView(ScavengePlayerPosition(0), state.facing, daylight, state.Light);
-            return daylight;
         }
 
         /// <summary>用同一占地查找会移动或随存档恢复的室内对象。</summary>
@@ -78,30 +76,27 @@ namespace OutpostLoop
 
         /// <summary>登记独立墙段、屋顶、房门或一栋封闭建筑的外壳。</summary>
         private void RegisterSurvivalShell(int room, Renderer[] parts, bool roof = false, bool upperResidence = false,
-            bool walkableRoof = false, bool sightCover = false)
+            bool walkableRoof = false)
         {
             if (parts.Length == 0) return;
             survivalShells.Add(new SurvivalShell(room, parts, roof, upperResidence, walkableRoof));
-            if (roof || sightCover) RegisterSurvivalSightCover(room, parts);
         }
 
-        /// <summary>室内沿用切除。室外只在实际挡住角色时半透明，搜点射线不能打开别的房间。</summary>
-        private void UpdateSurvivalShells(OcclusionRay torso, OcclusionRay feet, OcclusionRay cacheRay, bool hasVisibleCache)
+        /// <summary>同一批镜头射线为人物和脚边空间避挡，墙体的透明度与视线朝向无关。</summary>
+        private void UpdateSurvivalShells(OcclusionRay[] context)
         {
             float playerHeight = scavengeRun.PlayerHeightOffset;
             foreach (var shell in survivalShells)
             {
                 bool inside = shell.Room >= 0 && shell.Room == visibleSurvivalRoom;
-                if (PresentSurvivalSightCover(shell, torso, feet)) continue;
                 if (inside && (shell.Roof || (shell.UpperResidence && playerHeight < 1.8f) ||
                     (shell.WalkableRoof && playerHeight < RiverValleyResidence.RoofHeight - 1.2f)))
                 {
                     shell.Present(true, false, this);
                     continue;
                 }
-                bool cacheInside = inside && hasVisibleCache;
                 // 封闭建筑外壳固定，先用包围盒跳过大多数远处建筑。
-                if (shell.Room < 0 && !torso.BlockedBy(shell.Bounds) && !feet.BlockedBy(shell.Bounds))
+                if (shell.Room < 0 && !CameraContextBlocked(context, shell.Bounds))
                 {
                     shell.Present(false, false, this);
                     continue;
@@ -110,14 +105,19 @@ namespace OutpostLoop
                 foreach (var part in shell.Parts)
                 {
                     if (!part.enabled || !part.gameObject.activeInHierarchy) continue;
-                    if (torso.BlockedBy(part) || feet.BlockedBy(part) || (cacheInside && cacheRay.BlockedBy(part)))
-                    {
-                        blocked = true;
-                        break;
-                    }
+                    foreach (var ray in context)
+                        if (ray.BlockedBy(part)) { blocked = true; break; }
+                    if (blocked) break;
                 }
-                shell.Present(inside && blocked, !inside && blocked, this);
+                shell.Present(false, blocked, this);
             }
+        }
+
+        private static bool CameraContextBlocked(OcclusionRay[] context, Bounds bounds)
+        {
+            foreach (var ray in context)
+                if (ray.BlockedBy(bounds)) return true;
+            return false;
         }
 
         /// <summary>每种源材质共享行动内的半透明副本，退出行动时统一回收。</summary>
@@ -152,7 +152,8 @@ namespace OutpostLoop
         /// <summary>离开行动时清除房间与材质索引，新局重新绑定。</summary>
         private void ClearSurvivalVisibility()
         {
-            ClearSurvivalSightPresentation();
+            ClearSurvivalFog();
+            survivalClinicActor = null;
             survivalSight = null;
             survivalInteriors.Clear();
             survivalShells.Clear();

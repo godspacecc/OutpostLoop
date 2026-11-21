@@ -155,6 +155,7 @@ namespace OutpostLoop
                     scavengeRun.Outcome != ScavengeOutcome.Exploring && !ReferenceEquals(journeyRecordedRun, scavengeRun);
                 if (record) progress = SurvivalJourneyProgress.Record(progress, scavengeRun, CaptureSurvivalCarriedSummary());
                 var data = available ? scavengeRun.CaptureSurvival() : new SurvivalSave();
+                if (available && survivalFog) data.fog = survivalFog.Capture();
                 data.journey = progress;
                 SurvivalStore.Save(SurvivalSaveName, data);
                 survivalJourney = progress;

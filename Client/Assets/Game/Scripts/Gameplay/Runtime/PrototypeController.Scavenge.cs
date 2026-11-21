@@ -70,8 +70,12 @@ namespace OutpostLoop
                 ? survivalResume != null ? ScavengeRun.RestoreSurvival(survivalResume, survivalWorldGeometry) :
                     new ScavengeRun(seed, true, CreateSurvivalState(seed), survivalWorldGeometry)
                 : new ScavengeRun(seed, scavengeTown);
+            if (survivalMode)
+            {
+                ResetSurvivalPresentation();
+                StartSurvivalFog(survivalResume?.fog);
+            }
             survivalResume = null;
-            if (survivalMode) ResetSurvivalPresentation();
             scavengePaused = false;
             storageOpen = false;
             placingShelter = false;
@@ -264,7 +268,6 @@ namespace OutpostLoop
             if (survivalWorldGeometry != null) scavengeExit.position = SurvivalPosition(scavengeRun.ExitPoint, .05f);
             if (survivalMode) SyncSurvivalDrops();
             UpdateScavengeCamera(snapCamera);
-            PresentSurvivalSightOverlay();
             UpdateTownWeather();
         }
 

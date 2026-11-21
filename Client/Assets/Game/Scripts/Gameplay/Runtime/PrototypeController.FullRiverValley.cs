@@ -94,6 +94,7 @@ namespace OutpostLoop
             survivalWorldGeometry.Finish();
             // 暂用项目现有人形和待机动作表现诊所幸存者。
             var survivor = Instantiate(LoadScavengeHuman(), survivalInteriors[2].Root, false);
+            survivalClinicActor = survivor.transform;
             survivor.name = "诊所幸存者";
             survivor.transform.SetPositionAndRotation(SurvivalPosition(survivalWorldGeometry.ClinicSurvivor, 0),
                 Quaternion.LookRotation(Vector3.left));

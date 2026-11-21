@@ -631,9 +631,114 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyFogRemembersLastSeenByWorldPositionAndFloor()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            yield return VerifyFogMemoryDuringAction();
+            yield return new ExitPlayMode();
+        }
+
+        private static IEnumerator VerifyFogMemoryDuringAction()
+        {
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            Assert.NotNull(controller);
+            var type = typeof(PrototypeController);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/RiverValleyFogLive-20261121"));
+            var store = new Game.JsonFileStore<SurvivalSave>(System.IO.Path.Combine(folder, "Save-" + System.Guid.NewGuid()));
+            type.GetField("survivalStore", flags).SetValue(controller, store);
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var camera = (Camera)type.GetField("gameCamera", flags).GetValue(controller);
+            var doors = (Transform[])type.GetField("survivalDoors", flags).GetValue(controller);
+            var fog = camera.GetComponent<RiverValleyFog>();
+            Assert.NotNull(fog, "正常试玩入口应启用迷雾");
+            var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
+            var surface = typeof(ScavengeRun).GetField("playerSurface", flags);
+            var sync = type.GetMethod("SyncScavenge", flags);
+            var shop = run.FullTown.Interiors[0];
+            var door = new Vector2(shop.xMin + .14f, shop.center.y);
+            foreach (var patrol in run.Patrols) patrol.Health = 0;
+
+            void Render(string name, Vector2 facing)
+            {
+                run.Survival.facing = facing;
+                sync.Invoke(controller, new object[] { true });
+                CaptureVisibilityCamera(camera, folder, name, 1280, 720);
+            }
+
+            player.SetValue(run, door + Vector2.right * 4.6f);
+            run.Survival.rooms[0].open = true;
+            run.Survival.rooms[0].opensOutward = false;
+            Render("memory-open-observed", Vector2.left);
+            var ray = camera.ScreenPointToRay(camera.WorldToScreenPoint(doors[0].position));
+            Assert.IsTrue(new Plane(Vector3.up, Vector3.up * .05f).Raycast(ray, out float distance));
+            var projection = ray.GetPoint(distance);
+            int tileX = RiverValleyFog.PageAt(projection.x), tileZ = RiverValleyFog.PageAt(projection.z);
+
+            Color32[] ReadDoorMemory(RiverValleyFogPageSave[] pages)
+            {
+                var page = System.Array.Find(pages, item => item.surface == 0 && item.x == tileX && item.z == tileZ);
+                Assert.NotNull(page);
+                var image = new Texture2D(2, 2);
+                try
+                {
+                    Assert.IsTrue(ImageConversion.LoadImage(image, page.png));
+                    var all = image.GetPixels32();
+                    int x = Mathf.Clamp(Mathf.FloorToInt((projection.x / RiverValleyFog.PageSize - tileX) * image.width), 5, image.width - 6);
+                    int z = Mathf.Clamp(Mathf.FloorToInt((projection.z / RiverValleyFog.PageSize - tileZ) * image.height), 5, image.height - 6);
+                    var crop = new Color32[81];
+                    for (int row = 0; row < 9; row++)
+                        System.Array.Copy(all, x - 4 + (z - 4 + row) * image.width, crop, row * 9, 9);
+                    return crop;
+                }
+                finally { Object.Destroy(image); }
+            }
+
+            var lastOpen = ReadDoorMemory(fog.Capture());
+            Assert.That(System.Array.FindAll(lastOpen, sample => sample.a > 220).Length, Is.GreaterThan(20), "需要实际写入门的画面");
+            run.Survival.rooms[0].open = false;
+            Render("memory-door-closed-out-of-view", Vector2.right);
+            CollectionAssert.AreEqual(lastOpen, ReadDoorMemory(fog.Capture()));
+            var beforeWalk = run.Player;
+            for (int i = 0; i < 8; i++) run.Tick(.05f, Vector2.right);
+            Assert.That(Vector2.Distance(run.Player, beforeWalk), Is.GreaterThan(1));
+            Render("memory-stays-at-door-after-walking", Vector2.right);
+            CollectionAssert.AreEqual(lastOpen, ReadDoorMemory(fog.Capture()));
+            Render("memory-closed-observed", Vector2.left);
+            var lastClosed = ReadDoorMemory(fog.Capture());
+            Assert.IsFalse(System.Linq.Enumerable.SequenceEqual(lastOpen, lastClosed), "回头才写入新的门貌");
+
+            var home = run.FullTown.Residence.Footprint.center;
+            player.SetValue(run, home);
+            surface.SetValue(run, ResidenceSurface.Upper);
+            Render("memory-upper-floor", Vector2.right);
+            var withUpper = fog.Capture();
+            Assert.IsTrue(System.Array.Exists(withUpper, item => item.surface == (int)ResidenceSurface.Upper));
+            CollectionAssert.AreEqual(lastClosed, ReadDoorMemory(withUpper), "更新楼上记忆不应覆盖地面");
+
+            Assert.IsTrue((bool)type.GetMethod("WriteSurvivalSave", flags).Invoke(controller, new object[] { true }));
+            var save = (SurvivalSave)type.GetMethod("ReadSurvivalSave", flags).Invoke(controller, null);
+            Assert.NotNull(save?.fog);
+            type.GetMethod("StartSurvivalFog", flags).Invoke(controller, new object[] { save.fog });
+            RiverValleyFog restored = null;
+            foreach (var candidate in camera.GetComponents<RiverValleyFog>())
+                if (candidate.enabled) restored = candidate;
+            Assert.NotNull(restored);
+            CollectionAssert.AreEqual(lastClosed, ReadDoorMemory(restored.Capture()), "存档应恢复最后所见的颜色");
+        }
+
+        [UnityTest]
         public IEnumerator BootRiverValleyShowsExitAndInteriorsOnlyInContext()
         {
-            const string batch = "RiverValleyUnifiedSight-20261121";
+            const string batch = "RiverValleyFogLive-20261121";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -695,7 +800,8 @@ namespace OutpostLoop.Tests
             bool See(Vector2 point) => (bool)seeRoom.Invoke(controller, new object[] { point });
             run.Survival.facing = Vector2.right;
             Place(shopDoor - Vector2.right * 1.1f);
-            Assert.IsFalse(shopRoot.activeSelf, "关闭的门应遮住店内");
+            Assert.IsTrue(shopRoot.activeSelf, "底图独立于门洞视野，店内环境继续渲染");
+            Assert.IsFalse(See(shopDoor + Vector2.right * 1.25f), "关闭的门应遮住店内");
             CaptureVisibilityCamera(camera, peekEvidence, "closed-door", 1280, 720);
             Assert.IsTrue(run.ToggleSurvivalDoor());
             Place(shopDoor - Vector2.right * 1.1f);
@@ -710,7 +816,8 @@ namespace OutpostLoop.Tests
             CaptureVisibilityCamera(camera, peekEvidence, "window", 1280, 720);
             run.Survival.facing = Vector2.left;
             Place(shopWindow - Vector2.right * 1.1f);
-            Assert.IsFalse(shopRoot.activeSelf, "转开后室内应恢复遮蔽");
+            Assert.IsTrue(shopRoot.activeSelf, "转开后底图仍然存在");
+            Assert.IsFalse(See(shopWindow + Vector2.right * 1.25f), "转开后室内退出当前视野");
             for (int i = 0; i < run.FullTown.Interiors.Length; i++)
             {
                 // 所有房间都从门外测试正前方与身后，再越过门槛。
@@ -718,7 +825,7 @@ namespace OutpostLoop.Tests
                 var roomRoot = root.Find("房间内部 " + i);
                 var door = rooms.Door(i).center;
                 Place(door - Vector2.right);
-                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"背向门时看见室内 {i}");
+                Assert.IsFalse(See(door + Vector2.right * 1.3f), $"背向门时看见室内 {i}");
                 if (i == 2) Assert.IsFalse(clinic.activeInHierarchy);
                 run.Survival.facing = Vector2.right;
                 Place(door - Vector2.right);
@@ -726,18 +833,19 @@ namespace OutpostLoop.Tests
                 if (i < 2 && !run.Survival.rooms[i].open) Assert.IsTrue(run.ToggleSurvivalDoor());
                 Place(door - Vector2.right);
                 Assert.IsTrue(See(door + Vector2.right * 1.3f), $"开口后的空间仍隐藏 {i}");
-                Assert.IsTrue(roomRoot.gameObject.activeSelf, $"开口后屋顶未揭开 {i}");
+                Assert.IsTrue(roomRoot.gameObject.activeSelf, $"底图缺少室内 {i}");
                 if (i == 1) CaptureVisibilityCamera(camera, evidence, "second-building-open", 1280, 720);
                 Place(door + Vector2.right * 1.1f);
                 Assert.IsTrue(roomRoot.gameObject.activeSelf, $"进门后室内仍隐藏 {i}");
                 if (i == 2)
                 {
+                    Place(run.FullTown.ClinicSurvivor - Vector2.right * 1.5f);
                     Assert.IsTrue(clinic.activeInHierarchy);
                     CaptureVisibilityCamera(camera, evidence, "clinic-inside", 1280, 720);
                 }
                 run.Survival.facing = Vector2.left;
                 Place(door - Vector2.right);
-                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"出门后室内仍可见 {i}");
+                Assert.IsFalse(See(door + Vector2.right * 1.3f), $"出门朝外后仍能看见室内 {i}");
                 for (int k = 0; k < crates.Length; k++)
                     if (rooms.Footprint(i).Contains(run.CachePoints[k]))
                         Assert.IsFalse(crates[k].gameObject.activeSelf, $"室外看到室内搜点 {i}/{k}");
@@ -784,7 +892,12 @@ namespace OutpostLoop.Tests
             Assert.AreNotSame(original, shopWall.sharedMaterial);
             Assert.IsFalse(shopWall.forceRenderingOff, "室外使用半透明墙体");
             Assert.AreEqual(3000, shopWall.sharedMaterial.renderQueue);
-            Assert.IsFalse(root.Find("房间内部 0").gameObject.activeSelf);
+            Assert.IsFalse(See(new Vector2(shop.xMax - 1.3f, shop.center.y)), "镜头淡墙不能改变角色视线");
+            var faded = shopWall.sharedMaterial;
+            run.Survival.facing = Vector2.right;
+            type.GetMethod("SyncSurvivalRoomsVisibility", flags).Invoke(controller, null);
+            occlusion.Invoke(controller, null);
+            Assert.AreSame(faded, shopWall.sharedMaterial, "原地转身只更新迷雾，不改变墙材质");
             CaptureVisibilityCamera(camera, evidence, "outside-wall-faded", 1920, 1080);
             camera.transform.position = shopWall.bounds.center + Vector3.right * 5;
             occlusion.Invoke(controller, null);

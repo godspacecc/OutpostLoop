@@ -1268,6 +1268,7 @@ namespace OutpostLoop
         {
             if (managementPortrait) Destroy(managementPortrait);
             ReleaseRegionRoutes();
+            ClearSurvivalFog();
             ReleaseScavengeMaterials();
             ReleaseFog();
             Game.LifeCycle.UnregisterUpdate(PollInputAndPresent);

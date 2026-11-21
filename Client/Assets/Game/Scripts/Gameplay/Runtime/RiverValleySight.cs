@@ -58,23 +58,6 @@ namespace OutpostLoop
             }
         }
 
-        /// <summary>判断至少一条可见射线进入室内；射线结果与屋顶遮罩一致。</summary>
-        internal bool Enters(Rect area)
-        {
-            float x = eye.x - Mathf.Clamp(eye.x, area.xMin, area.xMax);
-            float z = eye.z - Mathf.Clamp(eye.z, area.yMin, area.yMax);
-            if (x * x + z * z > DayRange * DayRange) return false;
-            for (int i = 0; i < RayCount; i++)
-            {
-                if (distances[i] <= .1f) continue;
-                float start = 0, end = distances[i] - .10f;
-                var direction = directions[i];
-                if (ClipAxis(eye.x - area.center.x, direction.x, area.width / 2, ref start, ref end) &&
-                    ClipAxis(eye.z - area.center.y, direction.y, area.height / 2, ref start, ref end)) return true;
-            }
-            return false;
-        }
-
         /// <summary>检查一个世界点。检查物件表面时跳过该物件自身的实体。</summary>
         internal bool Sees(Vector3 target, Transform viewed = null)
         {
