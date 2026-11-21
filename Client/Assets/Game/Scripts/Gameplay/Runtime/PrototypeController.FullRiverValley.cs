@@ -49,7 +49,8 @@ namespace OutpostLoop
             yield return (.86f, "正在布置可进入的建筑");
             survivalWorldGeometry = town.WorldGeometry;
             if(survivalLayoutVersion>=RiverValleyShopInterior.Version)survivalWorldGeometry.EnableShopInterior();
-            if (survivalLayoutVersion >= RiverValleyResidence.Version) survivalWorldGeometry.EnableResidence();
+            if (survivalLayoutVersion >= RiverValleyResidence.UpperFloorVersion)
+                survivalWorldGeometry.EnableResidence(survivalLayoutVersion);
             currentSurvivalRooms = new SurvivalRoomSet(new[] { survivalWorldGeometry.Interiors[0], survivalWorldGeometry.Interiors[1] });
             riverValleyRegion = JsonUtility.FromJson<RiverValleyRegion>(content.layout.text);
             var wood = ScavengeMaterial(new Color(.43f,.32f,.23f));

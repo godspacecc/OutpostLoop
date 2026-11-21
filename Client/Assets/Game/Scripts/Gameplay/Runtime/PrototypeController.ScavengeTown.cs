@@ -1,4 +1,5 @@
 using UnityEngine;
+using OutpostLoop.RiverValley;
 
 namespace OutpostLoop
 {
@@ -127,7 +128,8 @@ namespace OutpostLoop
             for (int i = 0; i < indices.Length; i++) indices[i] = i;
             townRainMesh.vertices = rainVertices;
             townRainMesh.SetIndices(indices, MeshTopology.Lines, 0);
-            townRainMesh.bounds = new Bounds(new Vector3(0, 4.25f, 0), new Vector3(27, 10, 27));
+            // 同时覆盖地面雨线和高处屋面上的雨线。
+            townRainMesh.bounds = new Bounds(new Vector3(0, 7.25f, 0), new Vector3(27, 17, 27));
         }
 
         /// <summary>生成可重复的短试听音，随探索退出释放。</summary>
@@ -170,20 +172,39 @@ namespace OutpostLoop
             if (townRain.enabled)
             {
                 rainTime += Time.unscaledDeltaTime * 11f;
+                var residence = scavengeRun.FullTown?.Residence;
+                float roofOrigin = residence?.HasRoof == true
+                    ? SurvivalPosition(residence.Footprint.center, 0).y - townRain.transform.position.y : 0f;
                 for (int i = 0; i < rainPositions.Length; i++)
                 {
                     var drop = rainPositions[i];
                     drop.y = Mathf.Repeat(drop.y - rainTime, 8.5f);
+                    var worldPoint = scavengeRun.Player + new Vector2(drop.x, drop.z);
+                    bool roofRain = TryResidenceRainHeight(worldPoint, out float rainHeight);
+                    if (roofRain) drop.y += roofOrigin + rainHeight;
                     rainVertices[i * 2] = drop;
-                    var worldPoint=scavengeRun.Player+new Vector2(drop.x,drop.z);
-                    // 剔除屋顶投影内的整条雨线；屋顶为观察室内而隐藏时依然挡雨。
-                    rainVertices[i * 2 + 1] = TownRainCovered(worldPoint) ? drop : drop + new Vector3(-.045f, .42f, .04f);
+                    rainVertices[i * 2 + 1] = roofRain || !TownRainCovered(worldPoint)
+                        ? drop + new Vector3(-.045f, .42f, .04f) : drop;
                 }
                 townRainMesh.vertices = rainVertices;
             }
             townGunFlash = Mathf.Max(0, townGunFlash - Time.unscaledDeltaTime);
             townGunTrace.enabled = townGunFlash > 0;
             if (scavengeRun.Outcome != ScavengeOutcome.Exploring) townAmbience.Stop();
+        }
+
+        /// <summary>屋顶及开口内的露天台阶接雨，室内剖视时保留挡雨效果。</summary>
+        private bool TryResidenceRainHeight(Vector2 point, out float height)
+        {
+            height = 0f;
+            var residence = scavengeRun.FullTown?.Residence;
+            if (residence?.HasRoof != true || !residence.Footprint.Contains(point)) return false;
+            if (residence.Footprint.Contains(scavengeRun.Player) &&
+                scavengeRun.PlayerSurface != ResidenceSurface.Roof && scavengeRun.PlayerSurface != ResidenceSurface.RoofStairs)
+                return false;
+            var surface = residence.RoofStairwell.Contains(point) ? ResidenceSurface.RoofStairs : ResidenceSurface.Roof;
+            height = residence.HeightOffset(point, surface);
+            return true;
         }
 
         /// <summary>按当前行动的真实房间占地挡雨，不因玩家站在门内或门外而关闭整场雨。</summary>

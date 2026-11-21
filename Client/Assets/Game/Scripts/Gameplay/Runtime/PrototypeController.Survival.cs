@@ -215,10 +215,13 @@ namespace OutpostLoop
             }
             bool twoLevels = room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null;
             float roofHeight = twoLevels ? 2.92f + RiverValleyResidence.StoreyHeight : 2.92f;
-            var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, roofHeight), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
-            if (room == 0 && survivalWorldGeometry != null) CreateShopPeekMask(cover, floorMesh, rect);
-            RegisterSurvivalShell(room, cover.GetComponentsInChildren<Renderer>(), roof: true);
-            if (twoLevels) CreateResidenceUpperFloor(interior, walls, floor, wood);
+            if (!twoLevels || !survivalWorldGeometry.Residence.HasRoof)
+            {
+                var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, roofHeight), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
+                if (room == 0 && survivalWorldGeometry != null) CreateShopPeekMask(cover, floorMesh, rect);
+                RegisterSurvivalShell(room, cover.GetComponentsInChildren<Renderer>(), roof: true);
+            }
+            if (twoLevels) CreateResidenceUpperFloor(interior, walls, floor, wood, roof);
             survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
                 new Vector3(.5f, .13f, 0), new Vector3(.35f, .13f, 1.08f), floor);

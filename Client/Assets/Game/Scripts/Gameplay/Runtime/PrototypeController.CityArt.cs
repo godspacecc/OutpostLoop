@@ -11,7 +11,7 @@ namespace OutpostLoop
         private void ApplyRiverValleyCityVisual(Transform target, string name, Vector3 size)
         {
             if (!survivalMode || survivalLayoutVersion < 1 || survivalCityArt == null) return;
-            if (name == "现有外墙" || name == "重点建筑入口墙" || name == "住宅二楼外墙")
+            if (name == "现有外墙" || name == "重点建筑入口墙" || name == "住宅二楼外墙" || name == "住宅屋顶矮墙")
             {
                 survivalCityArt.ReplaceWall(target,size.z > size.x);
                 return;

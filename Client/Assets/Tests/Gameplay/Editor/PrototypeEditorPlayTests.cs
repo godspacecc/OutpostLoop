@@ -1308,6 +1308,8 @@ namespace OutpostLoop.Tests
             var player=typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
             var sync=type.GetMethod("SyncScavenge",flags);
             var covered=type.GetMethod("TownRainCovered",flags);
+            var roofRainHeight = type.GetMethod("TryResidenceRainHeight", flags);
+            var camera = GameObject.Find("PreviewCamera").GetComponent<Camera>();
             var rain=(MeshRenderer)type.GetField("townRain",flags).GetValue(controller);
             var mesh=(Mesh)type.GetField("townRainMesh",flags).GetValue(controller);
             Assert.IsTrue(rain.enabled);
@@ -1319,21 +1321,31 @@ namespace OutpostLoop.Tests
                 {
                     player.SetValue(run,targets[phase]);sync.Invoke(controller,new object[]{true});
                     Assert.That(rain.transform.position.y,Is.EqualTo(run.FullTown.Height(run.Player)).Within(.001f));
-                    var vertices=mesh.vertices;int hidden=0,visible=0,outside=0;
+                    var vertices=mesh.vertices;int hidden=0,visible=0,outside=0,raised=0;
                     for(int i=0;i<vertices.Length;i+=2)
                     {
                         var point=run.Player+new Vector2(vertices[i].x,vertices[i].z);
                         bool under=(bool)covered.Invoke(controller,new object[]{point});
                         bool shown=(vertices[i+1]-vertices[i]).sqrMagnitude>.001f;
+                        var sample = new object[] { point, 0f };
+                        if ((bool)roofRainHeight.Invoke(controller, sample))
+                        {
+                            Assert.IsTrue(shown);
+                            Assert.GreaterOrEqual(rain.transform.position.y + vertices[i].y,
+                                run.FullTown.Height(point) + (float)sample[1] - .001f);
+                            raised++;
+                            continue;
+                        }
                         if(area.Contains(point))Assert.IsFalse(shown,"实际房间矩形内不应出现雨线");
                         if(under){hidden++;Assert.IsFalse(shown,"雨线穿入房间 "+room+" / "+point);}
                         else{outside++;if(shown)visible++;}
                     }
-                    Assert.Greater(hidden,0,"测试必须实际覆盖屋顶投影");
+                    Assert.Greater(hidden+raised,0,"测试必须实际覆盖屋顶投影");
                     if(phase==0 || phase==3)Assert.Greater(outside,0,"门外取景必须覆盖露天雨线");
                     if(outside>0)Assert.AreEqual(outside,visible,"门外的雨不能一起关闭");
                     Assert.IsTrue((bool)covered.Invoke(controller,new object[]{new Vector2(area.xMin-.05f,area.center.y)}),"屋檐不能漏雨");
-                    if(room==0 && (phase==0 || phase==1))yield return CaptureSurvivalEvidence(phase==0?"rain-outside":"rain-inside",1920,1080,batch);
+                    if(room==0 && (phase==0 || phase==1))
+                        CaptureVisibilityCamera(camera, directory, phase==0?"rain-outside":"rain-inside",1920,1080);
                 }
             }
             // 原室内屋顶即使已被遮挡系统切掉，挡雨判定仍应保留。
@@ -2011,7 +2023,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootResidenceStairsConnectFloorsAndRestoreTheUpperRoom()
         {
-            const string batch = "RiverValleyResidence-20261120";
+            const string batch = "RiverValleyResidenceRoof-20261121";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -2029,6 +2041,7 @@ namespace OutpostLoop.Tests
             var runField = type.GetField("scavengeRun", flags);
             var sync = type.GetMethod("SyncScavenge", flags);
             var camera = GameObject.Find("PreviewCamera").GetComponent<Camera>();
+            type.GetMethod("BeginScavenge", flags).Invoke(controller, new object[] { 1 });
             var run = (ScavengeRun)runField.GetValue(controller);
             var residence = run.FullTown.Residence;
             Assert.NotNull(residence);
@@ -2115,10 +2128,106 @@ namespace OutpostLoop.Tests
             Assert.AreEqual(savedPosition, run.Player);
             Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
             Assert.AreEqual(SurvivalItem.Water, ((SurvivalContainer)nearbyDrop.Invoke(controller, null)).items[0].item);
+
+            Assert.IsTrue(residence.HasRoof);
+            var roofStair = residence.RoofStairwell;
+            var roofBottom = new Vector2(roofStair.xMin - .65f, roofStair.center.y);
+            var roofTop = new Vector2(roofStair.xMax + .65f, roofStair.center.y);
+            var roofCenter = residence.Footprint.center;
+            var roofPart = GameObject.Find("住宅屋顶平台").GetComponent<Renderer>();
+            var rain = type.GetMethod("TryResidenceRainHeight", flags);
+            var roofRain = new object[] { roofCenter, 0f };
+            sync.Invoke(controller, new object[] { true });
+            Assert.IsTrue(roofPart.forceRenderingOff);
+            Assert.IsFalse((bool)rain.Invoke(controller, roofRain));
+            Assert.IsTrue((bool)type.GetMethod("TownRainCovered", flags).Invoke(controller, new object[] { roofCenter }));
+
+            WalkTo(new Vector2(roofBottom.x, roofCenter.y));
+            WalkTo(roofBottom);
+            WalkTo(roofStair.center);
+            Assert.AreEqual(ResidenceSurface.RoofStairs, run.PlayerSurface);
+            Assert.That(run.PlayerHeightOffset, Is.EqualTo(4.5f).Within(.04f));
+            var midRoofStair = run.Player;
+            run.Tick(.1f, Vector2.zero);
+            Assert.AreEqual(midRoofStair, run.Player);
+            var roofStairSave = JsonUtility.FromJson<SurvivalSave>(JsonUtility.ToJson(run.CaptureSurvival()));
+            var roofStairResume = ScavengeRun.RestoreSurvival(roofStairSave, run.FullTown);
+            Assert.AreEqual(ResidenceSurface.RoofStairs, roofStairResume.PlayerSurface);
+            Assert.AreEqual(midRoofStair, roofStairResume.Player);
+            var stairRain = new object[] { roofStair.center, 0f };
+            Assert.IsTrue((bool)rain.Invoke(controller, stairRain));
+            Assert.That((float)stairRain[1], Is.EqualTo(4.5f).Within(.04f));
+            WalkTo(roofBottom);
+            Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
+            WalkTo(roofTop);
+            Assert.AreEqual(ResidenceSurface.Roof, run.PlayerSurface);
+            Assert.That(run.PlayerHeightOffset, Is.EqualTo(6f).Within(.001f));
+            for (int step = 0; step < 100; step++) run.Tick(.025f, Vector2.up);
+            Assert.That(run.Player.y, Is.InRange(residence.Footprint.yMax - .73f, residence.Footprint.yMax - .62f));
+            WalkTo(roofTop);
+            WalkTo(new Vector2(roofTop.x, roofCenter.y));
+            WalkTo(roofCenter);
+            Assert.IsTrue((bool)rain.Invoke(controller, roofRain));
+            Assert.That((float)roofRain[1], Is.EqualTo(6f).Within(.001f));
+            Assert.AreEqual(-1, run.NearbyCache);
+            Assert.IsNull(nearbyDrop.Invoke(controller, null));
+            var roofDrop = new SurvivalContainer { point = run.Player, surface = ResidenceSurface.Roof };
+            roofDrop.items.Add(new SurvivalStack(SurvivalItem.Food));
+            run.Survival.drops.Add(roofDrop);
+            Assert.AreSame(roofDrop, nearbyDrop.Invoke(controller, null));
+            sync.Invoke(controller, new object[] { true });
+            Assert.IsFalse(roofPart.forceRenderingOff);
+            var rainRenderer = (MeshRenderer)type.GetField("townRain", flags).GetValue(controller);
+            var rainVertices = ((Mesh)type.GetField("townRainMesh", flags).GetValue(controller)).vertices;
+            Assert.IsTrue(rainRenderer.enabled);
+            int roofRainLines = 0;
+            for (int i = 0; i < rainVertices.Length; i += 2)
+            {
+                var drop = rainVertices[i];
+                var point = run.Player + new Vector2(drop.x, drop.z);
+                if (!residence.Footprint.Contains(point) || residence.RoofStairwell.Contains(point)) continue;
+                Assert.That(drop.y, Is.GreaterThanOrEqualTo(5.999f));
+                Assert.That((rainVertices[i + 1] - drop).sqrMagnitude, Is.GreaterThan(.001f));
+                roofRainLines++;
+            }
+            Assert.Greater(roofRainLines, 0);
+            CaptureVisibilityCamera(camera, directory, "04-rooftop", 1280, 720);
+
+            var roofPosition = run.Player;
+            type.GetMethod("SaveAndLeaveSurvival", flags).Invoke(controller, null);
+            yield return null;
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run = (ScavengeRun)runField.GetValue(controller);
+            Assert.AreEqual(roofPosition, run.Player);
+            Assert.AreEqual(ResidenceSurface.Roof, run.PlayerSurface);
+            Assert.AreEqual(SurvivalItem.Food, ((SurvivalContainer)nearbyDrop.Invoke(controller, null)).items[0].item);
+            WalkTo(new Vector2(roofTop.x, roofCenter.y));
+            WalkTo(roofTop);
+            WalkTo(roofBottom);
+            Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
+            WalkTo(new Vector2(roofBottom.x, roofCenter.y));
             WalkTo(landing);
             WalkTo(top);
             WalkTo(bottom);
             Assert.AreEqual(ResidenceSurface.Ground, run.PlayerSurface);
+
+            var oldResidence = run.CaptureSurvival();
+            oldResidence.run.layoutVersion = RiverValleyResidence.UpperFloorVersion;
+            oldResidence.player = savedPosition;
+            oldResidence.playerSurface = ResidenceSurface.Upper;
+            oldResidence.run.drops.RemoveAll(drop => drop.surface == ResidenceSurface.Roof);
+            store.Save("town-survival-v1.json", oldResidence);
+            type.GetMethod("LeaveScavenge", flags).Invoke(controller, null);
+            yield return null;
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("ContinueSurvival");
+            yield return WaitForCrossing();
+            run = (ScavengeRun)runField.GetValue(controller);
+            Assert.IsFalse(run.FullTown.Residence.HasRoof);
+            Assert.AreEqual(savedPosition, run.Player);
+            Assert.AreEqual(ResidenceSurface.Upper, run.PlayerSurface);
             yield return new ExitPlayMode();
         }
 
