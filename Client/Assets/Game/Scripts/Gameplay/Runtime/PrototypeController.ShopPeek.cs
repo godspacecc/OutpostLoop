@@ -41,7 +41,18 @@ namespace OutpostLoop
             Segment(lower, upper, 1.96f, 2.04f, wood, "窗上框");
             Segment(lower, lower + .07f, 1.02f, 1.96f, wood, "窗侧框");
             Segment(upper - .07f, upper, 1.02f, 1.96f, wood, "窗侧框");
+            Segment(door.yMin, door.yMax, 2.04f, 2.84f, walls, "门洞过梁");
             return true;
+        }
+
+        /// <summary>店门外由视线裁切管理屋顶，避免镜头淡化整片屋顶。</summary>
+        private bool AtShopPeekFacade()
+        {
+            if (shopPeekRoof == null || scavengeRun == null || visibleSurvivalRoom == 0) return false;
+            var door = CurrentSurvivalRooms.Door(0);
+            var player = scavengeRun.Player;
+            return player.x < door.xMin + .28f && player.x > door.xMin - 9 &&
+                Mathf.Abs(player.y - door.center.y) < 11;
         }
 
         /// <summary>屋顶只在角色可见的地面投影上开口，其余部分仍遮住室内。</summary>
