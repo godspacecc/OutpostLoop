@@ -63,7 +63,12 @@ namespace OutpostLoop.RiverValley
             }
             /// <summary>在线段局部坐标中裁剪两轴，薄隔墙也不能从采样点之间漏过。</summary>
             internal bool Intersects(Vector2 from,Vector2 to,float padding)
+                => TryIntersect(from, to, padding, out _);
+
+            /// <summary>返回进入实体的线段比例，连续裁切可直接取得第一处遮挡。</summary>
+            internal bool TryIntersect(Vector2 from, Vector2 to, float padding, out float entry)
             {
+                entry = 0;
                 var center=Center;float c=cosine,s=sine;
                 Vector2 Local(Vector2 point)
                 {
@@ -84,6 +89,7 @@ namespace OutpostLoop.RiverValley
                     enter=Mathf.Max(enter,Mathf.Min(a,b));leave=Mathf.Min(leave,Mathf.Max(a,b));
                     if(enter>leave)return false;
                 }
+                entry = enter;
                 return true;
             }
         }

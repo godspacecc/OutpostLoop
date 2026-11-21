@@ -100,7 +100,22 @@ namespace OutpostLoop
         }
 
         /// <summary>视野样板复用场景实体遮挡。门和窗的开口由表现层校验。</summary>
-        internal bool ClearShopPeekLine(Vector2 from, Vector2 to) => ClearRunLine(from, to);
+        internal bool ClearShopPeekLine(Vector2 from, Vector2 to) => ShopPeekLineFraction(from, to) >= 1;
+
+        /// <summary>连续求交，避免门窗边缘因线段采样跳动。</summary>
+        internal float ShopPeekLineFraction(Vector2 from, Vector2 to)
+        {
+            float nearest = 1;
+            foreach (var wall in RunWalls)
+            {
+                var solid = new RiverValley.RiverValleyWorldGeometry.Solid(wall.center, wall.size, 0);
+                if (solid.TryIntersect(from, to, 0, out float entry)) nearest = Mathf.Min(nearest, entry);
+            }
+            if (FullTown != null)
+                foreach (var solid in FullTown.Solids)
+                    if (solid.TryIntersect(from, to, 0, out float entry)) nearest = Mathf.Min(nearest, entry);
+            return nearest;
+        }
 
         /// <summary>寻路同时检查河道和桥面；战斗视线仍只被实体阻挡。</summary>
         private bool ClearRunRoute(Vector2 from, Vector2 to, float clearance = .34f)

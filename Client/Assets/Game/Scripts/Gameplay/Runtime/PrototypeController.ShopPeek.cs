@@ -5,10 +5,12 @@ namespace OutpostLoop
     public sealed partial class PrototypeController
     {
         // 首轮只在整图主街杂货店验证门窗观察。窗洞不写入通行和攻击规则。
-        private const int PeekWidth = 80, PeekHeight = 64;
+        private const int PeekRayCount = 512;
+        private const float PeekRange = 13f;
         private const float PeekWindowHalf = .72f, PeekWindowOffset = 3.4f;
         private Texture2D shopPeekMask;
-        private Color32[] shopPeekPixels;
+        private float[] shopPeekDistances;
+        private Vector2[] shopPeekDirections;
         private (Renderer Renderer, Material[] Original, Material[] Peek)[] shopPeekRoof;
         private Transform shopPeekFloor;
         private Renderer[] shopPeekProps;
@@ -60,9 +62,15 @@ namespace OutpostLoop
         {
             var shader = UnityEngine.Resources.Load<Shader>("RiverValleyPeekRoof");
             if (!shader) return;
-            shopPeekMask = new Texture2D(PeekWidth, PeekHeight, TextureFormat.RGBA32, false, true)
+            shopPeekMask = new Texture2D(PeekRayCount, 1, TextureFormat.RFloat, false, true)
                 { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            shopPeekPixels = new Color32[PeekWidth * PeekHeight];
+            shopPeekDistances = new float[PeekRayCount];
+            shopPeekDirections = new Vector2[PeekRayCount];
+            for (int i = 0; i < PeekRayCount; i++)
+            {
+                float angle = ((i + .5f) / PeekRayCount - .5f) * Mathf.PI;
+                shopPeekDirections[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            }
             var parts = new System.Collections.Generic.List<(Renderer, Material[], Material[])>();
             foreach (var roof in cover.GetComponentsInChildren<Renderer>())
             {
@@ -90,23 +98,42 @@ namespace OutpostLoop
         {
             var ray = point - shopPeekPlayer;
             float distance = ray.magnitude;
-            if (ray.x <= 0 || distance > 13 || Vector2.Dot(ray, shopPeekFacing) < distance * .5f) return false;
-            var door = CurrentSurvivalRooms.Door(0);
-            float z = shopPeekPlayer.y + ray.y * ((door.xMin - shopPeekPlayer.x) / ray.x);
+            if (distance <= 0 || distance > PeekRange ||
+                !TryShopPeekEntrance(ray / distance, CurrentSurvivalRooms.Door(0), out var inside))
+                return false;
+            return point.x <= inside.x || scavengeRun.ClearShopPeekLine(inside, point);
+        }
+
+        /// <summary>判断朝向和门窗几何，再找出射线进入西墙内侧的位置。</summary>
+        private bool TryShopPeekEntrance(Vector2 direction, Rect door, out Vector2 inside)
+        {
+            inside = default;
+            if (direction.x <= 0 || Vector2.Dot(direction, shopPeekFacing) < .5f) return false;
+            float entryDistance = (door.xMin - shopPeekPlayer.x) / direction.x;
+            if (entryDistance > PeekRange) return false;
+            float z = shopPeekPlayer.y + direction.y * entryDistance;
             bool throughDoor = shopPeekDoorOpen && z > door.yMin && z < door.yMax;
             float windowCenter = door.center.y - PeekWindowOffset;
             if (!throughDoor && Mathf.Abs(z - windowCenter) >= PeekWindowHalf - .07f) return false;
-            var outside = shopPeekPlayer + ray * ((door.xMin - .04f - shopPeekPlayer.x) / ray.x);
-            var inside = shopPeekPlayer + ray * ((door.xMax + .04f - shopPeekPlayer.x) / ray.x);
-            return scavengeRun.ClearShopPeekLine(shopPeekPlayer, outside) &&
-                (point.x <= inside.x || scavengeRun.ClearShopPeekLine(inside, point));
+            var outside = shopPeekPlayer + direction * (entryDistance - .04f / direction.x);
+            inside = shopPeekPlayer + direction * ((door.xMax + .04f - shopPeekPlayer.x) / direction.x);
+            return scavengeRun.ClearShopPeekLine(shopPeekPlayer, outside);
+        }
+
+        /// <summary>沿同一射线找到最远可见位置，屋顶使用角度插值而非地面格子。</summary>
+        private float TraceShopPeek(Vector2 direction, Rect door)
+        {
+            if (!TryShopPeekEntrance(direction, door, out var inside)) return 0;
+            var end = shopPeekPlayer + direction * PeekRange;
+            if (end.x <= inside.x) return PeekRange;
+            float entry = Vector2.Dot(inside - shopPeekPlayer, direction);
+            return Mathf.Lerp(entry, PeekRange, scavengeRun.ShopPeekLineFraction(inside, end));
         }
 
         /// <summary>室外观察时只渲染露出的室内地面及物件，跨进房间后恢复原表现。</summary>
         private void UpdateShopPeek()
         {
             if (shopPeekRoof == null || scavengeRun?.Survival == null) return;
-            var room = survivalInteriors[0];
             var player = scavengeRun.Player;
             var facing = scavengeRun.Survival.facing.normalized;
             var door = CurrentSurvivalRooms.Door(0);
@@ -119,29 +146,26 @@ namespace OutpostLoop
                 shopPeekSampled = false;
                 return;
             }
-            if (shopPeekSampled && shopPeekDoorOpen == open && (shopPeekPlayer - player).sqrMagnitude < .012f &&
-                Vector2.Dot(shopPeekFacing, facing) > .999f) return;
+            if (shopPeekSampled && shopPeekDoorOpen == open && (shopPeekPlayer - player).sqrMagnitude < .0016f &&
+                Vector2.Dot(shopPeekFacing, facing) > .9998f) return;
             shopPeekSampled = true;
             shopPeekPlayer = player;
             shopPeekFacing = facing;
             shopPeekDoorOpen = open;
             bool visible = false;
-            float end = Mathf.Min(room.Area.xMax, player.x + 13);
-            int columns = Mathf.Clamp(Mathf.CeilToInt((end - room.Area.xMin) / room.Area.width * PeekWidth), 0, PeekWidth);
-            System.Array.Clear(shopPeekPixels, 0, shopPeekPixels.Length);
-            for (int y = 0; y < PeekHeight; y++)
-            for (int x = 0; x < columns; x++)
+            for (int i = 0; i < PeekRayCount; i++)
             {
-                var point = new Vector2(room.Area.xMin + (x + .5f) / PeekWidth * room.Area.width,
-                    room.Area.yMin + (y + .5f) / PeekHeight * room.Area.height);
-                if (!HasShopPeek(point)) continue;
-                shopPeekPixels[y * PeekWidth + x] = Color.white;
-                visible = true;
+                float distance = TraceShopPeek(shopPeekDirections[i], door);
+                shopPeekDistances[i] = distance;
+                visible |= distance > 0;
             }
             if (visible)
             {
-                shopPeekMask.SetPixels32(shopPeekPixels);
+                shopPeekMask.SetPixelData(shopPeekDistances, 0);
                 shopPeekMask.Apply(false);
+                foreach (var part in shopPeekRoof)
+                    foreach (var material in part.Peek)
+                        material.SetVector("_PeekPlayer", new Vector4(player.x, player.y, 0, 0));
             }
             SetShopPeek(visible);
         }
@@ -180,7 +204,8 @@ namespace OutpostLoop
             if (shopPeekMask) Destroy(shopPeekMask);
             shopPeekMask = null;
             shopPeekRoof = null;
-            shopPeekPixels = null;
+            shopPeekDistances = null;
+            shopPeekDirections = null;
             shopPeekProps = null;
             isShopPeeking = shopPeekSampled = false;
         }
