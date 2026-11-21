@@ -16,7 +16,9 @@ namespace OutpostLoop
                 scavengeMaterials.Add(palette[i]);
             }
             RiverValleyShopVisuals.Create(survivalInteriors[0].Root,survivalWorldGeometry.Shop,survivalCityArt,
-                point=>survivalWorldGeometry.Height(point),RegisterScavengeOccluder,palette);
+                point=>survivalWorldGeometry.Height(point),RegisterScavengeOccluder,palette,
+                (fixture, owner) => survivalSight.AddBox(SurvivalPosition(fixture.Area.center, fixture.Height * .5f),
+                    Quaternion.identity, new Vector3(fixture.Area.width, fixture.Height, fixture.Area.height), owner));
         }
     }
 }

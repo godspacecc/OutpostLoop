@@ -7,9 +7,10 @@ namespace OutpostLoop
 {
     public sealed partial class PrototypeController
     {
-        // 室内物件按实际房间归组。门槛状态只用于表现，不写入存档。
+        // 室内物件按场景归组；角色所在房间只负责镜头切顶。
         private readonly List<(Rect Area, Transform Root)> survivalInteriors = new List<(Rect, Transform)>();
         private int visibleSurvivalRoom = -1;
+        private RiverValleySight survivalSight;
         // 墙、屋顶与门留在室内组外，供镜头遮挡独立控制。
         private readonly List<SurvivalShell> survivalShells = new List<SurvivalShell>();
         private readonly Dictionary<Material, Material> fadedSurvivalMaterials = new Dictionary<Material, Material>();
@@ -24,19 +25,26 @@ namespace OutpostLoop
             return root;
         }
 
-        /// <summary>脚下跨过西侧门槛内边后，显示当前所在房间。</summary>
+        /// <summary>更新角色视野，并把屋顶、室内物件和地面明暗绑定到同一帧结果。</summary>
         private void SyncSurvivalRoomsVisibility()
         {
+            if (survivalSight == null) return;
             int room = SurvivalRoomAt(scavengeRun.Player);
             if (room >= 0 && scavengeRun.Player.x < survivalInteriors[room].Area.xMin + .28f)
                 room = -1;
-            if (room != visibleSurvivalRoom)
-            {
-                if (visibleSurvivalRoom >= 0) survivalInteriors[visibleSurvivalRoom].Root.gameObject.SetActive(false);
-                visibleSurvivalRoom = room;
-                if (room >= 0) survivalInteriors[room].Root.gameObject.SetActive(true);
-            }
-            UpdateShopPeek();
+            visibleSurvivalRoom = room;
+            float daylight = SetSurvivalSightView();
+            survivalSight.TraceContour();
+            SyncSurvivalSightPresentation(daylight);
+        }
+
+        /// <summary>瞄准和场景表现都从角色当前的位置和朝向取视线。</summary>
+        private float SetSurvivalSightView()
+        {
+            var state = scavengeRun.Survival;
+            float daylight = Mathf.Clamp01(Mathf.Min(state.Hour - 5.5f, 19.5f - state.Hour) / 1.5f);
+            survivalSight.SetView(ScavengePlayerPosition(0), state.facing, daylight, state.Light);
+            return daylight;
         }
 
         /// <summary>用同一占地查找会移动或随存档恢复的室内对象。</summary>
@@ -47,22 +55,34 @@ namespace OutpostLoop
             return -1;
         }
 
-        private bool CanSeeSurvivalInteriorAt(Vector2 point) =>
-            CanSeeSurvivalContainerAt(point, ResidenceSurface.Ground);
-
-        private bool CanSeeSurvivalContainerAt(Vector2 point, ResidenceSurface surface)
+        // 检查感染者头和胸口；低家具可以盖住身体下半部分。
+        private bool CanSeeSurvivalInteriorAt(Vector2 point)
         {
-            int room = SurvivalRoomAt(point);
-            if (room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null)
-                return room == visibleSurvivalRoom && surface == scavengeRun.PlayerSurface;
-            return room < 0 || room == visibleSurvivalRoom || (room == 0 && isShopPeeking && HasShopPeek(point));
+            if (survivalSight == null) return true;
+            if (!survivalSight.Reaches(point)) return false;
+            var head = SurvivalPosition(point, 1.34f);
+            return survivalSight.Sees(head) || survivalSight.Sees(head - Vector3.up * .29f);
+        }
+
+        private bool CanSeeSurvivalCache(int index)
+        {
+            if (survivalSight == null) return true;
+            var point = scavengeRun.CachePoints[index];
+            var surface = scavengeRun.Survival.caches[index].surface;
+            var shop = survivalWorldGeometry?.Shop;
+            if (index == 1 && shop != null)
+                return survivalSight.Sees(SurvivalPosition(shop.CounterCrate, 1.34f));
+            float offset = survivalWorldGeometry?.Residence?.HeightOffset(point, surface) ?? 0;
+            return survivalSight.Sees(SurvivalPosition(point, offset + .66f));
         }
 
         /// <summary>登记独立墙段、屋顶、房门或一栋封闭建筑的外壳。</summary>
         private void RegisterSurvivalShell(int room, Renderer[] parts, bool roof = false, bool upperResidence = false,
-            bool walkableRoof = false)
+            bool walkableRoof = false, bool sightCover = false)
         {
-            if (parts.Length > 0) survivalShells.Add(new SurvivalShell(room, parts, roof, upperResidence, walkableRoof));
+            if (parts.Length == 0) return;
+            survivalShells.Add(new SurvivalShell(room, parts, roof, upperResidence, walkableRoof));
+            if (roof || sightCover) RegisterSurvivalSightCover(room, parts);
         }
 
         /// <summary>室内沿用切除。室外只在实际挡住角色时半透明，搜点射线不能打开别的房间。</summary>
@@ -72,12 +92,7 @@ namespace OutpostLoop
             foreach (var shell in survivalShells)
             {
                 bool inside = shell.Room >= 0 && shell.Room == visibleSurvivalRoom;
-                if (shell.Room == 0 && shell.Roof && AtShopPeekFacade())
-                {
-                    shell.Present(false, false, this);
-                    if (isShopPeeking) PresentShopPeekRoof();
-                    continue;
-                }
+                if (PresentSurvivalSightCover(shell, torso, feet)) continue;
                 if (inside && (shell.Roof || (shell.UpperResidence && playerHeight < 1.8f) ||
                     (shell.WalkableRoof && playerHeight < RiverValleyResidence.RoofHeight - 1.2f)))
                 {
@@ -137,7 +152,8 @@ namespace OutpostLoop
         /// <summary>离开行动时清除房间与材质索引，新局重新绑定。</summary>
         private void ClearSurvivalVisibility()
         {
-            ClearShopPeek();
+            ClearSurvivalSightPresentation();
+            survivalSight = null;
             survivalInteriors.Clear();
             survivalShells.Clear();
             fadedSurvivalMaterials.Clear();

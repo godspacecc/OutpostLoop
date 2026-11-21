@@ -7,7 +7,8 @@ namespace OutpostLoop.RiverValley
     internal static class RiverValleyShopVisuals
     {
         internal static GameObject Create(Transform parent,RiverValleyShopInterior plan,RiverValleyCityArtCatalog catalog,
-            Func<Vector2,float> ground,Action<Renderer[]> occluder,Material[] zones)
+            Func<Vector2,float> ground,Action<Renderer[]> occluder,Material[] zones,
+            Action<RiverValleyShopInterior.Fixture, Transform> registerSight = null)
         {
             var root=new GameObject("主街杂货店完整室内");root.transform.SetParent(parent,false);
             // 未安装自有资源的检出仍显示同占地占位物，避免不可见实体或开局空引用。
@@ -23,6 +24,7 @@ namespace OutpostLoop.RiverValley
                     var collider=box.GetComponent<Collider>();
                     if(Application.isPlaying)UnityEngine.Object.Destroy(collider);else UnityEngine.Object.DestroyImmediate(collider);
                     var renderer=box.GetComponent<Renderer>();renderer.sharedMaterial=zones[1];occluder?.Invoke(new Renderer[]{renderer});
+                    registerSight?.Invoke(fixture, box.transform);
                 }
                 return root;
             }
@@ -55,6 +57,7 @@ namespace OutpostLoop.RiverValley
                         batch.Add("shelf",new Vector3(r.center.x+side*r.width/4,floor+fixture.Height/2,r.yMin+r.height*(tile+.5f)/count),new Vector3(r.height/count,fixture.Height,r.width/2),Quaternion.Euler(0,side*90,0));
                 }
                 batch.Finish();occluder?.Invoke(part.GetComponentsInChildren<Renderer>());
+                registerSight?.Invoke(fixture, part.transform);
             }
             return root;
         }

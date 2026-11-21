@@ -205,24 +205,24 @@ namespace OutpostLoop
         {
             var rect = CurrentSurvivalRooms.Footprint(room);
             var interior = RegisterSurvivalInterior(room, rect);
-            var floorMesh = ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor, interior);
+            ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor, interior);
             var door = CurrentSurvivalRooms.Door(room);
             foreach (var wall in CurrentSurvivalRooms.Walls(room))
             {
                 if (TryCreateShopWindow(room, wall, door, walls, wood)) continue;
-                var section = ScavengeBox("现有外墙", SurvivalPosition(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls);
+                var section = ScavengeBox("现有外墙", SurvivalPosition(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls, sightBox: true);
                 RegisterSurvivalShell(room, section.GetComponentsInChildren<Renderer>());
             }
             bool twoLevels = room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null;
             float roofHeight = twoLevels ? 2.92f + RiverValleyResidence.StoreyHeight : 2.92f;
             if (!twoLevels || !survivalWorldGeometry.Residence.HasRoof)
             {
-                var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, roofHeight), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
-                if (room == 0 && survivalWorldGeometry != null) CreateShopPeekMask(cover, floorMesh, rect);
+                var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, roofHeight), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof, sightBox: true);
                 RegisterSurvivalShell(room, cover.GetComponentsInChildren<Renderer>(), roof: true);
             }
             if (twoLevels) CreateResidenceUpperFloor(interior, walls, floor, wood, roof);
             survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
+            survivalSight.AddDoor(survivalDoors[room]);
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
                 new Vector3(.5f, .13f, 0), new Vector3(.35f, .13f, 1.08f), floor);
             RegisterSurvivalShell(room, survivalDoors[room].GetComponentsInChildren<Renderer>());
@@ -286,7 +286,7 @@ namespace OutpostLoop
             return clip;
         }
 
-        private void SyncSurvivalPresentation()
+        private void SyncSurvivalPresentation(bool snapDoor = false)
         {
             var state = scavengeRun.Survival;
             float hour = state.Hour;
@@ -306,6 +306,7 @@ namespace OutpostLoop
                 var render = door.GetComponent<Renderer>();
                 render.enabled = room.durability > 0;
                 survivalDoorBraces[i].gameObject.SetActive(room.fortified && room.durability > 0);
+                if (snapDoor) survivalDoorAngles[i] = SurvivalDoorTargetAngle(room);
                 SyncSurvivalDoorPose(i, hinge, room, scavengePaused ? 0 : Time.unscaledDeltaTime);
                 var audio = survivalAlarms[i];
                 if (room.durability < survivalDoorDurability[i] && !scavengePaused &&
@@ -317,6 +318,11 @@ namespace OutpostLoop
                 if (playing && !audio.isPlaying) audio.Play();
                 else if (!playing && audio.isPlaying) audio.Stop();
             }
+        }
+
+        private void SyncSurvivalDrops()
+        {
+            var state = scavengeRun.Survival;
             for (int i = 0; i < state.drops.Count; i++)
             {
                 var drop = state.drops[i];
@@ -326,7 +332,7 @@ namespace OutpostLoop
                     survivalDropMarkers.Add(ScavengeBox("地面物品", position,
                         new Vector3(.43f, .26f, .37f), survivalDropMaterial));
                 survivalDropMarkers[i].position = position;
-                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0 && CanSeeSurvivalContainerAt(drop.point, drop.surface));
+                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0 && survivalSight.Sees(position + Vector3.up * .13f));
             }
             for (int i = state.drops.Count; i < survivalDropMarkers.Count; i++)
                 survivalDropMarkers[i].gameObject.SetActive(false);
@@ -453,13 +459,16 @@ namespace OutpostLoop
 
         private int AimSurvivalHead(Vector2 cursor)
         {
+            SetSurvivalSightView();
             int target = -1;
             float best = float.MaxValue;
             for (int i = 0; i < scavengeRun.Patrols.Count; i++)
             {
                 var patrol = scavengeRun.Patrols[i];
                 if (!patrol.Alive) continue;
-                var head = gameCamera.WorldToScreenPoint(SurvivalPosition(patrol.Position, 1.34f));
+                var headPosition = SurvivalPosition(patrol.Position, 1.34f);
+                if (!survivalSight.Sees(headPosition)) continue;
+                var head = gameCamera.WorldToScreenPoint(headPosition);
                 if (head.z <= 0 || Vector2.Distance(cursor, head) > 12 * HudScale || head.z >= best) continue;
                 target = i;
                 best = head.z;
@@ -517,10 +526,10 @@ namespace OutpostLoop
             int bed = run.NearbySurvivalBed;
             if (bed >= 0)
                 return run.SurvivalSleepBlocked(bed) == null
-                    ? (Loc.T("FocusBed"), SurvivalPosition(CurrentSurvivalRooms.Bed(bed), .45f)) : default;
+                    ? (Loc.T("FocusBed"), SurvivalPosition(CurrentSurvivalRooms.Bed(bed), .61f)) : default;
             int cabinet = run.NearbySurvivalCabinet;
             if (cabinet >= 0)
-                return (Loc.T("InventoryStorage"), SurvivalPosition(CurrentSurvivalRooms.Cabinet(cabinet), .7f));
+                return (Loc.T("InventoryStorage"), SurvivalPosition(CurrentSurvivalRooms.Cabinet(cabinet), 1.06f));
             var drop = NearbySurvivalDrop();
             if (drop != null)
                 return (Loc.T("InventoryGround"), SurvivalPosition(drop.point, .25f) + Vector3.up *
@@ -539,7 +548,9 @@ namespace OutpostLoop
             pin = default;
             if (!CanShowSurvivalHud() || SurvivalContextHasProgress || SurvivalHudContains(cursor)) return false;
             var target = SurvivalFocusTarget();
-            if (target.Label == null) return false;
+            int door = scavengeRun.NearbySurvivalDoor;
+            var doorSurface = door >= 0 && scavengeRun.Survival.rooms[door].durability > 0 ? survivalDoors[door] : null;
+            if (target.Label == null || !survivalSight.Sees(target.Position, doorSurface)) return false;
             var screen = gameCamera.WorldToScreenPoint(target.Position);
             if (!IsCameraPoint(screen) || screen.z <= gameCamera.nearClipPlane ||
                 (cursor - (Vector2)screen).sqrMagnitude > Mathf.Pow(52 * HudScale, 2)) return false;

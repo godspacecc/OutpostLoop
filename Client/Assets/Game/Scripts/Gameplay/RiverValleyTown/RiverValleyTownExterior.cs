@@ -491,6 +491,7 @@ namespace OutpostLoop.RiverValley
         {
             if (fullSurvivalWorld)
             {
+                registerSightBox?.Invoke(transform.TransformPoint(position), transform.rotation * rotation, size);
                 WorldGeometry.Solids.Add(new RiverValleyWorldGeometry.Solid(new Vector2(position.x,position.z) - RiverValleyWorldGeometry.Anchor,
                     new Vector2(size.x,size.z), rotation.eulerAngles.y * Mathf.Deg2Rad));
                 return;

@@ -556,7 +556,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyShowsExitAndInteriorsOnlyInContext()
         {
-            const string batch = "RiverValleyVisibility-20261120";
+            const string batch = "RiverValleyUnifiedSight-20261121";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -613,8 +613,9 @@ namespace OutpostLoop.Tests
             var shopDoor = rooms.Door(0).center;
             var shopWindow = shopDoor - Vector2.up * 3.4f;
             var shopRoot = root.Find("房间内部 0").gameObject;
-            string peekEvidence = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
-                "../../Backup/Artifacts/RiverValleyDoorWindow-20261121"));
+            string peekEvidence = evidence;
+            var seeRoom = type.GetMethod("CanSeeSurvivalInteriorAt", flags);
+            bool See(Vector2 point) => (bool)seeRoom.Invoke(controller, new object[] { point });
             run.Survival.facing = Vector2.right;
             Place(shopDoor - Vector2.right * 1.1f);
             Assert.IsFalse(shopRoot.activeSelf, "关闭的门应遮住店内");
@@ -622,52 +623,76 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(run.ToggleSurvivalDoor());
             Place(shopDoor - Vector2.right * 1.1f);
             Assert.IsTrue(shopRoot.activeSelf, "开门后无需跨过门槛");
-            var seeRoom = type.GetMethod("CanSeeSurvivalInteriorAt", flags);
-            bool See(Vector2 point) => (bool)seeRoom.Invoke(controller, new object[] { point });
             Assert.IsTrue(See(shopDoor + Vector2.right * 1.25f));
             Assert.IsFalse(See(shopDoor + new Vector2(1.25f, 3f)), "门框外侧应保持遮蔽");
             CaptureVisibilityCamera(camera, peekEvidence, "open-door", 1280, 720);
             Assert.IsTrue(run.ToggleSurvivalDoor());
             Place(shopWindow - Vector2.right * 1.1f);
             Assert.IsTrue(See(shopWindow + Vector2.right * 1.25f), "关门后仍可独立透过窗户看见店内");
-            Assert.IsFalse(run.ClearShopPeekLine(run.Player, shopWindow + Vector2.right * 1.25f), "窗口仍应阻挡穿墙");
+            Assert.IsFalse(run.ClearRunLine(run.Player, shopWindow + Vector2.right * 1.25f), "窗口仍应阻挡穿墙");
             CaptureVisibilityCamera(camera, peekEvidence, "window", 1280, 720);
             run.Survival.facing = Vector2.left;
             Place(shopWindow - Vector2.right * 1.1f);
             Assert.IsFalse(shopRoot.activeSelf, "转开后室内应恢复遮蔽");
             for (int i = 0; i < run.FullTown.Interiors.Length; i++)
             {
-                // 普通房间及没有朝向开口时仍沿用门槛显隐。
+                // 所有房间都从门外测试正前方与身后，再越过门槛。
                 run.Survival.facing = Vector2.left;
                 var roomRoot = root.Find("房间内部 " + i);
                 var door = rooms.Door(i).center;
                 Place(door - Vector2.right);
-                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"门外看见室内 {i}");
+                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"背向门时看见室内 {i}");
                 if (i == 2) Assert.IsFalse(clinic.activeInHierarchy);
+                run.Survival.facing = Vector2.right;
+                Place(door - Vector2.right);
+                if (i < 2) Assert.IsFalse(See(door + Vector2.right * 1.3f), $"看到关闭门后的室内 {i}");
                 if (i < 2 && !run.Survival.rooms[i].open) Assert.IsTrue(run.ToggleSurvivalDoor());
-                Place(door + Vector2.right * .1f);
-                Assert.IsFalse(roomRoot.gameObject.activeSelf, $"门槛上提前显示 {i}");
-                for (int step = 0; step < 8; step++) run.Tick(.05f, Vector2.right);
-                sync.Invoke(controller, new object[] { true });
+                Place(door - Vector2.right);
+                Assert.IsTrue(See(door + Vector2.right * 1.3f), $"开口后的空间仍隐藏 {i}");
+                Assert.IsTrue(roomRoot.gameObject.activeSelf, $"开口后屋顶未揭开 {i}");
+                if (i == 1) CaptureVisibilityCamera(camera, evidence, "second-building-open", 1280, 720);
+                Place(door + Vector2.right * 1.1f);
                 Assert.IsTrue(roomRoot.gameObject.activeSelf, $"进门后室内仍隐藏 {i}");
                 if (i == 2)
                 {
                     Assert.IsTrue(clinic.activeInHierarchy);
                     CaptureVisibilityCamera(camera, evidence, "clinic-inside", 1280, 720);
                 }
-                for (int k = 0; k < crates.Length; k++)
-                    if (run.Survival.caches[k].active && rooms.Footprint(i).Contains(run.CachePoints[k]))
-                        Assert.IsTrue(crates[k].gameObject.activeSelf, $"入内未显示搜点 {i}/{k}");
-                for (int step = 0; step < 14; step++) run.Tick(.05f, Vector2.left);
-                sync.Invoke(controller, new object[] { true });
+                run.Survival.facing = Vector2.left;
+                Place(door - Vector2.right);
                 Assert.IsFalse(roomRoot.gameObject.activeSelf, $"出门后室内仍可见 {i}");
                 for (int k = 0; k < crates.Length; k++)
                     if (rooms.Footprint(i).Contains(run.CachePoints[k]))
                         Assert.IsFalse(crates[k].gameObject.activeSelf, $"室外看到室内搜点 {i}/{k}");
             }
 
+            // 直接用杂货店布局的占地与高度取观察位置，验证室内高低家具差异。
+            var sight = (RiverValleySight)type.GetField("survivalSight", flags).GetValue(controller);
+            var shopLayout = run.FullTown.Shop;
+            var partition = System.Array.Find(shopLayout.Fixtures, item => item.Type == RiverValleyShopInterior.Kind.Partition);
+            var counter = System.Array.Find(shopLayout.Fixtures, item => item.Type == RiverValleyShopInterior.Kind.Counter);
+            run.Survival.facing = Vector2.right;
+            Place(new Vector2(partition.Area.xMin - .45f, partition.Area.center.y));
+            Assert.IsFalse(See(new Vector2(partition.Area.xMax + .35f, partition.Area.center.y)), "室内隔断挡住头胸射线");
+            CaptureVisibilityCamera(camera, evidence, "inside-partition", 1280, 720);
+            Place(new Vector2(counter.Area.center.x, counter.Area.yMin - .4f));
+            run.Survival.facing = Vector2.up;
+            Place(run.Player);
+            var beyond = new Vector2(counter.Area.center.x, counter.Area.yMax + .25f);
+            Assert.IsTrue(sight.Sees(new Vector3(beyond.x, run.FullTown.Height(beyond) + 1.55f, beyond.y)), "低柜允许看见后方眼高空间");
+
             Rect shop = rooms.Footprint(0);
+            var aroundCorner = new Vector2(shop.xMax - 1.8f, shop.yMin - .8f);
+            var beforeCorner = new Vector2(shop.xMax + .8f, shop.yMin + 1f);
+            run.Survival.facing = (aroundCorner - beforeCorner).normalized;
+            Place(beforeCorner);
+            Assert.IsFalse(See(aroundCorner), "未走过外墙拐角时不应看到另一侧");
+            Place(new Vector2(beforeCorner.x, shop.yMin - .85f));
+            Assert.IsTrue(See(aroundCorner), "走过同一拐角后应能看到另一侧");
+            CaptureVisibilityCamera(camera, evidence, "street-corner", 1280, 720);
+            run.Survival.facing = Vector2.left;
             Place(new Vector2(shop.xMax + .8f, shop.center.y));
+            Assert.IsFalse(See(new Vector2(shop.xMax - 1.3f, shop.center.y)), "室外实墙挡住视野");
             Renderer shopWall = null;
             foreach (Transform part in root)
                 if (part.name == "现有外墙" && Mathf.Abs(part.position.x - (shop.xMax - .14f)) < .05f)
@@ -1484,6 +1509,7 @@ namespace OutpostLoop.Tests
             try
             {
                 language.SetLanguageCode("zh-CN");
+                run.Survival.facing = Vector2.right;
                 player.SetValue(run, run.CachePoints[12] + Vector2.left);
                 sync.Invoke(controller, new object[] { true });
                 late.Invoke(controller, null);

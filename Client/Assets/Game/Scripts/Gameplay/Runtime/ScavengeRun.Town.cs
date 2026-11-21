@@ -89,7 +89,7 @@ namespace OutpostLoop
         }
 
         /// <summary>房门、墙体和可见实体遮挡视线，水面本身不遮挡。</summary>
-        private bool ClearRunLine(Vector2 from, Vector2 to, float clearance = 0)
+        internal bool ClearRunLine(Vector2 from, Vector2 to, float clearance = 0)
         {
             if (!ScavengeLayout.ClearLine(from, to, clearance, RunWalls)) return false;
             if (FullTown == null) return true;
@@ -97,24 +97,6 @@ namespace OutpostLoop
             int steps = Mathf.CeilToInt(Vector2.Distance(from, to) * 2);
             for (int i = 1; i <= steps; i++) if (!FullTown.ClearBody(Vector2.Lerp(from, to, (float)i / steps), clearance)) return false;
             return true;
-        }
-
-        /// <summary>视野样板复用场景实体遮挡。门和窗的开口由表现层校验。</summary>
-        internal bool ClearShopPeekLine(Vector2 from, Vector2 to) => ShopPeekLineFraction(from, to) >= 1;
-
-        /// <summary>连续求交，避免门窗边缘因线段采样跳动。</summary>
-        internal float ShopPeekLineFraction(Vector2 from, Vector2 to)
-        {
-            float nearest = 1;
-            foreach (var wall in RunWalls)
-            {
-                var solid = new RiverValley.RiverValleyWorldGeometry.Solid(wall.center, wall.size, 0);
-                if (solid.TryIntersect(from, to, 0, out float entry)) nearest = Mathf.Min(nearest, entry);
-            }
-            if (FullTown != null)
-                foreach (var solid in FullTown.Solids)
-                    if (solid.TryIntersect(from, to, 0, out float entry)) nearest = Mathf.Min(nearest, entry);
-            return nearest;
         }
 
         /// <summary>寻路同时检查河道和桥面；战斗视线仍只被实体阻挡。</summary>

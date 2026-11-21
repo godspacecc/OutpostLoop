@@ -15,9 +15,9 @@ namespace OutpostLoop
             void AddPart(string name, Rect area, float y, float thickness, Material material, bool rooftop = false)
             {
                 var part = ScavengeBox(name, SurvivalPosition(area.center, y),
-                    new Vector3(area.width, thickness, area.height), material);
+                    new Vector3(area.width, thickness, area.height), material, sightBox: true);
                 RegisterSurvivalShell(RiverValleyResidence.RoomIndex, part.GetComponentsInChildren<Renderer>(),
-                    upperResidence: !rooftop, walkableRoof: rooftop);
+                    upperResidence: !rooftop, walkableRoof: rooftop, sightCover: thickness <= .2f && area.width > .3f && area.height > .3f);
             }
 
             // 四块楼板围住楼梯洞口，楼板顶面与通行高度一致。

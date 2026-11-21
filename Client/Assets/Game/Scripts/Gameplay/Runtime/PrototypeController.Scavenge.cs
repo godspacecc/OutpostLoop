@@ -209,6 +209,7 @@ namespace OutpostLoop
         /// <summary>画面只读取角色、敌情、探索物和撤离状态。</summary>
         private void SyncScavenge(bool snapCamera = false)
         {
+            if (survivalMode) SyncSurvivalPresentation(snapCamera);
             SyncSurvivalRoomsVisibility();
             scavengePlayer.position = ScavengePlayerPosition(0);
             scavengePlayer.gameObject.SetActive(!scavengeRun.Driving);
@@ -235,10 +236,12 @@ namespace OutpostLoop
                 if (survivalMode)
                 {
                     var cache = scavengeRun.Survival.caches[i];
-                    scavengeCrates[i].position = SurvivalPosition(scavengeRun.CachePoints[i], .33f);
+                    var point = scavengeRun.CachePoints[i];
+                    float height = survivalWorldGeometry?.Residence?.HeightOffset(point, cache.surface) ?? 0;
+                    scavengeCrates[i].position = SurvivalPosition(point, .33f + height);
                     if(i==1 && survivalWorldGeometry?.Shop!=null)
                         scavengeCrates[i].position=SurvivalPosition(survivalWorldGeometry.Shop.CounterCrate,1.03f);
-                    scavengeCrates[i].gameObject.SetActive(cache.active && CanSeeSurvivalContainerAt(scavengeRun.CachePoints[i], cache.surface));
+                    scavengeCrates[i].gameObject.SetActive(cache.active && CanSeeSurvivalCache(i));
                     scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
                     continue;
                 }
@@ -256,8 +259,9 @@ namespace OutpostLoop
             }
             SyncDefenseModels();
             if (survivalWorldGeometry != null) scavengeExit.position = SurvivalPosition(scavengeRun.ExitPoint, .05f);
-            if (survivalMode) SyncSurvivalPresentation();
+            if (survivalMode) SyncSurvivalDrops();
             UpdateScavengeCamera(snapCamera);
+            PresentSurvivalSightOverlay();
             UpdateTownWeather();
         }
 
@@ -266,6 +270,7 @@ namespace OutpostLoop
         {
             scavengeRoot = new GameObject("ScavengeTrial").transform;
             scavengeRoot.SetParent(transform, false);
+            if (survivalMode) survivalSight = new RiverValleySight();
             var soil = ScavengeMaterial(new Color(.22f, .27f, .27f));
             var road = ScavengeMaterial(new Color(.31f, .37f, .37f));
             var concrete = ScavengeMaterial(new Color(.50f, .53f, .49f));
@@ -447,9 +452,12 @@ namespace OutpostLoop
                         new Vector3(.08f, 1.36f, .08f), steel);
         }
 
-        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material, Transform parent = null)
+        private Transform ScavengeBox(string name, Vector3 point, Vector3 size, Material material, Transform parent = null,
+            bool sightBox = false)
         {
             var target = Shape(name, parent ?? scavengeRoot, PrimitiveType.Cube, point, size, material);
+            if (survivalMode && (sightBox || (parent != null && survivalInteriors.Exists(room => room.Root == parent))))
+                survivalSight.AddBox(target.position, target.rotation, size, target);
             ApplyRiverValleyCityVisual(target,name,size);
             return target;
         }

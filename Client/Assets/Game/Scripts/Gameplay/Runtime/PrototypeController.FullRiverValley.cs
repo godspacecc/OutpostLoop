@@ -44,7 +44,8 @@ namespace OutpostLoop
             if (content?.layout == null || content.surface == null) throw new System.InvalidOperationException("河谷镇整图引用缺失。");
             survivalCityArt = RiverValleyCityArtCatalog.Load();
             var town = RiverValleyTownPreview.CreateWorld(scavengeRoot, content.layout, content.surface,
-                catalog: survivalCityArt, deferBuild: true, registerBuildingShell: parts => RegisterSurvivalShell(-1, parts));
+                catalog: survivalCityArt, deferBuild: true, registerBuildingShell: parts => RegisterSurvivalShell(-1, parts),
+                registerSightBox: (center, rotation, size) => survivalSight.AddBox(center, rotation, size));
             foreach (var step in town.BuildStages()) yield return step;
             yield return (.86f, "正在布置可进入的建筑");
             survivalWorldGeometry = town.WorldGeometry;
@@ -71,11 +72,11 @@ namespace OutpostLoop
                 foreach (var wall in allRooms.Walls(i))
                 {
                     var section = ScavengeBox("重点建筑入口墙", SurvivalPosition(wall.center,1.42f),
-                        new Vector3(wall.width,2.84f,wall.height),walls);
+                        new Vector3(wall.width,2.84f,wall.height),walls, sightBox: true);
                     RegisterSurvivalShell(i, section.GetComponentsInChildren<Renderer>());
                     survivalWorldGeometry.Solids.Add(new RiverValleyWorldGeometry.Solid(wall.center,wall.size,0));
                 }
-                var cover = ScavengeBox("重点建筑屋顶",SurvivalPosition(area.center,2.92f),new Vector3(area.width,.16f,area.height),roof);
+                var cover = ScavengeBox("重点建筑屋顶",SurvivalPosition(area.center,2.92f),new Vector3(area.width,.16f,area.height),roof, sightBox: true);
                 RegisterSurvivalShell(i, cover.GetComponentsInChildren<Renderer>(), roof: true);
                 // 保留入口至中央搜点的通道，少量设施让大房间有可辨认的尺度。
                 for (int side = -1; side <= 1; side += 2)
