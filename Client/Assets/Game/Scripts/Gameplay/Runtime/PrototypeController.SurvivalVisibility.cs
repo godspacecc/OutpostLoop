@@ -30,10 +30,13 @@ namespace OutpostLoop
             int room = SurvivalRoomAt(scavengeRun.Player);
             if (room >= 0 && scavengeRun.Player.x < survivalInteriors[room].Area.xMin + .28f)
                 room = -1;
-            if (room == visibleSurvivalRoom) return;
-            if (visibleSurvivalRoom >= 0) survivalInteriors[visibleSurvivalRoom].Root.gameObject.SetActive(false);
-            visibleSurvivalRoom = room;
-            if (room >= 0) survivalInteriors[room].Root.gameObject.SetActive(true);
+            if (room != visibleSurvivalRoom)
+            {
+                if (visibleSurvivalRoom >= 0) survivalInteriors[visibleSurvivalRoom].Root.gameObject.SetActive(false);
+                visibleSurvivalRoom = room;
+                if (room >= 0) survivalInteriors[room].Root.gameObject.SetActive(true);
+            }
+            UpdateShopPeek();
         }
 
         /// <summary>用同一占地查找会移动或随存档恢复的室内对象。</summary>
@@ -52,7 +55,7 @@ namespace OutpostLoop
             int room = SurvivalRoomAt(point);
             if (room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null)
                 return room == visibleSurvivalRoom && surface == scavengeRun.PlayerSurface;
-            return room < 0 || room == visibleSurvivalRoom;
+            return room < 0 || room == visibleSurvivalRoom || (room == 0 && isShopPeeking && HasShopPeek(point));
         }
 
         /// <summary>登记独立墙段、屋顶、房门或一栋封闭建筑的外壳。</summary>
@@ -67,6 +70,12 @@ namespace OutpostLoop
             foreach (var shell in survivalShells)
             {
                 bool inside = shell.Room >= 0 && shell.Room == visibleSurvivalRoom;
+                if (shell.Room == 0 && shell.Roof && isShopPeeking)
+                {
+                    shell.Present(false, false, this);
+                    PresentShopPeekRoof();
+                    continue;
+                }
                 if (inside && (shell.Roof || (shell.UpperResidence && scavengeRun.PlayerHeightOffset < 1.8f)))
                 {
                     shell.Present(true, false, this);
@@ -125,6 +134,7 @@ namespace OutpostLoop
         /// <summary>离开行动时清除房间与材质索引，新局重新绑定。</summary>
         private void ClearSurvivalVisibility()
         {
+            ClearShopPeek();
             survivalInteriors.Clear();
             survivalShells.Clear();
             fadedSurvivalMaterials.Clear();

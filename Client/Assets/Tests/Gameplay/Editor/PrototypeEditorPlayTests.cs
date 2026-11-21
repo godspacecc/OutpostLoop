@@ -610,8 +610,35 @@ namespace OutpostLoop.Tests
             var rooms = new SurvivalRoomSet(run.FullTown.Interiors);
             var crates = (Transform[])type.GetField("scavengeCrates", flags).GetValue(controller);
             var clinic = root.Find("房间内部 2").Find("诊所幸存者").gameObject;
+            var shopDoor = rooms.Door(0).center;
+            var shopWindow = shopDoor - Vector2.up * 3.4f;
+            var shopRoot = root.Find("房间内部 0").gameObject;
+            string peekEvidence = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/RiverValleyDoorWindow-20261121"));
+            run.Survival.facing = Vector2.right;
+            Place(shopDoor - Vector2.right * 1.1f);
+            Assert.IsFalse(shopRoot.activeSelf, "关闭的门应遮住店内");
+            CaptureVisibilityCamera(camera, peekEvidence, "closed-door", 1280, 720);
+            Assert.IsTrue(run.ToggleSurvivalDoor());
+            Place(shopDoor - Vector2.right * 1.1f);
+            Assert.IsTrue(shopRoot.activeSelf, "开门后无需跨过门槛");
+            var seeRoom = type.GetMethod("CanSeeSurvivalInteriorAt", flags);
+            bool See(Vector2 point) => (bool)seeRoom.Invoke(controller, new object[] { point });
+            Assert.IsTrue(See(shopDoor + Vector2.right * 1.25f));
+            Assert.IsFalse(See(shopDoor + new Vector2(1.25f, 3f)), "门框外侧应保持遮蔽");
+            CaptureVisibilityCamera(camera, peekEvidence, "open-door", 1280, 720);
+            Assert.IsTrue(run.ToggleSurvivalDoor());
+            Place(shopWindow - Vector2.right * 1.1f);
+            Assert.IsTrue(See(shopWindow + Vector2.right * 1.25f), "关门后仍可独立透过窗户看见店内");
+            Assert.IsFalse(run.ClearShopPeekLine(run.Player, shopWindow + Vector2.right * 1.25f), "窗口仍应阻挡穿墙");
+            CaptureVisibilityCamera(camera, peekEvidence, "window", 1280, 720);
+            run.Survival.facing = Vector2.left;
+            Place(shopWindow - Vector2.right * 1.1f);
+            Assert.IsFalse(shopRoot.activeSelf, "转开后室内应恢复遮蔽");
             for (int i = 0; i < run.FullTown.Interiors.Length; i++)
             {
+                // 普通房间及没有朝向开口时仍沿用门槛显隐。
+                run.Survival.facing = Vector2.left;
                 var roomRoot = root.Find("房间内部 " + i);
                 var door = rooms.Door(i).center;
                 Place(door - Vector2.right);

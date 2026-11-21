@@ -205,18 +205,20 @@ namespace OutpostLoop
         {
             var rect = CurrentSurvivalRooms.Footprint(room);
             var interior = RegisterSurvivalInterior(room, rect);
-            ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor, interior);
+            var floorMesh = ScavengeBox("房间地面", SurvivalPosition(rect.center, .035f), new Vector3(rect.width, .065f, rect.height), floor, interior);
+            var door = CurrentSurvivalRooms.Door(room);
             foreach (var wall in CurrentSurvivalRooms.Walls(room))
             {
+                if (TryCreateShopWindow(room, wall, door, walls, wood)) continue;
                 var section = ScavengeBox("现有外墙", SurvivalPosition(wall.center, 1.42f), new Vector3(wall.width, 2.84f, wall.height), walls);
                 RegisterSurvivalShell(room, section.GetComponentsInChildren<Renderer>());
             }
             bool twoLevels = room == RiverValleyResidence.RoomIndex && survivalWorldGeometry?.Residence != null;
             float roofHeight = twoLevels ? 2.92f + RiverValleyResidence.StoreyHeight : 2.92f;
             var cover = ScavengeBox("屋顶", SurvivalPosition(rect.center, roofHeight), new Vector3(rect.width + .2f, .16f, rect.height + .2f), roof);
+            if (room == 0 && survivalWorldGeometry != null) CreateShopPeekMask(cover, floorMesh, rect);
             RegisterSurvivalShell(room, cover.GetComponentsInChildren<Renderer>(), roof: true);
             if (twoLevels) CreateResidenceUpperFloor(interior, walls, floor, wood);
-            var door = CurrentSurvivalRooms.Door(room);
             survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
                 new Vector3(.5f, .13f, 0), new Vector3(.35f, .13f, 1.08f), floor);

@@ -99,6 +99,9 @@ namespace OutpostLoop
             return true;
         }
 
+        /// <summary>视野样板复用场景实体遮挡。门和窗的开口由表现层校验。</summary>
+        internal bool ClearShopPeekLine(Vector2 from, Vector2 to) => ClearRunLine(from, to);
+
         /// <summary>寻路同时检查河道和桥面；战斗视线仍只被实体阻挡。</summary>
         private bool ClearRunRoute(Vector2 from, Vector2 to, float clearance = .34f)
         {
