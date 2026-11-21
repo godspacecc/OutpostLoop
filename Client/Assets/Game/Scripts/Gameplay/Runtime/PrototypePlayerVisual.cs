@@ -3,21 +3,22 @@ using UnityEngine;
 
 namespace OutpostLoop
 {
-    /// <summary>只读取人物位移和界面暂停状态，驱动原地动画；不拥有移动、战斗或存档状态。</summary>
+    /// <summary>读取人物位移和界面暂停状态，驱动原地动画与旧探索入口的步行转向。</summary>
     public sealed class PrototypePlayerVisual : MonoBehaviour
     {
-        // 位移由领域层更新，本组件只用相邻画面的位置差判断走跑与朝向。
+        // 位移由领域层更新，本组件按相邻帧位移判断走跑。
         private Vector3 previousPosition;
         private Animator animator;
         private Func<bool> paused, sprinting;
-        private bool hasPosition;
+        private bool hasPosition, turnWithMovement;
         private static readonly int Speed = Animator.StringToHash("Speed");
 
         /// <summary>绑定当前会话的只读状态，禁止 Animator 的根运动参与位置计算。</summary>
-        internal void Initialize(Func<bool> isPaused, Func<bool> isSprinting)
+        internal void Initialize(Func<bool> isPaused, Func<bool> isSprinting, bool turnWithMovement)
         {
             paused = isPaused;
             sprinting = isSprinting;
+            this.turnWithMovement = turnWithMovement;
             animator = GetComponentInChildren<Animator>();
             animator.applyRootMotion = false;
             animator.updateMode = AnimatorUpdateMode.UnscaledTime;
@@ -38,7 +39,7 @@ namespace OutpostLoop
                 ? Mathf.Min(3.4f, metresPerSecond / 7f * 3.4f)
                 : Mathf.Min(1.4f, metresPerSecond / 4f * 1.4f);
             animator.SetFloat(Speed, speed, .08f, seconds);
-            if (!frozen && metresPerSecond > .1f)
+            if (turnWithMovement && !frozen && metresPerSecond > .1f)
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(delta), 720f * seconds);
             previousPosition = transform.position;
             hasPosition = true;

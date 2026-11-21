@@ -67,8 +67,6 @@ namespace OutpostLoop
                 for (int i = 0; i < gripJoints.Length; i++)
                     gripJoints[i].localRotation = gripRotations[i];
             animator.SetLayerWeight(1,gun || attackRemaining>0?1:0);
-            if((gun || attackRemaining>0) && state.facing.sqrMagnitude>.01f)
-                transform.rotation=Quaternion.LookRotation(new Vector3(state.facing.x,0,state.facing.y));
             // 重定向瞄准姿态作为基底，后坐和换弹是显式程序骨骼覆盖，不伪称供应者成套动画。
             if(gun)
             {

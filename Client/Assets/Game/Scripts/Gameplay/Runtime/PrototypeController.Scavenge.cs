@@ -212,6 +212,9 @@ namespace OutpostLoop
             if (survivalMode) SyncSurvivalPresentation(snapCamera);
             SyncSurvivalRoomsVisibility();
             scavengePlayer.position = ScavengePlayerPosition(0);
+            // 生存角色与视野、手电和瞄准共用当前朝向。
+            if (scavengeRun.Survival is { } state && state.facing.sqrMagnitude > .01f)
+                scavengePlayer.rotation = Quaternion.LookRotation(At(state.facing, 0));
             scavengePlayer.gameObject.SetActive(!scavengeRun.Driving);
             SyncSurvivalVehicle();
             for (int i = 0; i < scavengeEnemies.Length; i++)

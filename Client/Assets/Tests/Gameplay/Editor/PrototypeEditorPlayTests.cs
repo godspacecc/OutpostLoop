@@ -554,6 +554,83 @@ namespace OutpostLoop.Tests
         }
 
         [UnityTest]
+        public IEnumerator BootRiverValleyUnarmedPlayerFacesMouseWhileStandingAndMoving()
+        {
+            EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
+            yield return new EnterPlayMode();
+            yield return WaitForMain();
+            var controller = Object.FindObjectOfType<PrototypeController>();
+            var type = typeof(PrototypeController);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath,
+                "../../Backup/Artifacts/RiverValleyPlayerFacing-20261121/Save-" + System.Guid.NewGuid().ToString("N")));
+            type.GetField("survivalStore", flags).SetValue(controller, new Game.JsonFileStore<SurvivalSave>(directory));
+            type.GetField("survivalSaveChecked", flags).SetValue(controller, false);
+            type.GetMethod("RefreshOverlay", flags).Invoke(controller, null);
+            Click("StartSurvival");
+            yield return WaitForCrossing();
+
+            var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
+            var player = (Transform)type.GetField("scavengePlayer", flags).GetValue(controller);
+            var camera = (Camera)type.GetField("gameCamera", flags).GetValue(controller);
+            var torch = (Light)type.GetField("survivalTorch", flags).GetValue(controller);
+            var sight = (RiverValleySight)type.GetField("survivalSight", flags).GetValue(controller);
+            var settings = InputSystem.settings;
+            var previousBackground = settings.backgroundBehavior;
+            var previousEditorInput = settings.editorInputBehaviorInPlayMode;
+            settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var mouse = InputSystem.AddDevice<Mouse>();
+            try
+            {
+                foreach (var patrol in run.Patrols) patrol.Health = 0;
+                void PointAt(Vector3 direction)
+                {
+                    var screen = camera.WorldToScreenPoint(player.position + direction * 5);
+                    InputSystem.QueueStateEvent(mouse, new MouseState { position = screen });
+                    InputSystem.Update();
+                }
+                void AssertFacing(Vector3 expected)
+                {
+                    var facing = run.Survival.facing;
+                    var forward = new Vector3(facing.x, 0, facing.y);
+                    Assert.That(Vector3.Dot(forward, expected), Is.GreaterThan(.9f), "鼠标方向应成为角色朝向");
+                    Assert.That(Vector3.Dot(player.forward, forward), Is.GreaterThan(.999f), "角色模型应同步转向");
+                    Assert.That(Vector3.Dot(torch.transform.forward, forward), Is.GreaterThan(.98f), "手电应同步转向");
+                    Assert.IsTrue(sight.Reaches(run.Player + facing * 2));
+                    Assert.IsFalse(sight.Reaches(run.Player - facing * 2));
+                }
+
+                var initialPosition = run.Player;
+                PointAt(Vector3.right);
+                yield return null;
+                AssertFacing(Vector3.right);
+                PointAt(Vector3.left);
+                yield return null;
+                AssertFacing(Vector3.left);
+                Assert.AreEqual(initialPosition, run.Player, "转身时角色保持原地");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.W));
+                for (int frame = 0; frame < 50 && Vector2.Distance(initialPosition, run.Player) < .3f; frame++)
+                {
+                    PointAt(Vector3.left);
+                    yield return null;
+                }
+                Assert.That(Vector2.Distance(initialPosition, run.Player), Is.GreaterThan(.2f));
+                AssertFacing(Vector3.left);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(mouse);
+                InputSystem.RemoveDevice(keyboard);
+                settings.backgroundBehavior = previousBackground;
+                settings.editorInputBehaviorInPlayMode = previousEditorInput;
+            }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         public IEnumerator BootRiverValleyShowsExitAndInteriorsOnlyInContext()
         {
             const string batch = "RiverValleyUnifiedSight-20261121";
