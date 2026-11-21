@@ -5,7 +5,7 @@ namespace OutpostLoop
 {
     public sealed partial class PrototypeController
     {
-        // 临时车型只呈现当前领域车辆，由行动根节点统一释放。
+        // 车身按照最后一次观察到的位置呈现，实际车辆仍由行动领域控制。
         private Transform survivalVehicleVisual;
 
         /// <summary>合并编辑器的两套键盘输入，每个方向在同一帧只取一次。</summary>
@@ -21,6 +21,18 @@ namespace OutpostLoop
         private void SyncSurvivalVehicle()
         {
             if (!scavengeRun.HasVehicle) return;
+            var position = SurvivalPosition(scavengeRun.VehiclePosition, 0);
+            bool visible = scavengeRun.Driving || CanSeeSurvivalInteriorAt(scavengeRun.VehiclePosition);
+            var known = survivalObjectMemory.Observe(RiverValleyObjectKind.Vehicle, 0,
+                visible, true, position, scavengeRun.VehicleHeading);
+            if (!visible && known.present && (known.position - position).sqrMagnitude > .25f &&
+                survivalSight.Sees(known.position + Vector3.up))
+                known = survivalObjectMemory.Observe(RiverValleyObjectKind.Vehicle, 0, true, false, known.position);
+            if (!known.present)
+            {
+                if (survivalVehicleVisual) survivalVehicleVisual.gameObject.SetActive(false);
+                return;
+            }
             if (survivalVehicleVisual == null)
             {
                 survivalVehicleVisual = new GameObject("河谷镇可驾驶民用车").transform;
@@ -41,8 +53,10 @@ namespace OutpostLoop
                                 new Vector3(side * .76f, .24f, axle * 1.32f), new Vector3(.25f, .48f, .67f), dark);
                 }
             }
-            survivalVehicleVisual.SetPositionAndRotation(SurvivalPosition(scavengeRun.VehiclePosition, 0),
-                Quaternion.Euler(0, scavengeRun.VehicleHeading, 0));
+            survivalVehicleVisual.gameObject.SetActive(true);
+            survivalVehicleVisual.SetPositionAndRotation(known.position, Quaternion.Euler(0, known.yaw, 0));
+            if (survivalFog && scavengeRun.PlayerOnGround)
+                survivalFog.IncludeKnownObject(known.position + Vector3.up * .7f, new Vector3(.9f, .7f, 2.1f), known.yaw);
         }
     }
 }

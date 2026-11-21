@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,7 +7,7 @@ namespace OutpostLoop
     /// <summary>用角色眼高和当前实体计算同一帧的视野，独立于镜头遮挡表现。</summary>
     internal sealed class RiverValleySight
     {
-        // 屋顶和环境明暗共用圆周采样；角色与交互目标用精确的三维线段。
+        // 迷雾使用圆周采样；角色与交互目标用精确的三维线段。
         internal const int RayCount = 512;
         private const float DayRange = 13f, NightRange = 5f, EyeHeight = 1.55f;
         private static readonly Vector2[] directions = CreateDirections();
@@ -21,11 +22,12 @@ namespace OutpostLoop
         internal float FeetHeight => eye.y - EyeHeight;
         internal float[] Distances => distances;
 
-        // 静态实体在搭建地图时注册，活动门每帧从同一门板取实际姿态和破坏状态。
+        // 静态实体在搭建地图时注册，活动门从领域姿态取遮挡，独立于记忆模型。
         internal void AddBox(Vector3 center, Quaternion rotation, Vector3 size, Transform owner = null) =>
             blockers.Add(new Blocker(Matrix4x4.TRS(center, rotation, size), owner, null));
 
-        internal void AddDoor(Transform door) => blockers.Add(new Blocker(Matrix4x4.identity, door, door.GetComponent<Renderer>()));
+        internal void AddDoor(Transform door, Func<Matrix4x4?> actualPose) =>
+            blockers.Add(new Blocker(Matrix4x4.identity, door, actualPose));
 
         /// <summary>取得当前帧近处实体，供所有视线查询复用。</summary>
         internal void SetView(Vector3 feet, Vector2 look, float sun, float light)
@@ -37,17 +39,19 @@ namespace OutpostLoop
             nearby.Clear();
             foreach (var blocker in blockers)
             {
-                if (blocker.Door && !blocker.Door.enabled) continue;
-                var matrix = blocker.Door ? blocker.Owner.localToWorldMatrix : blocker.LocalToWorld;
+                var pose = blocker.ActualPose;
+                Matrix4x4? world = pose == null ? blocker.LocalToWorld : pose();
+                if (!world.HasValue) continue;
+                var matrix = world.Value;
                 var delta = matrix.GetColumn(3) - (Vector4)eye;
-                var extent = blocker.Door ? new Vector2(1.5f, 1.5f) : blocker.Extent;
+                var extent = pose != null ? new Vector2(1.5f, 1.5f) : blocker.Extent;
                 if (Mathf.Abs(delta.x) > DayRange + extent.x || Mathf.Abs(delta.z) > DayRange + extent.y) continue;
-                var inverse = blocker.Door ? matrix.inverse : blocker.WorldToLocal;
+                var inverse = pose != null ? matrix.inverse : blocker.WorldToLocal;
                 nearby.Add(new NearbyBlocker(inverse, inverse.MultiplyPoint3x4(eye), blocker.Owner));
             }
         }
 
-        /// <summary>给地面与屋顶裁切采样。角度用世界坐标，转身时不需要重新绑定材质。</summary>
+        /// <summary>按世界角度生成迷雾距离，转身时沿用同一纹理坐标。</summary>
         internal void TraceContour()
         {
             for (int i = 0; i < RayCount; i++)
@@ -131,16 +135,16 @@ namespace OutpostLoop
             internal readonly Matrix4x4 LocalToWorld, WorldToLocal;
             internal readonly Vector2 Extent;
             internal readonly Transform Owner;
-            internal readonly Renderer Door;
+            internal readonly Func<Matrix4x4?> ActualPose;
 
-            internal Blocker(Matrix4x4 matrix, Transform owner, Renderer door)
+            internal Blocker(Matrix4x4 matrix, Transform owner, Func<Matrix4x4?> actualPose)
             {
                 LocalToWorld = matrix;
                 WorldToLocal = matrix.inverse;
                 Extent = new Vector2(Mathf.Abs(matrix.m00) + Mathf.Abs(matrix.m01) + Mathf.Abs(matrix.m02),
                     Mathf.Abs(matrix.m20) + Mathf.Abs(matrix.m21) + Mathf.Abs(matrix.m22)) * .5f;
                 Owner = owner;
-                Door = door;
+                ActualPose = actualPose;
             }
         }
 

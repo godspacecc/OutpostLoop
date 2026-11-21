@@ -22,6 +22,7 @@ namespace OutpostLoop
         public RiverValleyVehicleSave vehicle;
         // 老档没有最后所见地块，读回时从空记忆开始。
         public RiverValleyFogPageSave[] fog;
+        public RiverValleyObservation[] observations;
     }
 
     /// <summary>恢复时保留巡逻位置、受伤状态以及正在追踪的目标。</summary>

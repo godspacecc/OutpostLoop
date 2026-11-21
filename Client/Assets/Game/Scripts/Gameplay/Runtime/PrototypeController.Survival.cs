@@ -156,6 +156,7 @@ namespace OutpostLoop
                 if (record) progress = SurvivalJourneyProgress.Record(progress, scavengeRun, CaptureSurvivalCarriedSummary());
                 var data = available ? scavengeRun.CaptureSurvival() : new SurvivalSave();
                 if (available && survivalFog) data.fog = survivalFog.Capture();
+                if (available) data.observations = survivalObjectMemory?.Capture();
                 data.journey = progress;
                 SurvivalStore.Save(SurvivalSaveName, data);
                 survivalJourney = progress;
@@ -223,7 +224,7 @@ namespace OutpostLoop
             }
             if (twoLevels) CreateResidenceUpperFloor(interior, walls, floor, wood, roof);
             survivalDoors[room] = ScavengeBox("现有房门", SurvivalPosition(door.center, 1.02f), new Vector3(.21f, 2.04f, door.height), wood);
-            survivalSight.AddDoor(survivalDoors[room]);
+            survivalSight.AddDoor(survivalDoors[room], () => ActualSurvivalDoorMatrix(room, door));
             survivalDoorBraces[room] = Shape("加固横板", survivalDoors[room], PrimitiveType.Cube,
                 new Vector3(.5f, .13f, 0), new Vector3(.35f, .13f, 1.08f), floor);
             RegisterSurvivalShell(room, survivalDoors[room].GetComponentsInChildren<Renderer>());
@@ -303,12 +304,8 @@ namespace OutpostLoop
             {
                 var room = state.rooms[i];
                 var hinge = CurrentSurvivalRooms.Door(i);
-                var door = survivalDoors[i];
-                var render = door.GetComponent<Renderer>();
-                render.enabled = room.durability > 0;
-                survivalDoorBraces[i].gameObject.SetActive(room.fortified && room.durability > 0);
                 if (snapDoor) survivalDoorAngles[i] = SurvivalDoorTargetAngle(room);
-                SyncSurvivalDoorPose(i, hinge, room, scavengePaused ? 0 : Time.unscaledDeltaTime);
+                AdvanceSurvivalDoorAngle(i, room, scavengePaused ? 0 : Time.unscaledDeltaTime);
                 var audio = survivalAlarms[i];
                 if (room.durability < survivalDoorDurability[i] && !scavengePaused &&
                     Vector2.Distance(scavengeRun.Player, hinge.center) <= 12)
@@ -329,11 +326,17 @@ namespace OutpostLoop
                 var drop = state.drops[i];
                 float height = survivalWorldGeometry?.Residence?.HeightOffset(drop.point, drop.surface) ?? 0f;
                 var position = SurvivalPosition(drop.point, .13f + height);
+                bool visible = survivalSight.Sees(position + Vector3.up * .13f);
+                var known = survivalObjectMemory.Observe(RiverValleyObjectKind.Drop, i, visible,
+                    drop.items.Count > 0, position);
                 if (i == survivalDropMarkers.Count)
                     survivalDropMarkers.Add(ScavengeBox("地面物品", position,
                         new Vector3(.43f, .26f, .37f), survivalDropMaterial));
-                survivalDropMarkers[i].position = position;
-                survivalDropMarkers[i].gameObject.SetActive(drop.items.Count > 0 && survivalSight.Sees(position + Vector3.up * .13f));
+                bool show = known.present && (visible || drop.surface == scavengeRun.PlayerSurface);
+                survivalDropMarkers[i].gameObject.SetActive(show);
+                if (!show) continue;
+                survivalDropMarkers[i].position = known.position;
+                if (survivalFog) survivalFog.IncludeKnownObject(known.position, new Vector3(.215f, .13f, .185f));
             }
             for (int i = state.drops.Count; i < survivalDropMarkers.Count; i++)
                 survivalDropMarkers[i].gameObject.SetActive(false);
@@ -343,15 +346,51 @@ namespace OutpostLoop
         private static float SurvivalDoorTargetAngle(SurvivalRoom room) =>
             room.open ? (room.opensOutward ? -90f : 90f) : 0f;
 
-        /// <summary>由门轴反算门板中心，使门板和附着的横板一起绕轴旋转。</summary>
-        private void SyncSurvivalDoorPose(int index, Rect doorway, SurvivalRoom room, float deltaTime)
+        /// <summary>领域门板独立推进摆动，未观察时不更新记忆外观。</summary>
+        private void AdvanceSurvivalDoorAngle(int index, SurvivalRoom room, float deltaTime)
         {
             const float swingDuration = .28f;
-            float angle = survivalDoorAngles[index] = Mathf.MoveTowards(survivalDoorAngles[index],
+            survivalDoorAngles[index] = Mathf.MoveTowards(survivalDoorAngles[index],
                 SurvivalDoorTargetAngle(room), 90f / swingDuration * deltaTime);
-            var rotation = Quaternion.Euler(0, angle, 0);
+        }
+
+        private Vector3 SurvivalDoorCenter(Rect doorway, Quaternion rotation)
+        {
             var pivot = SurvivalPosition(new Vector2(doorway.center.x, doorway.yMin), 1.02f);
-            survivalDoors[index].SetPositionAndRotation(pivot + rotation * (Vector3.forward * (doorway.height * .5f)), rotation);
+            return pivot + rotation * (Vector3.forward * (doorway.height * .5f));
+        }
+
+        /// <summary>实际门板的盒体独立于旧画面，关门立即按实际状态计算通行和遮挡。</summary>
+        private Matrix4x4? ActualSurvivalDoorMatrix(int index, Rect doorway)
+        {
+            if (scavengeRun.Survival.rooms[index].durability <= 0) return null;
+            var rotation = Quaternion.Euler(0, survivalDoorAngles[index], 0);
+            return Matrix4x4.TRS(SurvivalDoorCenter(doorway, rotation), rotation,
+                new Vector3(.21f, 2.04f, doorway.height));
+        }
+
+        /// <summary>门板或原门框进入视野后才更新记忆，摆动、破坏与横板共用该规则。</summary>
+        private void SyncObservedSurvivalDoors()
+        {
+            for (int i = 0; i < survivalDoors.Length; i++)
+            {
+                var doorway = CurrentSurvivalRooms.Door(i);
+                var model = survivalDoors[i];
+                var room = scavengeRun.Survival.rooms[i];
+                float yaw = survivalDoorAngles[i];
+                var center = SurvivalDoorCenter(doorway, Quaternion.Euler(0, yaw, 0));
+                var frame = SurvivalPosition(doorway.center, 1.24f);
+                bool visible = survivalSight.Sees(center + Vector3.up * .22f, model) || survivalSight.Sees(frame, model);
+                var known = survivalObjectMemory.Observe(RiverValleyObjectKind.Door, i, visible,
+                    room.durability > 0, center, yaw, room.fortified);
+                model.GetComponent<Renderer>().enabled = known.present;
+                survivalDoorBraces[i].gameObject.SetActive(known.present && known.detail);
+                if (!known.present) continue;
+                model.SetPositionAndRotation(known.position, Quaternion.Euler(0, known.yaw, 0));
+                if (survivalFog && scavengeRun.PlayerOnGround)
+                    survivalFog.IncludeKnownObject(known.position,
+                        new Vector3(known.detail ? .21f : .105f, 1.02f, doorway.height * .54f), known.yaw);
+            }
         }
 
         private void ReleaseSurvivalPresentation()
@@ -538,7 +577,7 @@ namespace OutpostLoop
             if (run.CanTalkToClinicSurvivor)
                 return (Loc.T("FocusSurvivor"), SurvivalPosition(survivalWorldGeometry.ClinicSurvivor, 1.4f));
             int cache = run.NearbyCache;
-            return cache >= 0 && scavengeCrates[cache].gameObject.activeInHierarchy
+            return cache >= 0 && CanSeeSurvivalCache(cache) && scavengeCrates[cache].gameObject.activeInHierarchy
                 ? (Loc.T("FocusSupply"), scavengeCrates[cache].position + Vector3.up * .55f) : default;
         }
 

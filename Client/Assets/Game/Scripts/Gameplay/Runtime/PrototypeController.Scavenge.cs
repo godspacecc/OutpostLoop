@@ -73,7 +73,7 @@ namespace OutpostLoop
             if (survivalMode)
             {
                 ResetSurvivalPresentation();
-                StartSurvivalFog(survivalResume?.fog);
+                StartSurvivalFog(survivalResume);
             }
             survivalResume = null;
             scavengePaused = false;
@@ -215,6 +215,7 @@ namespace OutpostLoop
         {
             if (survivalMode) SyncSurvivalPresentation(snapCamera);
             SyncSurvivalRoomsVisibility();
+            if (survivalMode) SyncObservedSurvivalDoors();
             scavengePlayer.position = ScavengePlayerPosition(0);
             // 生存角色与视野、手电和瞄准共用当前朝向。
             if (scavengeRun.Survival is { } state && state.facing.sqrMagnitude > .01f)
@@ -245,11 +246,18 @@ namespace OutpostLoop
                     var cache = scavengeRun.Survival.caches[i];
                     var point = scavengeRun.CachePoints[i];
                     float height = survivalWorldGeometry?.Residence?.HeightOffset(point, cache.surface) ?? 0;
-                    scavengeCrates[i].position = SurvivalPosition(point, .33f + height);
+                    var position = SurvivalPosition(point, .33f + height);
                     if(i==1 && survivalWorldGeometry?.Shop!=null)
-                        scavengeCrates[i].position=SurvivalPosition(survivalWorldGeometry.Shop.CounterCrate,1.03f);
-                    scavengeCrates[i].gameObject.SetActive(cache.active && CanSeeSurvivalCache(i));
-                    scavengeCrates[i].localScale = new Vector3(1.3f, cache.searched && cache.items.Count == 0 ? .33f : .66f, .82f);
+                        position = SurvivalPosition(survivalWorldGeometry.Shop.CounterCrate,1.03f);
+                    bool visible = CanSeeSurvivalCache(i);
+                    var known = survivalObjectMemory.Observe(RiverValleyObjectKind.Cache, i, visible,
+                        cache.active, position, detail: cache.searched && cache.items.Count == 0);
+                    bool show = known.present && (visible || cache.surface == scavengeRun.PlayerSurface);
+                    scavengeCrates[i].gameObject.SetActive(show);
+                    if (!show) continue;
+                    scavengeCrates[i].position = known.position;
+                    scavengeCrates[i].localScale = new Vector3(1.3f, known.detail ? .33f : .66f, .82f);
+                    if (survivalFog) survivalFog.IncludeKnownObject(known.position, scavengeCrates[i].localScale * .5f);
                     continue;
                 }
                 scavengeCrates[i].localScale = new Vector3(1.3f,

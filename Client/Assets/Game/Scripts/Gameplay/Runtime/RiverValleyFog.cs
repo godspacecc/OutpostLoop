@@ -13,7 +13,7 @@ namespace OutpostLoop
         public byte[] png;
     }
 
-    /// <summary>按世界地块保存最后所见。镜头先完整渲染，迷雾只在画面合成阶段生效。</summary>
+    /// <summary>按世界地块保存已观察范围，迷雾在场景渲染完成后调节实时画面。</summary>
     [RequireComponent(typeof(Camera))]
     public sealed class RiverValleyFog : MonoBehaviour
     {
@@ -21,16 +21,20 @@ namespace OutpostLoop
         internal const int PageSize = 24, PagePixels = 256;
         private const int AtlasPages = 5;
         private const float ViewRange = 14f;
+        private const int MaxKnownObjects = 24;
         private readonly Dictionary<(int Surface, int X, int Z), RenderTexture> pages =
             new Dictionary<(int, int, int), RenderTexture>();
         private Texture2D presence;
         private readonly Color32[] occupied = new Color32[AtlasPages * AtlasPages];
+        // 记录实际绘制的已知物件尺寸，使地面遮罩不会截断它们的轮廓。
+        private readonly Vector4[] knownCenters = new Vector4[MaxKnownObjects];
+        private readonly Vector4[] knownExtents = new Vector4[MaxKnownObjects];
+        private int knownCount;
         private Camera viewCamera;
         private Material material;
         private RenderTexture scratch, atlas;
         private Texture2D distances;
         private Vector3 observer;
-        private float projectionHeight;
         private int surface;
         private bool hasView;
         private DepthTextureMode previousDepth;
@@ -57,14 +61,23 @@ namespace OutpostLoop
             return true;
         }
 
-        /// <summary>楼层分别记录。走动时投影到世界平面，旧画面不跟着屏幕移动。</summary>
-        internal void SetView(Vector3 feet, ResidenceSurface floor, float plane, Texture2D mask)
+        /// <summary>按楼层记录已看范围，镜头移动时根据当前世界坐标查询。</summary>
+        internal void SetView(Vector3 feet, ResidenceSurface floor, Texture2D mask)
         {
             observer = feet;
             surface = (int)floor;
-            projectionHeight = plane;
             distances = mask;
             hasView = true;
+            knownCount = 0;
+        }
+
+        /// <summary>将记忆模型的空间包围盒交给迷雾，盒外仍按世界地块处理。</summary>
+        internal void IncludeKnownObject(Vector3 center, Vector3 half, float yaw = 0)
+        {
+            if (knownCount == MaxKnownObjects || (center - observer).sqrMagnitude > 20 * 20) return;
+            float angle = yaw * Mathf.Deg2Rad;
+            knownCenters[knownCount] = new Vector4(center.x, center.y, center.z, half.y);
+            knownExtents[knownCount++] = new Vector4(half.x, half.z, Mathf.Cos(angle), Mathf.Sin(angle));
         }
 
         private void OnRenderImage(RenderTexture source, RenderTexture target)
@@ -74,14 +87,14 @@ namespace OutpostLoop
                 Graphics.Blit(source, target);
                 return;
             }
-            BindCamera(source);
+            BindCamera();
             StampVisiblePages();
             FillAtlas();
             Graphics.Blit(source, target, material, 1);
         }
 
         /// <summary>统一使用相机的实际透视投影，绘制和采样地块采用同一个坐标系。</summary>
-        private void BindCamera(RenderTexture source)
+        private void BindCamera()
         {
             var cameraTransform = viewCamera.transform;
             float halfHeight = Mathf.Tan(viewCamera.fieldOfView * .5f * Mathf.Deg2Rad);
@@ -90,13 +103,18 @@ namespace OutpostLoop
             material.SetVector("_FogUp", cameraTransform.up);
             material.SetVector("_FogForward", cameraTransform.forward);
             material.SetVector("_FogProjection", new Vector4(2 * halfHeight * viewCamera.aspect, 2 * halfHeight,
-                projectionHeight, observer.y));
+                0, observer.y));
             material.SetVector("_FogViewer", new Vector4(observer.x, observer.z, 0, 0));
             material.SetTexture("_Distances", distances);
-            material.SetTexture("_SceneTex", source);
+            material.SetFloat("_KnownCount", knownCount);
+            if (knownCount > 0)
+            {
+                material.SetVectorArray("_KnownCenters", knownCenters);
+                material.SetVectorArray("_KnownExtents", knownExtents);
+            }
         }
 
-        /// <summary>玩家附近的地块只写入当前可见纹理，其余像素原样保留。</summary>
+        /// <summary>玩家附近的地块只写入当前可见范围，旧区域不变。</summary>
         private void StampVisiblePages()
         {
             int xMin = PageAt(observer.x - ViewRange), xMax = PageAt(observer.x + ViewRange);
@@ -171,7 +189,7 @@ namespace OutpostLoop
                 if (pages.ContainsKey(key) || !ImageConversion.LoadImage(staging, entry.png) ||
                     staging.width != PagePixels || staging.height != PagePixels) continue;
                 var page = MakeTexture(PagePixels, FilterMode.Bilinear);
-                Graphics.Blit(staging, page);
+                Graphics.Blit(staging, page, material, 2);
                 pages.Add(key, page);
             }
             Destroy(staging);
@@ -183,7 +201,7 @@ namespace OutpostLoop
         {
             var texture = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
             {
-                name = "河谷镇最后所见",
+                name = "河谷镇已观察范围",
                 filterMode = filter,
                 wrapMode = TextureWrapMode.Clamp
             };
