@@ -7,12 +7,10 @@ namespace OutpostLoop
 {
     public sealed partial class PrototypeController
     {
-        // 互动按钮与搜索、持续动作共用底部容器。文本沿用物品界面的字体。
+        // 底部只反馈需要等待的动作。现场标签和进度均不接收指针输入。
         private RectTransform survivalContextPanel;
-        private Button survivalContextButton;
         private TMP_Text survivalContextLabel;
         private Image survivalContextTrack, survivalContextFill;
-        private string survivalContextShownAction;
         private Rect SurvivalContextRect
         {
             get
@@ -23,22 +21,22 @@ namespace OutpostLoop
             }
         }
 
-        /// <summary>点击拦截只覆盖当前可见的底部操作或进度。</summary>
-        private bool SurvivalContextContains(Vector2 point) =>
-            CanShowSurvivalHud() && PerceptionVisible(PerceptionGroup.Interaction) &&
-            !SurvivalContextHasProgress && SurvivalContextRect.Contains(point) && SurvivalInteraction() != null;
-
         private bool SurvivalContextHasProgress => scavengeRun.SearchRemaining > 0 ||
             scavengeRun.Survival.action != SurvivalAction.None;
 
-        /// <summary>模态窗口隐藏提示。进行中的操作在同一位置读取领域计时。</summary>
+        /// <summary>短暂观察后才显示进度，立即完成的操作由场景反馈。</summary>
         private void UpdateSurvivalContext()
         {
-            bool hud = CanShowSurvivalHud();
-            bool progress = hud && SurvivalContextHasProgress;
-            string action = hud && !progress && PerceptionVisible(PerceptionGroup.Interaction) ? SurvivalInteraction() : null;
-            survivalContextShownAction = action;
-            if (action == null && !progress)
+            if (!CanShowSurvivalHud() || !SurvivalContextHasProgress)
+            {
+                if (survivalContextPanel) survivalContextPanel.gameObject.SetActive(false);
+                return;
+            }
+            var state = scavengeRun.Survival;
+            bool searching = scavengeRun.SearchRemaining > 0;
+            float remaining = searching ? scavengeRun.SearchRemaining : state.actionTime;
+            float duration = searching ? ScavengeRun.SearchSeconds : state.actionDuration;
+            if (duration - remaining < .15f)
             {
                 if (survivalContextPanel) survivalContextPanel.gameObject.SetActive(false);
                 return;
@@ -47,29 +45,16 @@ namespace OutpostLoop
             if (!survivalContextPanel) CreateSurvivalContext();
             PerceptionGeometry.Place(survivalContextPanel, SurvivalContextRect, new Vector2(350, 40));
             survivalContextPanel.gameObject.SetActive(true);
-            survivalContextButton.targetGraphic.raycastTarget = action != null;
-            survivalContextButton.interactable = action != null;
-            survivalContextTrack.gameObject.SetActive(progress);
-            if (!progress)
-            {
-                survivalContextLabel.text = "E  " + action;
-                return;
-            }
-
-            var state = scavengeRun.Survival;
-            bool searching = scavengeRun.SearchRemaining > 0;
-            float remaining = searching ? scavengeRun.SearchRemaining : state.actionTime;
-            float duration = searching ? ScavengeRun.SearchSeconds : state.actionDuration;
             survivalContextLabel.text = searching ? Loc.T("InventorySearching", remaining) :
                 Loc.T("ContextActionTime", Loc.T("ContextAction." + state.action), remaining);
             float fraction = duration > 0 ? Mathf.Clamp01(1 - remaining / duration) : 0;
             survivalContextFill.rectTransform.anchorMax = new Vector2(fraction, 1);
         }
 
-        /// <summary>共用 HUD 缩放，底部正中锚定。只有操作按钮接收指针点击。</summary>
+        /// <summary>进度条沿用感知界面布局里的位置与缩放。</summary>
         private void CreateSurvivalContext()
         {
-            var root = new GameObject("RiverValleyContextCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var root = new GameObject("RiverValleyContextCanvas", typeof(Canvas), typeof(CanvasScaler));
             root.transform.SetParent(transform, false);
             var canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -79,22 +64,12 @@ namespace OutpostLoop
             scaler.referenceResolution = new Vector2(1280, 720);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
-            var panel = new GameObject("Interaction", typeof(Image), typeof(Button));
+            var panel = new GameObject("Interaction", typeof(Image));
             survivalContextPanel = (RectTransform)panel.transform;
             survivalContextPanel.SetParent(root.transform, false);
             var frame = panel.GetComponent<Image>();
             frame.color = LootBackground;
-            survivalContextButton = panel.GetComponent<Button>();
-            survivalContextButton.targetGraphic = frame;
-            survivalContextButton.navigation = new Navigation { mode = Navigation.Mode.None };
-            var colors = ColorBlock.defaultColorBlock;
-            colors.disabledColor = Color.white;
-            survivalContextButton.colors = colors;
-            survivalContextButton.onClick.AddListener(() =>
-            {
-                if (CanShowSurvivalHud() && !SurvivalContextHasProgress && survivalContextShownAction != null &&
-                    survivalContextShownAction == SurvivalInteraction()) InteractSurvival();
-            });
+            frame.raycastTarget = false;
 
             survivalContextLabel = new GameObject("Label", typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
             survivalContextLabel.transform.SetParent(panel.transform, false);

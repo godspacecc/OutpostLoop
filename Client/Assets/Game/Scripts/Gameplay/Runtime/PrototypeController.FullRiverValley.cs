@@ -13,7 +13,6 @@ namespace OutpostLoop
         private SurvivalRoomSet currentSurvivalRooms;
         private SurvivalRoomSet CurrentSurvivalRooms => currentSurvivalRooms ?? (currentSurvivalRooms = new SurvivalRoomSet());
         // 与六处重点入口按同一顺序展示名称。
-        private static readonly string[] FullTownInteriorNames = { "主街杂货店", "住宅", "社区诊所", "仓库", "医院入口层", "西岸桥头店铺" };
         /// <summary>把领域平面位置投到当前地图真实地面或桥面高度。</summary>
         private Vector3 SurvivalPosition(Vector2 point, float offset) => At(point, (survivalWorldGeometry?.Height(point) ?? 0) + offset);
         private Vector3 ScavengePlayerPosition(float offset) =>
@@ -102,24 +101,6 @@ namespace OutpostLoop
             survivorTint.SetColor("_Color", new Color(.27f, .67f, .76f));
             foreach (var renderer in survivor.GetComponentsInChildren<SkinnedMeshRenderer>())
                 renderer.SetPropertyBlock(survivorTint);
-        }
-
-        /// <summary>重点入口有现场名称；无入口标记的其余建筑保持封闭。</summary>
-        private void DrawFullRiverValleyEntrances()
-        {
-            DrawMainStreetShopZones();
-            if (survivalWorldGeometry == null) return;
-            var rooms = new SurvivalRoomSet(survivalWorldGeometry.Interiors);
-            for (int i = 0; i < 6; i++)
-            {
-                var point = rooms.Door(i).center;
-                if (Vector2.Distance(point, scavengeRun.Player) > 45) continue;
-                var screen = gameCamera.WorldToScreenPoint(SurvivalPosition(point, 3.4f));
-                if (screen.z <= 0) continue;
-                var pin = new Vector2(screen.x, Screen.height - screen.y) / HudScale;
-                if (pin.y < 165 || pin.y > Screen.height / HudScale - 120) continue;
-                GUI.Box(new Rect(pin.x - 90, pin.y - 15, 180, 30), FullTownInteriorNames[i] + " · 入口");
-            }
         }
     }
 }

@@ -147,7 +147,7 @@ namespace OutpostLoop
                 room.opensOutward = Player.x >= RoomSet.Door(index).center.x;
             room.open = !room.open;
             RefreshSurvivalWalls();
-            return ReportSurvival(room.open ? "门已打开" : "门已关上", true);
+            return true;
         }
 
         /// <summary>关门和交互提示共用门洞占用判定。</summary>

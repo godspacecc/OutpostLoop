@@ -1355,7 +1355,7 @@ namespace OutpostLoop.Tests
             var run = (ScavengeRun)type.GetField("scavengeRun", flags).GetValue(controller);
             var player = typeof(ScavengeRun).GetProperty(nameof(ScavengeRun.Player));
             var interact = type.GetMethod("InteractSurvival", flags);
-            var context = type.GetMethod("SurvivalInteraction", flags);
+            var context = type.GetMethod("SurvivalFocusTarget", flags);
             var sync = type.GetMethod("SyncScavenge", flags);
             foreach (var patrol in run.Patrols) patrol.Health = 0;
             Assert.IsFalse(run.CanTalkToClinicSurvivor);
@@ -1382,19 +1382,19 @@ namespace OutpostLoop.Tests
             while (run.SearchRemaining > 0) run.Tick(.05f, Vector2.zero);
             Assert.IsTrue(run.CanReadWarehouseTransferNote);
             sync.Invoke(controller, new object[] { true });
-            yield return CaptureSurvivalEvidence("warehouse-transfer-note", 1280, 720, batch);
+            if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("warehouse-transfer-note", 1280, 720, batch);
             interact.Invoke(controller, null);
             Assert.IsFalse(run.CanReadWarehouseTransferNote);
             Assert.IsFalse(run.MedicineLeadKnown, "搜点记录不启用旧试玩任务");
 
-            var survivor = GameObject.Find("诊所幸存者");
-            Assert.NotNull(survivor);
             var meeting = run.FullTown.ClinicSurvivor + Vector2.left;
             Assert.IsTrue(run.FullTown.Interiors[2].Contains(meeting));
             Assert.IsTrue(run.FullTown.Walkable(meeting));
             Assert.IsTrue(run.FullTown.Walkable(run.FullTown.ClinicSurvivor));
             player.SetValue(run, meeting);
-            Assert.AreEqual("和幸存者交谈", context.Invoke(controller, null));
+            sync.Invoke(controller, new object[] { true });
+            Assert.NotNull(GameObject.Find("诊所幸存者"));
+            Assert.AreEqual(Game.Loc.T("FocusSurvivor"), ((System.ValueTuple<string, Vector3>)context.Invoke(controller, null)).Item1);
             int feedback = run.SurvivalFeedbackVersion;
             interact.Invoke(controller, null);
             Assert.AreEqual(feedback + 1, run.SurvivalFeedbackVersion);
@@ -1402,7 +1402,7 @@ namespace OutpostLoop.Tests
             Assert.IsTrue(run.CanTalkToClinicSurvivor, "对话可重复查看");
             Assert.IsFalse(run.SurvivorSpoken, "现场对话不启用旧试玩任务");
             sync.Invoke(controller, new object[] { true });
-            yield return CaptureSurvivalEvidence("clinic-conversation", 1280, 720, batch);
+            if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("clinic-conversation", 1280, 720, batch);
 
             Assert.IsTrue(run.Survival.pack.Exists(item => item.item == SurvivalItem.Aid));
             Assert.IsFalse(run.Survival.Ready);
@@ -1412,7 +1412,7 @@ namespace OutpostLoop.Tests
         [UnityTest]
         public IEnumerator BootRiverValleyContextFollowsActionProgressAndModals()
         {
-            const string batch = "RiverValleyInteraction-20261120";
+            const string batch = "RiverValleyFocusLabels-20261121";
             EditorSceneManager.OpenScene("Assets/Game/Scenes/Boot.unity");
             yield return new EnterPlayMode();
             yield return WaitForMain();
@@ -1436,6 +1436,11 @@ namespace OutpostLoop.Tests
             var hudContains = type.GetMethod("SurvivalHudContains", flags);
             var language = Game.Game.Interface.GetModel<Game.LocalizationModel>();
             var originalLanguage = language.CurrentLanguageCode.Value;
+            var input = InputSystem.settings;
+            var oldBackground = input.backgroundBehavior;
+            var oldEditorInput = input.editorInputBehaviorInPlayMode;
+            input.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            input.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
             var keyboard = InputSystem.AddDevice<Keyboard>();
             try
             {
@@ -1443,34 +1448,30 @@ namespace OutpostLoop.Tests
                 player.SetValue(run, run.CachePoints[12] + Vector2.left);
                 sync.Invoke(controller, new object[] { true });
                 late.Invoke(controller, null);
-                var canvas = GameObject.Find("RiverValleyContextCanvas");
-                Assert.NotNull(canvas);
-                var context = canvas.transform.Find("Interaction");
+                Assert.IsNull(GameObject.Find("RiverValleyContextCanvas"), "等待动作前不显示底部操作条");
+                var focus = type.GetMethod("SurvivalFocusTarget", flags);
+                var hitLabel = type.GetMethod("TrySurvivalFocusLabel", flags);
+                var target = ((string Label, Vector3 Position))focus.Invoke(controller, null);
+                Assert.AreEqual("补给箱", target.Label);
+                var camera = (Camera)type.GetField("gameCamera", flags).GetValue(controller);
+                var atTarget = (Vector2)camera.WorldToScreenPoint(target.Position);
+                Assert.IsTrue((bool)hitLabel.Invoke(controller, new object[] { atTarget, null, null }));
+                Assert.IsFalse((bool)hitLabel.Invoke(controller, new object[] { atTarget + Vector2.right * Screen.width, null, null }));
+                Assert.IsFalse((bool)hudContains.Invoke(controller, new object[] { atTarget }));
+
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
+                Assert.AreEqual(12, run.OpenCache);
+                run.Tick(.2f, Vector2.zero);
+                late.Invoke(controller, null);
+                var context = GameObject.Find("RiverValleyContextCanvas").transform.Find("Interaction");
                 var label = context.Find("Label").GetComponent<TMPro.TMP_Text>();
-                var button = context.GetComponent<Button>();
                 var progress = context.Find("Progress");
                 var fill = (RectTransform)progress.Find("Fill");
                 Canvas.ForceUpdateCanvases();
                 var rect = (RectTransform)context;
                 var cursor = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
-                Assert.AreEqual("E  搜索", label.text);
-                Assert.IsTrue((bool)hudContains.Invoke(controller, new object[] { cursor }));
-                // 小地图图面和键位提示都拦截攻击，旧按钮区域交回场景输入。
-                float hudScale = Mathf.Min(Screen.width / 1280f, Screen.height / 720f);
-                Assert.IsTrue((bool)hudContains.Invoke(controller, new object[]
-                    { new Vector2(Screen.width - 95 * hudScale, Screen.height - 75 * hudScale) }));
-                Assert.IsTrue((bool)hudContains.Invoke(controller, new object[]
-                    { new Vector2(Screen.width - 40 * hudScale, Screen.height - 156 * hudScale) }));
-                Assert.IsFalse((bool)hudContains.Invoke(controller, new object[]
-                    { new Vector2(215 * hudScale, 40 * hudScale) }));
-                yield return CaptureSurvivalEvidence("search-ready-zh", 1280, 720, batch);
-
-                PressInventoryButton(button);
-                Assert.AreEqual(12, run.OpenCache);
-                run.Tick(.2f, Vector2.zero);
-                late.Invoke(controller, null);
                 Assert.IsTrue(progress.gameObject.activeSelf);
-                Assert.IsFalse(button.interactable);
+                Assert.IsNull(context.GetComponent<Button>());
                 Assert.That(fill.anchorMax.x, Is.EqualTo(1f / 3f).Within(.01f));
                 StringAssert.StartsWith("搜索中", label.text);
                 var inventory = GameObject.Find("RiverValleyInventoryCanvas");
@@ -1487,7 +1488,7 @@ namespace OutpostLoop.Tests
                 Assert.AreEqual(12, run.OpenCache);
                 Assert.IsTrue(inventory.activeSelf);
                 Assert.IsTrue(progress.gameObject.activeInHierarchy);
-                yield return CaptureSurvivalEvidence("search-progress-zh", 1280, 720, batch);
+                if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("search-progress-zh", 1280, 720, batch);
                 run.Tick(.65f, Vector2.zero);
                 late.Invoke(controller, null);
                 Assert.IsFalse(context.gameObject.activeSelf);
@@ -1503,37 +1504,37 @@ namespace OutpostLoop.Tests
                 late.Invoke(controller, null);
                 StringAssert.StartsWith("Drinking", label.text);
                 Assert.That(fill.anchorMax.x, Is.EqualTo(.25f).Within(.01f));
-                yield return CaptureSurvivalEvidence("action-progress-en", 1920, 1080, batch);
+                if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("action-progress-en", 1920, 1080, batch);
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 Assert.AreEqual(SurvivalAction.None, run.Survival.action);
 
                 player.SetValue(run, run.RoomSet.Door(0).center);
                 Assert.AreEqual(0, run.NearbySurvivalDoor);
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Open door", label.text);
+                Assert.AreEqual("Door", ((System.ValueTuple<string, Vector3>)focus.Invoke(controller, null)).Item1);
                 DriveScavengeKey(controller, poll, keyboard, Key.V);
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Close", label.text);
+                Assert.IsFalse(context.gameObject.activeSelf);
                 Assert.IsFalse(inventory.activeSelf);
-                PressInventoryButton(button);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsFalse((bool)type.GetField("survivalBuildOpen", flags).GetValue(controller));
 
                 Vector3 left = Quaternion.Euler(0, run.VehicleHeading, 0) * Vector3.left;
                 player.SetValue(run, run.VehiclePosition + new Vector2(left.x, left.z) * 1.55f);
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Enter vehicle", label.text);
+                Assert.AreEqual("Vehicle", ((System.ValueTuple<string, Vector3>)focus.Invoke(controller, null)).Item1);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsTrue(run.Driving);
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Exit vehicle", label.text);
+                Assert.IsFalse(context.gameObject.activeSelf);
                 DriveScavengeKey(controller, poll, keyboard, Key.M);
                 late.Invoke(controller, null);
                 Assert.IsFalse(context.gameObject.activeSelf);
                 DriveScavengeKey(controller, poll, keyboard, Key.M);
                 Assert.IsTrue(run.Driving);
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Exit vehicle", label.text);
-                yield return CaptureSurvivalEvidence("driving-en", 1920, 1080, batch);
+                Assert.IsFalse(context.gameObject.activeSelf);
+                if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("driving-en", 1920, 1080, batch);
                 DriveScavengeKey(controller, poll, keyboard, Key.E);
                 Assert.IsFalse(run.Driving);
 
@@ -1546,30 +1547,32 @@ namespace OutpostLoop.Tests
                 player.SetValue(run, run.ExitPoint);
                 sync.Invoke(controller, new object[] { true });
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Extract early", label.text);
+                Assert.AreEqual("Extract early", ((System.ValueTuple<string, Vector3>)focus.Invoke(controller, null)).Item1);
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 late.Invoke(controller, null);
                 Assert.IsFalse(context.gameObject.activeSelf);
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 late.Invoke(controller, null);
-                PressInventoryButton(button);
+                DriveScavengeKey(controller, poll, keyboard, Key.E);
                 late.Invoke(controller, null);
                 Assert.IsFalse(context.gameObject.activeSelf);
                 Assert.IsTrue((bool)type.GetField("survivalConfirmExit", flags).GetValue(controller));
-                yield return CaptureSurvivalEvidence("early-extraction-confirm-en", 1280, 720, batch);
+                if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("early-extraction-confirm-en", 1280, 720, batch);
                 DriveScavengeKey(controller, poll, keyboard, Key.Escape);
                 Assert.AreEqual(ScavengeOutcome.Exploring, run.Outcome);
                 Assert.IsFalse((bool)type.GetField("scavengePaused", flags).GetValue(controller));
 
                 run.Survival.elapsed = ScavengeSurvival.Goal;
                 late.Invoke(controller, null);
-                Assert.AreEqual("E  Extract", label.text);
-                yield return CaptureSurvivalEvidence("extraction-ready-en", 1920, 1080, batch);
+                Assert.AreEqual("Extraction point", ((System.ValueTuple<string, Vector3>)focus.Invoke(controller, null)).Item1);
+                if (!Application.isBatchMode) yield return CaptureSurvivalEvidence("extraction-ready-en", 1920, 1080, batch);
             }
             finally
             {
                 language.SetLanguageCode(originalLanguage);
                 InputSystem.RemoveDevice(keyboard);
+                input.backgroundBehavior = oldBackground;
+                input.editorInputBehaviorInPlayMode = oldEditorInput;
             }
             yield return new ExitPlayMode();
         }

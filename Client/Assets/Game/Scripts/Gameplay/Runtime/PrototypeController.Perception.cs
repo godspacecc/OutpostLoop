@@ -34,8 +34,7 @@ namespace OutpostLoop
         {
             float width = Screen.width / HudScale, height = Screen.height / HudScale;
             return PerceptionVisible(group) &&
-                (!SurvivalInventoryOpen && !survivalBuildOpen || !bounds.Overlaps(SurvivalInventory(width, height))) &&
-                (!ShowSurvivalBuild || !bounds.Overlaps(SurvivalBuildRect(width, height)));
+                (!SurvivalInventoryOpen && !survivalBuildOpen || !bounds.Overlaps(SurvivalInventory(width, height)));
         }
 
         private bool ShowPerceptionMap()

@@ -495,25 +495,63 @@ namespace OutpostLoop
             if (scavengeRun.BeginSurvivalAction(action, index)) CloseSurvivalPanels();
         }
 
-        /// <summary>底部只显示当前 E 键能成功完成的主操作。失败反馈仍由旧输入处理。</summary>
-        private string SurvivalInteraction()
+        /// <summary>按现有 E 键优先级选出当前可操作物件，只显示一个现场标签。</summary>
+        private (string Label, Vector3 Position) SurvivalFocusTarget()
         {
-            if (scavengeRun.Driving) return scavengeRun.CanLeaveVehicle ? Loc.T("ContextLeaveVehicle") : null;
-            if (scavengeRun.Survival.sleeping) return Loc.T("ContextWake");
-            if (SurvivalPanelOpen) return SurvivalInventoryOpen ? null : Loc.T("ContextClose");
-            if (scavengeRun.CanEnterVehicle) return Loc.T("ContextEnterVehicle");
-            if (scavengeRun.AtExit) return Loc.T(scavengeRun.Survival.Ready ? "ContextExtract" : "ContextEarlyExtract");
-            int door = scavengeRun.NearbySurvivalDoor;
-            if (door >= 0 && scavengeRun.Survival.rooms[door].durability > 0)
-                return scavengeRun.SurvivalDoorBlocked(door) != null ? null :
-                    Loc.T(scavengeRun.Survival.rooms[door].open ? "ContextCloseDoor" : "ContextOpenDoor");
-            int bed = scavengeRun.NearbySurvivalBed;
-            if (bed >= 0) return scavengeRun.SurvivalSleepBlocked(bed) == null ? Loc.T("ContextSleep") : null;
-            if (scavengeRun.NearbySurvivalCabinet >= 0) return Loc.T("ContextStorage");
-            if (NearbySurvivalDrop() != null) return Loc.T("ContextGround");
-            if (scavengeRun.CanTalkToClinicSurvivor) return Loc.T("ContextTalk");
-            if (scavengeRun.NearbyCache >= 0) return Loc.T("ContextSearch");
-            return null;
+            var run = scavengeRun;
+            if (run.Driving || run.Survival.sleeping || SurvivalPanelOpen) return default;
+            if (run.CanEnterVehicle)
+                return (Loc.T("FocusVehicle"), SurvivalPosition(run.VehiclePosition, 1.2f));
+            if (run.AtExit)
+                return (Loc.T(run.Survival.Ready ? "FocusExit" : "ContextEarlyExtract"),
+                    scavengeExit.position + Vector3.up * 1.4f);
+            int door = run.NearbySurvivalDoor;
+            if (door >= 0 && run.Survival.rooms[door].durability > 0)
+                return (Loc.T(run.SurvivalDoorBlocked(door) == null ? "FocusDoor" : "FocusDoorBlocked"),
+                    SurvivalPosition(CurrentSurvivalRooms.Door(door).center, 1.25f));
+            int bed = run.NearbySurvivalBed;
+            if (bed >= 0)
+                return run.SurvivalSleepBlocked(bed) == null
+                    ? (Loc.T("FocusBed"), SurvivalPosition(CurrentSurvivalRooms.Bed(bed), .45f)) : default;
+            int cabinet = run.NearbySurvivalCabinet;
+            if (cabinet >= 0)
+                return (Loc.T("InventoryStorage"), SurvivalPosition(CurrentSurvivalRooms.Cabinet(cabinet), .7f));
+            var drop = NearbySurvivalDrop();
+            if (drop != null)
+                return (Loc.T("InventoryGround"), SurvivalPosition(drop.point, .25f) + Vector3.up *
+                    (survivalWorldGeometry?.Residence?.HeightOffset(drop.point, drop.surface) ?? 0));
+            if (run.CanTalkToClinicSurvivor)
+                return (Loc.T("FocusSurvivor"), SurvivalPosition(survivalWorldGeometry.ClinicSurvivor, 1.4f));
+            int cache = run.NearbyCache;
+            return cache >= 0 && scavengeCrates[cache].gameObject.activeInHierarchy
+                ? (Loc.T("FocusSupply"), scavengeCrates[cache].position + Vector3.up * .55f) : default;
+        }
+
+        /// <summary>只在指针指向当前近处目标时标出名称，文本不参与点击命中。</summary>
+        private bool TrySurvivalFocusLabel(Vector2 cursor, out string label, out Vector2 pin)
+        {
+            label = null;
+            pin = default;
+            if (!CanShowSurvivalHud() || SurvivalContextHasProgress || SurvivalHudContains(cursor)) return false;
+            var target = SurvivalFocusTarget();
+            if (target.Label == null) return false;
+            var screen = gameCamera.WorldToScreenPoint(target.Position);
+            if (!IsCameraPoint(screen) || screen.z <= gameCamera.nearClipPlane ||
+                (cursor - (Vector2)screen).sqrMagnitude > Mathf.Pow(52 * HudScale, 2)) return false;
+            label = target.Label;
+            pin = new Vector2(screen.x, Screen.height - screen.y) / HudScale;
+            return true;
+        }
+
+        private void DrawSurvivalFocusLabel(float width)
+        {
+            if (Event.current.type != EventType.Repaint ||
+                !TrySurvivalFocusLabel(Input.mousePosition, out string label, out var pin)) return;
+            var style = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            float w = Mathf.Clamp(style.CalcSize(new GUIContent(label)).x + 18, 56, width);
+            var bounds = new Rect(Mathf.Clamp(pin.x - w / 2, 0, width - w), Mathf.Max(0, pin.y - 46), w, 27);
+            ScavengeFill(bounds, new Color(.04f, .055f, .05f, .72f));
+            GUI.Label(bounds, label, style);
         }
 
         private SurvivalContainer NearbySurvivalDrop()
@@ -563,18 +601,14 @@ namespace OutpostLoop
             float panelHeight = SurvivalInventoryOpen ? SurvivalInventoryHeight() : 395;
             return new Rect(18, 172, Mathf.Min(600, width - 36), Mathf.Min(panelHeight, height - 248));
         }
-        private static Rect SurvivalBuildRect(float width, float height) => new Rect(width - 205, height - 108, 184, 38);
-
-        private bool ShowSurvivalBuild => !scavengeRun.Driving && scavengeRun.NearbySurvivalDoor >= 0;
-
         private bool SurvivalHudContains(Vector2 cursor)
         {
             float scale = HudScale;
             float width = Screen.width / scale, height = Screen.height / scale;
             var point = new Vector2(cursor.x, Screen.height - cursor.y) / scale;
-            return SurvivalStatusContains(point) || SurvivalContextContains(point) ||
+            return SurvivalStatusContains(point) ||
                 (ShowPerceptionMap() && PerceptionRect(PerceptionGroup.Map).Contains(point)) || InventoryContains(cursor, point, width, height) ||
-                (ShowSurvivalBuild && SurvivalBuildRect(width, height).Contains(point));
+                (survivalBuildOpen && SurvivalInventory(width, height).Contains(point));
         }
 
         private void DrawSurvival(float width, float height)
@@ -606,18 +640,14 @@ namespace OutpostLoop
                 GUI.Box(new Rect(interaction.x, y, interaction.width, 34), notice);
             }
 
-            if (ShowSurvivalBuild && GUI.Button(SurvivalBuildRect(width, height), "入口操作  V"))
-                OpenSurvivalBuild();
-
             if (survivalBuildOpen)
             {
                 Rect panel = SurvivalInventory(width, height);
                 GUI.Box(panel, "");
                 DrawSurvivalBuild(panel);
             }
-            DrawScavengeExitLabel();
+            DrawSurvivalFocusLabel(width);
             DrawScavengeMap(width, opensRegion: true);
-            DrawFullRiverValleyEntrances();
         }
 
         /// <summary>资源加载失败时保留旧状态读数和背包入口。</summary>

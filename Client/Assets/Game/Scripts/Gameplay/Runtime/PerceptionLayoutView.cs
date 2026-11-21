@@ -146,13 +146,14 @@ namespace OutpostLoop
             PerceptionGeometry.Resolve(draft, lastArea, bounds);
             var item = draft.Get(selected);
             selectedLabel.text = Loc.T(Keys[(int)selected]);
+            visible.gameObject.SetActive(selected != PerceptionGroup.Interaction);
             Caption(visible, Loc.T(item.Visible == true ? "PerceptionShown" : "PerceptionHidden"));
             scaleLabel.text = Loc.T("PerceptionSize", Mathf.RoundToInt(item.Scale.Value * 100));
             size.SetValueWithoutNotify(item.Scale.Value * 20);
             for (int i = 0; i < frames.Length; i++)
             {
                 var group = (PerceptionGroup)i;
-                bool shown = draft.Get(group).Visible == true;
+                bool shown = group == PerceptionGroup.Interaction || draft.Get(group).Visible == true;
                 var frame = frames[i];
                 var outline = frame.GetComponent<Outline>();
                 if (!outline) outline = frame.gameObject.AddComponent<Outline>();
